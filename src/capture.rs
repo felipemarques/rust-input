@@ -10,7 +10,7 @@ use input_capture::{
 };
 use input_event::{Event, KeyboardEvent, scancode};
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::ProtoEvent;
+use rustinput_proto::{CAP_CURSOR_POSITION, ProtoEvent};
 use tokio::task::{JoinHandle, spawn_local};
 use tokio_util::sync::CancellationToken;
 
@@ -24,8 +24,9 @@ pub(crate) struct Capture {
 }
 
 pub(crate) enum ICaptureEvent {
-    /// a client was entered
-    CaptureBegin(CaptureHandle),
+    /// a client was entered, with where along its edge the pointer left
+    /// this device (if known)
+    CaptureBegin(CaptureHandle, Option<f64>),
     /// capture disabled
     CaptureDisabled,
     /// capture disabled
@@ -92,6 +93,7 @@ impl Capture {
             request_rx,
             release_bind: Rc::new(RefCell::new(release_bind)),
             state: Default::default(),
+            entry_fraction: None,
         };
         let task = spawn_local(capture_task.run());
         Self {
@@ -176,6 +178,8 @@ struct CaptureTask {
     release_bind: Rc<RefCell<Vec<scancode::Linux>>>,
     request_rx: Receiver<CaptureRequest>,
     state: State,
+    /// where along its edge the pointer left this device for the active client
+    entry_fraction: Option<f64>,
 }
 
 impl CaptureTask {
@@ -305,6 +309,11 @@ impl CaptureTask {
                             log::info!("releasing capture: left remote client device region");
                             self.release_capture(capture).await?;
                         },
+                        // the same, telling where the pointer left the client
+                        ProtoEvent::LeaveAt(fraction) => {
+                            log::info!("releasing capture: left remote client device region at {fraction:.3}");
+                            self.release_capture_to(capture, Some(fraction)).await?;
+                        },
                         _ => {}
                     }
                 },
@@ -353,8 +362,9 @@ impl CaptureTask {
         }
 
         if event == CaptureEvent::Begin {
+            self.entry_fraction = capture.entry_fraction();
             self.event_tx
-                .send(ICaptureEvent::CaptureBegin(handle))
+                .send(ICaptureEvent::CaptureBegin(handle, self.entry_fraction))
                 .expect("channel closed");
         }
 
@@ -380,12 +390,19 @@ impl CaptureTask {
         }
 
         let opposite_pos = to_proto_pos(self.get_pos(handle).opposite());
+        // tell clients that can place their pointer where it left this device
+        let enter = match self.entry_fraction {
+            Some(fraction) if self.conn.peer_capabilities(handle) & CAP_CURSOR_POSITION != 0 => {
+                ProtoEvent::EnterAt(opposite_pos, fraction)
+            }
+            _ => ProtoEvent::Enter(opposite_pos),
+        };
 
         let event = match event {
-            CaptureEvent::Begin => ProtoEvent::Enter(opposite_pos),
+            CaptureEvent::Begin => enter,
             CaptureEvent::Input(e) => match self.state {
                 // connection not acknowledged, repeat `Enter` event
-                State::WaitingForAck => ProtoEvent::Enter(opposite_pos),
+                State::WaitingForAck => enter,
                 State::Sending => ProtoEvent::Input(e),
             },
         };
@@ -403,6 +420,18 @@ impl CaptureTask {
     }
 
     async fn release_capture(&mut self, capture: &mut InputCapture) -> Result<(), CaptureError> {
+        self.release_capture_to(capture, None).await
+    }
+
+    /// releases the capture, putting the pointer at `fraction` along the edge
+    /// of the capture if given (where it left the client) and back where it
+    /// left this device otherwise
+    async fn release_capture_to(
+        &mut self,
+        capture: &mut InputCapture,
+        fraction: Option<f64>,
+    ) -> Result<(), CaptureError> {
+        self.entry_fraction = None;
         // If we have an active client, notify them we're leaving
         if let Some(handle) = self.active_client.take() {
             // Surface the leave to the service layer so it can fire
@@ -452,7 +481,10 @@ impl CaptureTask {
                 log::warn!("failed to send Leave to client {handle}: {e}");
             }
         }
-        capture.release().await
+        match fraction {
+            Some(fraction) => capture.release_to(fraction).await,
+            None => capture.release().await,
+        }
     }
 }
 

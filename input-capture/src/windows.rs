@@ -34,6 +34,15 @@ impl Capture for WindowsInputCapture {
         Ok(())
     }
 
+    async fn release_to(&mut self, fraction: f64) -> Result<(), CaptureError> {
+        self.event_thread.release_capture_to(fraction);
+        Ok(())
+    }
+
+    fn entry_fraction(&self) -> Option<f64> {
+        event_thread::entry_fraction()
+    }
+
     async fn terminate(&mut self) -> Result<(), CaptureError> {
         Ok(())
     }

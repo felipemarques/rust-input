@@ -135,3 +135,26 @@ content (same hash) answers with `Cancel`.
 Text is sent as UTF-8, images as PNG (8 bit RGBA). The hash of an image is taken
 over its pixels, so an image read back from the clipboard is recognized no
 matter how it was compressed.
+
+## Pointer position across devices
+
+Like Synergy and Deskflow, the pointer keeps its relative position along the
+edge it crosses: leaving the top of the left edge of one device enters the top
+of the right edge of the next one. Every device treats all of its monitors as
+one rectangle, so screens of different sizes map proportionally.
+
+This is an optional feature (`CAP_CURSOR_POSITION`):
+
+- the controlling device sends `EnterAt(position, fraction)` instead of
+  `Enter(position)`, where `fraction` is where along its edge the pointer left,
+  from 0.0 (top or left end of its desktop) to 1.0;
+- the controlled device puts its pointer at the same fraction of its own edge,
+  one pixel inside, on the first `EnterAt` of an entry (`Enter` is repeated
+  until it is acknowledged);
+- when the pointer leaves the controlled device through the edge, it answers
+  with `LeaveAt(fraction)` instead of `Leave`, and the controlling device puts
+  its pointer at that fraction of the edge it captured.
+
+Releasing with the release bind still returns the pointer to where it left.
+Placing the pointer is implemented for X11 and Windows; the other backends keep
+the previous behavior.

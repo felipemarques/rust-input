@@ -2,12 +2,12 @@ use crate::config::local_commit;
 use crate::listen::{ListenEvent, ListenerCreationError, RustInputListener};
 use futures::StreamExt;
 use input_emulation::{EmulationHandle, InputEmulation, InputEmulationError};
-use input_event::Event;
+use input_event::{Event, edge::Edge};
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{Position, ProtoEvent};
+use rustinput_proto::{CAP_CURSOR_POSITION, Position, ProtoEvent};
 use std::{
     cell::Cell,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     net::SocketAddr,
     rc::Rc,
     time::{Duration, Instant},
@@ -68,7 +68,9 @@ pub(crate) enum EmulationEvent {
 
 enum EmulationRequest {
     Reenable,
-    Release(SocketAddr),
+    /// the pointer leaves this device for the one at the address, at the
+    /// given position along the edge if known
+    Release(SocketAddr, Option<f64>),
     ChangePort(u16),
     Terminate,
 }
@@ -95,9 +97,9 @@ impl Emulation {
         }
     }
 
-    pub(crate) fn send_leave_event(&self, addr: SocketAddr) {
+    pub(crate) fn send_leave_event(&self, addr: SocketAddr, fraction: Option<f64>) {
         self.request_tx
-            .send(EmulationRequest::Release(addr))
+            .send(EmulationRequest::Release(addr, fraction))
             .expect("channel closed");
     }
 
@@ -141,6 +143,9 @@ impl ListenTask {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         let mut last_response = HashMap::new();
         let mut rejected_connections = HashMap::new();
+        // devices currently controlling this one, the pointer is only placed
+        // on the first of the (repeated) Enter events
+        let mut entered = HashSet::new();
         loop {
             select! {
                 e = self.listener.next() => {match e {
@@ -148,7 +153,15 @@ impl ListenTask {
                         log::trace!("{event} <-<-<-<-<- {addr}");
                         last_response.insert(addr, Instant::now());
                         match event {
-                            ProtoEvent::Enter(pos) => {
+                            ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) => {
+                                if let ProtoEvent::EnterAt(_, fraction) = event {
+                                    if entered.insert(addr) {
+                                        log::debug!("{addr} entered at {fraction:.3} along the {pos} edge");
+                                        self.emulation_proxy.warp(to_edge(pos), fraction);
+                                    }
+                                } else {
+                                    entered.insert(addr);
+                                }
                                 if let Some(fingerprint) = self.listener.get_certificate_fingerprint(addr).await {
                                     log::info!("releasing capture: {addr} entered this device");
                                     self.event_tx.send(EmulationEvent::ReleaseNotify).expect("channel closed");
@@ -157,6 +170,7 @@ impl ListenTask {
                                 }
                             }
                             ProtoEvent::Leave(_) => {
+                                entered.remove(&addr);
                                 self.emulation_proxy.remove(addr);
                                 self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                             }
@@ -198,7 +212,14 @@ impl ListenTask {
                     // reenable emulation
                     EmulationRequest::Reenable => self.emulation_proxy.reenable(),
                     // notify the other end that we hit a barrier (should release capture)
-                    EmulationRequest::Release(addr) => self.listener.reply(addr, ProtoEvent::Leave(0)).await,
+                    EmulationRequest::Release(addr, fraction) => {
+                        entered.remove(&addr);
+                        let leave = match fraction {
+                            Some(fraction) if self.listener.peer_capabilities(addr) & CAP_CURSOR_POSITION != 0 => ProtoEvent::LeaveAt(fraction),
+                            _ => ProtoEvent::Leave(0),
+                        };
+                        self.listener.reply(addr, leave).await
+                    }
                     EmulationRequest::ChangePort(port) => {
                         self.listener.request_port_change(port);
                         let result = self.listener.port_changed().await;
@@ -210,6 +231,7 @@ impl ListenTask {
                     last_response.retain(|&addr,instant| {
                         if instant.elapsed() > Duration::from_secs(1) {
                             log::warn!("releasing keys: {addr} not responding!");
+                            entered.remove(&addr);
                             self.emulation_proxy.remove(addr);
                             self.event_tx.send(EmulationEvent::Disconnected { addr }).expect("channel closed");
                             false
@@ -237,6 +259,8 @@ pub(crate) struct EmulationProxy {
 
 enum ProxyRequest {
     Input(Event, SocketAddr),
+    /// place the pointer at a position along an edge
+    Warp(Edge, f64),
     Remove(SocketAddr),
     Terminate,
     Reenable,
@@ -286,6 +310,14 @@ impl EmulationProxy {
         }
     }
 
+    fn warp(&self, edge: Edge, fraction: f64) {
+        if self.emulation_active.get() {
+            self.request_tx
+                .send(ProxyRequest::Warp(edge, fraction))
+                .expect("channel closed");
+        }
+    }
+
     fn remove(&self, addr: SocketAddr) {
         self.request_tx
             .send(ProxyRequest::Remove(addr))
@@ -330,7 +362,8 @@ impl EmulationTask {
                 match self.request_rx.recv().await.expect("channel closed") {
                     ProxyRequest::Reenable => break,
                     ProxyRequest::Terminate => return,
-                    ProxyRequest::Input(..) => { /* emulation inactive => ignore */ }
+                    ProxyRequest::Input(..) | ProxyRequest::Warp(..) => { /* emulation inactive => ignore */
+                    }
                     ProxyRequest::Remove(..) => { /* emulation inactive => ignore */ }
                 }
             }
@@ -397,6 +430,7 @@ impl EmulationTask {
                         };
                         emulation.consume(event, handle).await?;
                     },
+                    ProxyRequest::Warp(edge, fraction) => emulation.warp(edge, fraction).await,
                     ProxyRequest::Remove(addr) => {
                         if let Some(handle) = self.handles.remove(&addr) {
                             emulation.destroy(handle).await;
@@ -407,6 +441,15 @@ impl EmulationTask {
                 },
             }
         }
+    }
+}
+
+fn to_edge(pos: Position) -> Edge {
+    match pos {
+        Position::Left => Edge::Left,
+        Position::Right => Edge::Right,
+        Position::Top => Edge::Top,
+        Position::Bottom => Edge::Bottom,
     }
 }
 
@@ -423,7 +466,7 @@ async fn wait_for_termination(rx: &mut Receiver<ProxyRequest>) {
     loop {
         match rx.recv().await.expect("channel closed") {
             ProxyRequest::Terminate => return,
-            ProxyRequest::Input(_, _) => continue,
+            ProxyRequest::Input(_, _) | ProxyRequest::Warp(..) => continue,
             ProxyRequest::Remove(_) => continue,
             ProxyRequest::Reenable => continue,
         }

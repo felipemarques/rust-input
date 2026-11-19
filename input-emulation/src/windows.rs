@@ -1,6 +1,7 @@
 use super::error::{EmulationError, WindowsEmulationCreationError};
 use input_event::{
     BTN_BACK, BTN_FORWARD, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, Event, KeyboardEvent, PointerEvent,
+    edge::{Area, Edge},
     scancode,
 };
 
@@ -8,6 +9,9 @@ use async_trait::async_trait;
 use std::ops::BitOrAssign;
 use std::time::Duration;
 use tokio::task::AbortHandle;
+use windows::Win32::UI::HiDpi::{
+    DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE,
     MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN,
@@ -17,7 +21,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT_0, KEYEVENTF_EXTENDEDKEY, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, SendInput,
 };
-use windows::Win32::UI::WindowsAndMessaging::{XBUTTON1, XBUTTON2};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    SetCursorPos, XBUTTON1, XBUTTON2,
+};
 
 use super::{Emulation, EmulationHandle};
 
@@ -80,6 +87,26 @@ impl Emulation for WindowsEmulation {
     async fn destroy(&mut self, _handle: EmulationHandle) {}
 
     async fn terminate(&mut self) {}
+
+    async fn warp(&mut self, edge: Edge, fraction: f64) {
+        unsafe {
+            // physical pixels, also when the displays are scaled
+            let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+            let desktop = Area {
+                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+                width: GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                height: GetSystemMetrics(SM_CYVIRTUALSCREEN),
+            };
+            let (x, y) = desktop.point(edge, fraction);
+            if let Err(e) = SetCursorPos(x, y) {
+                log::warn!("could not place the pointer at ({x}, {y}): {e}");
+            }
+            if !previous.is_invalid() {
+                SetThreadDpiAwarenessContext(previous);
+            }
+        }
+    }
 }
 
 impl WindowsEmulation {

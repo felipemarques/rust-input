@@ -1,8 +1,11 @@
 use futures::{Stream, StreamExt};
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent};
+use rustinput_proto::{
+    CAP_CURSOR_POSITION, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent,
+};
 use rustls::pki_types::CertificateDer;
 use std::{
+    cell::RefCell,
     collections::{HashMap, VecDeque},
     net::SocketAddr,
     rc::Rc,
@@ -35,6 +38,9 @@ pub enum ListenerCreationError {
 }
 
 type ArcConn = Arc<dyn Conn + Send + Sync>;
+
+/// optional features announced by the connected devices
+type PeerCapabilities = Rc<RefCell<HashMap<SocketAddr, u32>>>;
 
 /// sends raw datagrams over the connections accepted by the listener
 #[derive(Clone)]
@@ -80,6 +86,7 @@ pub(crate) struct RustInputListener {
     conns: Rc<AsyncMutex<Vec<(SocketAddr, ArcConn)>>>,
     request_port_change: Sender<u16>,
     port_changed: Receiver<Result<u16, ListenerCreationError>>,
+    peer_capabilities: PeerCapabilities,
 }
 
 type VerifyPeerCertificateFn = Arc<
@@ -140,6 +147,8 @@ impl RustInputListener {
 
         let conns: Rc<AsyncMutex<Vec<(SocketAddr, ArcConn)>>> =
             Rc::new(AsyncMutex::new(Vec::new()));
+        let peer_capabilities = PeerCapabilities::default();
+        let capabilities = peer_capabilities.clone();
 
         let conns_clone = conns.clone();
         let listen_task: JoinHandle<()> = {
@@ -161,7 +170,7 @@ impl RustInputListener {
                                 let cert = certs.first().expect("cert");
                                 let fingerprint = crypto::generate_fingerprint(cert);
                                 listen_tx.send(ListenEvent::Accept { addr, fingerprint }).expect("channel closed");
-                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone(), clipboard.clone()));
+                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone(), clipboard.clone(), capabilities.clone()));
                             },
                             Err(e) => {
                                 if let Error::Std(ref e) = e {
@@ -209,7 +218,17 @@ impl RustInputListener {
             listen_task,
             port_changed,
             request_port_change,
+            peer_capabilities,
         })
+    }
+
+    /// the optional features the device connected from `addr` announced
+    pub(crate) fn peer_capabilities(&self, addr: SocketAddr) -> u32 {
+        self.peer_capabilities
+            .borrow()
+            .get(&addr)
+            .copied()
+            .unwrap_or(0)
     }
 
     pub(crate) fn links(&self) -> IncomingLinks {
@@ -283,6 +302,7 @@ async fn read_loop(
     conn: ArcConn,
     dtls_tx: Sender<ListenEvent>,
     clipboard: ClipboardHandle,
+    peer_capabilities: PeerCapabilities,
 ) -> Result<(), Error> {
     // every connection reaching this point presented an authorized certificate
     let peer = Peer::Incoming(addr);
@@ -297,12 +317,14 @@ async fn read_loop(
                 let hello = ProtoEvent::Hello {
                     commit: local_commit(),
                 };
-                for event in [hello, ProtoEvent::Capabilities(clipboard.capabilities())] {
+                let flags = CAP_CURSOR_POSITION | clipboard.capabilities();
+                for event in [hello, ProtoEvent::Capabilities(flags)] {
                     let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
                     let _ = conn.send(&buf[..len]).await;
                 }
             }
             Ok(Datagram::Event(ProtoEvent::Capabilities(flags))) => {
+                peer_capabilities.borrow_mut().insert(addr, flags);
                 clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
             }
             Ok(Datagram::Event(event)) => {
@@ -333,6 +355,7 @@ async fn read_loop(
         }
     }
     log::info!("dtls client disconnected {addr:?}");
+    peer_capabilities.borrow_mut().remove(&addr);
     clipboard.notify(ClipboardMsg::Disconnected { peer });
     let mut conns = conns.lock().await;
     let index = conns

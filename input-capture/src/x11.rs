@@ -39,6 +39,7 @@ use x11rb::{
 
 use input_event::{
     BTN_BACK, BTN_FORWARD, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, Event, KeyboardEvent, PointerEvent,
+    edge::{Area, Edge},
 };
 
 use super::{Capture, CaptureError, CaptureEvent, Position, error::X11InputCaptureCreationError};
@@ -84,6 +85,16 @@ impl Rect {
     fn center(&self) -> (i32, i32) {
         (self.x + self.w / 2, self.y + self.h / 2)
     }
+}
+
+/// the rectangle spanned by all monitors
+fn desktop(monitors: &[Rect]) -> Option<Area> {
+    Area::bounding(monitors.iter().map(|m| Area {
+        x: m.x,
+        y: m.y,
+        width: m.w,
+        height: m.h,
+    }))
 }
 
 fn index(pos: Position) -> usize {
@@ -256,6 +267,8 @@ pub struct X11InputCapture {
     motion: Option<(f64, f64)>,
     /// edges the pointer was touching at the last check, indexed by [`index`]
     touching: [bool; 4],
+    /// where along its edge the pointer was when the current capture began
+    entry_fraction: Option<f64>,
     released_at: Option<Instant>,
     /// keycodes currently held down, used to drop auto-repeated presses
     pressed: HashSet<u8>,
@@ -344,6 +357,7 @@ impl X11InputCapture {
             grab: None,
             motion: None,
             touching: [false; 4],
+            entry_fraction: None,
             released_at: None,
             pressed: HashSet::new(),
             modifiers: None,
@@ -604,7 +618,11 @@ impl X11InputCapture {
         )?;
         self.conn.flush()?;
 
-        log::debug!("x11: capture started at {pos}, pointer was at {entry:?}");
+        self.entry_fraction = desktop(&self.monitors).map(|d| d.fraction(pos.into(), at));
+        log::debug!(
+            "x11: capture started at {pos}, pointer was at {entry:?} ({:?} along the edge)",
+            self.entry_fraction
+        );
         self.grab = Some(Grab {
             pos,
             entry,
@@ -616,13 +634,21 @@ impl X11InputCapture {
         self.forward_modifiers(pos)
     }
 
-    fn end(&mut self) -> Result<(), CaptureError> {
+    /// Ends the capture. The pointer goes to `fraction` along the edge of the
+    /// capture if given, where it left the other device, and back to where it
+    /// left this one otherwise.
+    fn end(&mut self, fraction: Option<f64>) -> Result<(), CaptureError> {
         let Some(grab) = self.grab.take() else {
             return Ok(());
         };
-        // back to where it left, while the cursor is still hidden
+        let target = fraction
+            .zip(desktop(&self.monitors))
+            .map(|(fraction, desktop)| desktop.point(Edge::from(grab.pos), fraction))
+            .map(|(x, y)| (x as i16, y as i16))
+            .unwrap_or(grab.entry);
+        // while the cursor is still hidden
         self.conn
-            .warp_pointer(NONE, self.root, 0, 0, 0, 0, grab.entry.0, grab.entry.1)?;
+            .warp_pointer(NONE, self.root, 0, 0, 0, 0, target.0, target.1)?;
         self.conn.ungrab_keyboard(CURRENT_TIME)?;
         self.conn.ungrab_pointer(CURRENT_TIME)?;
         self.conn.flush()?;
@@ -634,8 +660,9 @@ impl X11InputCapture {
         self.modifiers = None;
         self.motion = None;
         self.released_at = Some(Instant::now());
-        // the pointer is back on the edge: that is not a new arrival
-        let (x, y) = (grab.entry.0 as i32, grab.entry.1 as i32);
+        // the pointer is back at (or next to) the edge: that is not a new arrival
+        self.entry_fraction = None;
+        let (x, y) = (target.0 as i32, target.1 as i32);
         for pos in POSITIONS {
             self.touching[index(pos)] = at_outer_edge(&self.monitors, x, y, pos);
         }
@@ -683,20 +710,30 @@ impl Capture for X11InputCapture {
         self.zones.remove(&pos);
         self.touching[index(pos)] = false;
         if self.grab.as_ref().is_some_and(|g| g.pos == pos) {
-            self.end()?;
+            self.end(None)?;
             self.wake();
         }
         Ok(())
     }
 
     async fn release(&mut self) -> Result<(), CaptureError> {
-        self.end()?;
+        self.end(None)?;
         self.wake();
         Ok(())
     }
 
+    async fn release_to(&mut self, fraction: f64) -> Result<(), CaptureError> {
+        self.end(Some(fraction))?;
+        self.wake();
+        Ok(())
+    }
+
+    fn entry_fraction(&self) -> Option<f64> {
+        self.entry_fraction
+    }
+
     async fn terminate(&mut self) -> Result<(), CaptureError> {
-        self.end()?;
+        self.end(None)?;
         self.zones.clear();
         self.conn.free_cursor(self.blank_cursor)?;
         self.conn.flush()?;

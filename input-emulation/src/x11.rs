@@ -7,6 +7,7 @@ use x11::{
 
 use input_event::{
     BTN_BACK, BTN_FORWARD, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, Event, KeyboardEvent, PointerEvent,
+    edge::{Area, Edge},
 };
 
 use crate::error::EmulationError;
@@ -150,5 +151,21 @@ impl Emulation for X11Emulation {
 
     async fn terminate(&mut self) {
         /* nothing to do */
+    }
+
+    async fn warp(&mut self, edge: Edge, fraction: f64) {
+        unsafe {
+            let screen = xlib::XDefaultScreen(self.display);
+            // the root window spans all monitors
+            let desktop = Area {
+                x: 0,
+                y: 0,
+                width: xlib::XDisplayWidth(self.display, screen),
+                height: xlib::XDisplayHeight(self.display, screen),
+            };
+            let (x, y) = desktop.point(edge, fraction);
+            xtest::XTestFakeMotionEvent(self.display, screen, x, y, 0);
+            xlib::XFlush(self.display);
+        }
     }
 }

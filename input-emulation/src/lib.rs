@@ -153,6 +153,13 @@ impl InputEmulation {
         }
     }
 
+    /// Puts the pointer at `fraction` along `edge` of the desktop, where it
+    /// left the controlling device (see [`input_event::edge`]). A no-op for
+    /// backends that can not place the pointer.
+    pub async fn warp(&mut self, edge: input_event::edge::Edge, fraction: f64) {
+        self.emulation.warp(edge, fraction).await
+    }
+
     pub async fn create(&mut self, handle: EmulationHandle) -> bool {
         if self.handles.insert(handle) {
             self.pressed_keys.insert(handle, HashSet::new());
@@ -237,4 +244,6 @@ trait Emulation: Send {
     async fn create(&mut self, handle: EmulationHandle);
     async fn destroy(&mut self, handle: EmulationHandle);
     async fn terminate(&mut self);
+    /// puts the pointer at `fraction` along `edge` of the desktop
+    async fn warp(&mut self, _edge: input_event::edge::Edge, _fraction: f64) {}
 }

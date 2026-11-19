@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use futures_core::Stream;
 
-use input_event::{Event, KeyboardEvent, scancode};
+use input_event::{Event, KeyboardEvent, edge::Edge, scancode};
 
 pub use error::{CaptureCreationError, CaptureError, InputCaptureError};
 
@@ -67,6 +67,17 @@ impl Position {
             Position::Right => Self::Left,
             Position::Top => Self::Bottom,
             Position::Bottom => Self::Top,
+        }
+    }
+}
+
+impl From<Position> for Edge {
+    fn from(pos: Position) -> Self {
+        match pos {
+            Position::Left => Edge::Left,
+            Position::Right => Edge::Right,
+            Position::Top => Edge::Top,
+            Position::Bottom => Edge::Bottom,
         }
     }
 }
@@ -169,6 +180,22 @@ impl InputCapture {
     pub async fn release(&mut self) -> Result<(), CaptureError> {
         self.pressed_keys.clear();
         self.capture.release().await
+    }
+
+    /// Release the mouse and put the pointer at `fraction` along the edge of
+    /// the capture, where the pointer left the other device (see
+    /// [`input_event::edge`]). Backends that can not place the pointer
+    /// release it like [`InputCapture::release`].
+    pub async fn release_to(&mut self, fraction: f64) -> Result<(), CaptureError> {
+        self.pressed_keys.clear();
+        self.capture.release_to(fraction).await
+    }
+
+    /// Where along its edge the pointer left this device when the current
+    /// capture began, from 0.0 (top or left end of the desktop) to 1.0.
+    /// `None` if the backend does not know.
+    pub fn entry_fraction(&self) -> Option<f64> {
+        self.capture.entry_fraction()
     }
 
     /// Drain and return every key the capture has forwarded as
@@ -286,6 +313,15 @@ trait Capture: Stream<Item = Result<(Position, CaptureEvent), CaptureError>> + U
 
     /// release mouse
     async fn release(&mut self) -> Result<(), CaptureError>;
+
+    /// release mouse, putting the pointer at `fraction` along the edge of the
+    /// capture; backends that can not place the pointer just release it
+    async fn release_to(&mut self, fraction: f64) -> Result<(), CaptureError>;
+
+    /// where along its edge the pointer was when the current capture began
+    fn entry_fraction(&self) -> Option<f64> {
+        None
+    }
 
     /// destroy the input capture
     async fn terminate(&mut self) -> Result<(), CaptureError>;

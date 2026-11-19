@@ -4,7 +4,9 @@ use crate::config::local_commit;
 use crate::crypto;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
-use rustinput_proto::{Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent};
+use rustinput_proto::{
+    CAP_CURSOR_POSITION, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent,
+};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -166,6 +168,11 @@ impl RustInputConnection {
                 authorized_keys,
             },
         }
+    }
+
+    /// the optional features the client announced
+    pub(crate) fn peer_capabilities(&self, handle: ClientHandle) -> u32 {
+        self.client_manager.peer_capabilities(handle)
     }
 
     pub(crate) fn links(&self) -> OutgoingLinks {
@@ -380,7 +387,7 @@ async fn receive_loop(
         ping_response,
     } = shared;
     let peer = Peer::Outgoing(handle);
-    let flags = clipboard.as_ref().map_or(0, |c| c.capabilities());
+    let flags = CAP_CURSOR_POSITION | clipboard.as_ref().map_or(0, |c| c.capabilities());
     // whether the peer was told our build and features
     let mut introduced = false;
     let mut buf = [0u8; MAX_DATAGRAM_SIZE];
@@ -407,6 +414,7 @@ async fn receive_loop(
                         client_manager.set_peer_commit(handle, Some(commit));
                     }
                     ProtoEvent::Capabilities(flags) => {
+                        client_manager.set_peer_capabilities(handle, flags);
                         if let Some(clipboard) = &clipboard {
                             clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
                         }
@@ -443,6 +451,7 @@ async fn disconnect(
     conns.lock().await.remove(&addr);
     client_manager.set_active_addr(handle, None);
     client_manager.set_peer_commit(handle, None);
+    client_manager.set_peer_capabilities(handle, 0);
     let active: Vec<SocketAddr> = conns.lock().await.keys().copied().collect();
     log::info!("active connections: {active:?}");
 }

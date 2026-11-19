@@ -783,6 +783,11 @@ impl Capture for MacOSInputCapture {
         Ok(())
     }
 
+    async fn release_to(&mut self, _fraction: f64) -> Result<(), CaptureError> {
+        // the pointer can not be placed with this backend
+        self.release().await
+    }
+
     async fn release(&mut self) -> Result<(), CaptureError> {
         let notify_tx = self.notify_tx.clone();
         tokio::task::spawn_local(async move {

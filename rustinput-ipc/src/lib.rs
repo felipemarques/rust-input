@@ -185,6 +185,10 @@ pub struct ClientState {
     /// that predates the Hello event. The frontend uses this to
     /// soft-warn on version mismatch.
     pub peer_commit: Option<[u8; 8]>,
+    /// optional features the peer announced (`CAP_*` flags of the
+    /// protocol), 0 until it did
+    #[serde(default)]
+    pub peer_capabilities: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

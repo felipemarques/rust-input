@@ -356,11 +356,12 @@ impl Service {
 
     fn handle_capture_event(&mut self, event: ICaptureEvent) {
         match event {
-            ICaptureEvent::CaptureBegin(handle) => {
+            ICaptureEvent::CaptureBegin(handle, fraction) => {
                 // we entered the capture zone for an incoming connection
-                // => notify it that its capture should be released
+                // => notify it that its capture should be released, and
+                // where along the edge the pointer left
                 if let Some(incoming) = self.incoming_conn_info.get(&handle) {
-                    self.emulation.send_leave_event(incoming.addr);
+                    self.emulation.send_leave_event(incoming.addr, fraction);
                     // control goes back to that device, and so does
                     // what was copied here in the meantime
                     self.clipboard.push(Peer::Incoming(incoming.addr));

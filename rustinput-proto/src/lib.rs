@@ -23,6 +23,11 @@ pub const MAX_DATAGRAM_SIZE: usize = 1200;
 /// (see [`ProtoEvent::Capabilities`])
 pub const CAP_CLIPBOARD: u32 = 1 << 0;
 
+/// capability flag: the peer understands [`ProtoEvent::EnterAt`] and
+/// [`ProtoEvent::LeaveAt`], which keep the pointer at the same relative
+/// position along the edge it crosses
+pub const CAP_CURSOR_POSITION: u32 = 1 << 1;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///
@@ -107,6 +112,17 @@ pub enum ProtoEvent {
     /// [`MAX_EVENT_SIZE`] must only be sent to peers that announced the
     /// feature they belong to.
     Capabilities(u32),
+    /// [`ProtoEvent::Enter`] telling where along the edge the pointer
+    /// crossed, from 0.0 (top or left end of the sending device's desktop)
+    /// to 1.0 (bottom or right end). The receiver puts its pointer at the
+    /// same relative position of its own edge. Only sent to peers with
+    /// [`CAP_CURSOR_POSITION`].
+    EnterAt(Position, f64),
+    /// [`ProtoEvent::Leave`] sent by the controlled device when the pointer
+    /// leaves it, telling where along its edge it left (see
+    /// [`ProtoEvent::EnterAt`]), so the controlling device can put its
+    /// pointer there. Only sent to peers with [`CAP_CURSOR_POSITION`].
+    LeaveAt(f64),
 }
 
 impl Display for ProtoEvent {
@@ -129,6 +145,8 @@ impl Display for ProtoEvent {
                 write!(f, "Hello({s})")
             }
             ProtoEvent::Capabilities(flags) => write!(f, "Capabilities({flags:#x})"),
+            ProtoEvent::EnterAt(pos, at) => write!(f, "EnterAt({pos}, {at:.3})"),
+            ProtoEvent::LeaveAt(at) => write!(f, "LeaveAt({at:.3})"),
         }
     }
 }
@@ -151,6 +169,8 @@ pub enum EventType {
     // RustInput extensions start at 0x80 to stay clear of event types
     // added upstream; 0x81 to 0x84 are the clipboard frames
     Capabilities = 0x80,
+    EnterAt = 0x85,
+    LeaveAt = 0x86,
 }
 
 impl ProtoEvent {
@@ -175,6 +195,8 @@ impl ProtoEvent {
             ProtoEvent::Ack(_) => EventType::Ack,
             ProtoEvent::Hello { .. } => EventType::Hello,
             ProtoEvent::Capabilities(_) => EventType::Capabilities,
+            ProtoEvent::EnterAt(..) => EventType::EnterAt,
+            ProtoEvent::LeaveAt(_) => EventType::LeaveAt,
         }
     }
 }
@@ -237,6 +259,11 @@ impl TryFrom<[u8; MAX_EVENT_SIZE]> for ProtoEvent {
                 Ok(Self::Hello { commit })
             }
             EventType::Capabilities => Ok(Self::Capabilities(decode_u32(&mut buf)?)),
+            EventType::EnterAt => Ok(Self::EnterAt(
+                decode_u8(&mut buf)?.try_into()?,
+                decode_f64(&mut buf)?,
+            )),
+            EventType::LeaveAt => Ok(Self::LeaveAt(decode_f64(&mut buf)?)),
         }
     }
 }
@@ -307,6 +334,11 @@ impl From<ProtoEvent> for ([u8; MAX_EVENT_SIZE], usize) {
                     }
                 }
                 ProtoEvent::Capabilities(flags) => encode_u32(buf, len, flags),
+                ProtoEvent::EnterAt(pos, at) => {
+                    encode_u8(buf, len, pos as u8);
+                    encode_f64(buf, len, at);
+                }
+                ProtoEvent::LeaveAt(at) => encode_f64(buf, len, at),
             }
         }
         (buf, len)
@@ -394,6 +426,25 @@ mod tests {
             ProtoEvent::Capabilities(flags) => assert_eq!(flags, CAP_CLIPBOARD | 0x8000_0000),
             event => panic!("unexpected event {event}"),
         }
+    }
+
+    #[test]
+    fn cursor_position_events_roundtrip() {
+        match roundtrip(ProtoEvent::EnterAt(Position::Right, 0.25)) {
+            ProtoEvent::EnterAt(Position::Right, at) => assert_eq!(at, 0.25),
+            event => panic!("unexpected event {event}"),
+        }
+        match roundtrip(ProtoEvent::LeaveAt(1.0)) {
+            ProtoEvent::LeaveAt(at) => assert_eq!(at, 1.0),
+            event => panic!("unexpected event {event}"),
+        }
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) =
+            ProtoEvent::EnterAt(Position::Left, 0.5).into();
+        assert_eq!(&buf[..2], &[0x85, 0]);
+        assert_eq!(len, 10);
+        // the new event types are no clipboard frames
+        assert!(!clipboard::is_clipboard_frame(0x85));
+        assert!(!clipboard::is_clipboard_frame(0x86));
     }
 
     #[test]
