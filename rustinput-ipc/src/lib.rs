@@ -191,6 +191,33 @@ pub struct ClientState {
     pub peer_capabilities: u32,
 }
 
+/// a file transfer, as shown to the user
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TransferInfo {
+    /// identifies the transfer among the reported ones
+    pub id: u64,
+    /// sent by this device (`true`) or received (`false`)
+    pub sending: bool,
+    /// name of the other device
+    pub peer: String,
+    pub files: u32,
+    pub files_done: u32,
+    pub bytes: u64,
+    pub bytes_done: u64,
+    /// the file being transferred
+    pub current: Option<String>,
+    pub state: TransferState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransferState {
+    /// queued behind another transfer to the same device
+    Waiting,
+    Running,
+    Done,
+    Failed(String),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FrontendEvent {
     /// a client was created
@@ -228,6 +255,8 @@ pub enum FrontendEvent {
     },
     /// incoming disconnected
     IncomingDisconnected(SocketAddr),
+    /// the file transfers, running and recently finished ones
+    Transfers(Vec<TransferInfo>),
     /// failed connection attempt (approval for fingerprint required)
     ConnectionAttempt { fingerprint: String },
 }
@@ -270,6 +299,8 @@ pub enum FrontendRequest {
     UpdateLeaveHook(u64, Option<String>),
     /// save config file
     SaveConfiguration,
+    /// cancel the running and waiting file transfers
+    CancelTransfers,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]

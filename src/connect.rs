@@ -287,7 +287,14 @@ async fn connect_to_handle(
         // not verify who answers at the configured address, and the
         // clipboard must not go to (or come from) a stranger. The
         // peer learns this from the flags and will not offer its own.
-        let trusted = peer_is_authorized(&conn, &clipboard.authorized_keys).await;
+        let fingerprint = peer_fingerprint(&conn).await;
+        let trusted = fingerprint.as_ref().is_some_and(|fp| {
+            clipboard
+                .authorized_keys
+                .read()
+                .expect("lock")
+                .contains_key(fp)
+        });
         if !trusted && clipboard.clipboard.capabilities() != 0 {
             log::info!(
                 "clipboard is not shared with client {handle} @ {addr}: \
@@ -304,7 +311,7 @@ async fn connect_to_handle(
             handle,
             addr,
             conn,
-            trusted.then_some(clipboard.clipboard),
+            trusted.then_some(clipboard.clipboard).zip(fingerprint),
         ));
         return Ok(());
     }
@@ -341,22 +348,11 @@ async fn ping_pong(
 }
 
 /// whether the certificate presented by the peer is authorized on this device
-async fn peer_is_authorized(
-    conn: &Arc<dyn Conn + Send + Sync>,
-    authorized_keys: &RwLock<HashMap<String, String>>,
-) -> bool {
-    let Some(conn) = conn.as_any().downcast_ref::<DTLSConn>() else {
-        return false;
-    };
+/// fingerprint of the certificate the peer presented
+pub(crate) async fn peer_fingerprint(conn: &Arc<dyn Conn + Send + Sync>) -> Option<String> {
+    let conn = conn.as_any().downcast_ref::<DTLSConn>()?;
     let certs = conn.connection_state().await.peer_certificates;
-    let Some(cert) = certs.first() else {
-        return false;
-    };
-    let fingerprint = crypto::generate_fingerprint(cert);
-    authorized_keys
-        .read()
-        .expect("lock")
-        .contains_key(&fingerprint)
+    certs.first().map(|cert| crypto::generate_fingerprint(cert))
 }
 
 /// tells the peer our build and optional features
@@ -377,8 +373,8 @@ async fn receive_loop(
     handle: ClientHandle,
     addr: SocketAddr,
     conn: Arc<dyn Conn + Send + Sync>,
-    // set if the clipboard may be shared with this peer
-    clipboard: Option<ClipboardHandle>,
+    // set if the clipboard may be shared with this peer, with its fingerprint
+    clipboard: Option<(ClipboardHandle, String)>,
 ) {
     let Shared {
         client_manager,
@@ -387,7 +383,7 @@ async fn receive_loop(
         ping_response,
     } = shared;
     let peer = Peer::Outgoing(handle);
-    let flags = CAP_CURSOR_POSITION | clipboard.as_ref().map_or(0, |c| c.capabilities());
+    let flags = CAP_CURSOR_POSITION | clipboard.as_ref().map_or(0, |(c, _)| c.capabilities());
     // whether the peer was told our build and features
     let mut introduced = false;
     let mut buf = [0u8; MAX_DATAGRAM_SIZE];
@@ -415,15 +411,21 @@ async fn receive_loop(
                     }
                     ProtoEvent::Capabilities(flags) => {
                         client_manager.set_peer_capabilities(handle, flags);
-                        if let Some(clipboard) = &clipboard {
-                            clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
+                        if let Some((clipboard, fingerprint)) = &clipboard {
+                            clipboard.notify(ClipboardMsg::Capabilities {
+                                peer,
+                                flags,
+                                fingerprint: fingerprint.clone(),
+                                // the file channel listens on the port of the input channel
+                                connect_to: Some(addr),
+                            });
                         }
                     }
                     event => tx.send((handle, event)).expect("channel closed"),
                 }
             }
             Ok(Datagram::Clipboard(frame)) => {
-                if let Some(clipboard) = &clipboard {
+                if let Some((clipboard, _)) = &clipboard {
                     clipboard.notify(ClipboardMsg::Frame { peer, frame });
                 }
             }
@@ -435,7 +437,7 @@ async fn receive_loop(
         }
     }
     log::warn!("recv error");
-    if let Some(clipboard) = &clipboard {
+    if let Some((clipboard, _)) = &clipboard {
         clipboard.notify(ClipboardMsg::Disconnected { peer });
     }
     disconnect(&client_manager, handle, addr, &conns).await;

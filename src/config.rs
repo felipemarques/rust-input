@@ -68,6 +68,7 @@ struct ConfigToml {
     release_bind: Option<Vec<scancode::Linux>>,
     cert_path: Option<PathBuf>,
     clipboard: Option<bool>,
+    clipboard_files: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
@@ -498,6 +499,14 @@ impl Config {
         self.config_toml
             .as_ref()
             .and_then(|c| c.clipboard)
+            .unwrap_or(true)
+    }
+
+    /// whether copied files are sent along with the clipboard
+    pub fn clipboard_files(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.clipboard_files)
             .unwrap_or(true)
     }
 

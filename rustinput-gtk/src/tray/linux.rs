@@ -4,13 +4,15 @@
 use async_channel::Sender;
 use ksni::{MenuItem, OfflineReason, ToolTip, blocking::TrayMethods, menu::StandardItem};
 
-use super::{TrayAction, icon};
+use super::{Summary, TrayAction, icon};
 
 struct RustInputTray {
     actions: Sender<TrayAction>,
     icons: Vec<ksni::Icon>,
     /// name and version, shown in the tooltip and at the top of the menu
     label: String,
+    /// the file transfers
+    transfers: Summary,
 }
 
 impl RustInputTray {
@@ -34,9 +36,14 @@ impl ksni::Tray for RustInputTray {
     }
 
     fn tool_tip(&self) -> ToolTip {
+        let description = self
+            .transfers
+            .status
+            .clone()
+            .unwrap_or_else(|| "Mouse and keyboard sharing".into());
         ToolTip {
             title: self.label.clone(),
-            description: "Mouse and keyboard sharing".into(),
+            description,
             ..Default::default()
         }
     }
@@ -46,7 +53,7 @@ impl ksni::Tray for RustInputTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
-        vec![
+        let mut menu = vec![
             StandardItem {
                 label: self.label.clone(),
                 enabled: false,
@@ -54,6 +61,34 @@ impl ksni::Tray for RustInputTray {
             }
             .into(),
             MenuItem::Separator,
+        ];
+        if !self.transfers.lines.is_empty() {
+            for line in &self.transfers.lines {
+                menu.push(
+                    StandardItem {
+                        label: line.clone(),
+                        enabled: false,
+                        ..Default::default()
+                    }
+                    .into(),
+                );
+            }
+            if self.transfers.cancellable {
+                menu.push(
+                    StandardItem {
+                        label: "Cancel transfers".into(),
+                        icon_name: "process-stop".into(),
+                        activate: Box::new(|tray: &mut Self| {
+                            tray.send(TrayAction::CancelTransfers)
+                        }),
+                        ..Default::default()
+                    }
+                    .into(),
+                );
+            }
+            menu.push(MenuItem::Separator);
+        }
+        menu.extend([
             StandardItem {
                 label: "Show RustInput".into(),
                 activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Show)),
@@ -68,7 +103,8 @@ impl ksni::Tray for RustInputTray {
                 ..Default::default()
             }
             .into(),
-        ]
+        ]);
+        menu
     }
 
     fn watcher_online(&self) {
@@ -87,6 +123,13 @@ impl ksni::Tray for RustInputTray {
 /// the running tray icon, removed when dropped
 pub(super) struct Handle(ksni::blocking::Handle<RustInputTray>);
 
+impl Handle {
+    /// shows the file transfers in the menu and the tooltip
+    pub(super) fn show(&self, transfers: Summary) {
+        self.0.update(move |tray| tray.transfers = transfers);
+    }
+}
+
 impl Drop for Handle {
     fn drop(&mut self) {
         self.0.shutdown().wait();
@@ -100,6 +143,7 @@ pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle
         actions,
         icons,
         label,
+        transfers: Summary::default(),
     };
     match tray.spawn() {
         Ok(handle) => Some(Handle(handle)),

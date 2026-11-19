@@ -306,6 +306,9 @@ async fn read_loop(
 ) -> Result<(), Error> {
     // every connection reaching this point presented an authorized certificate
     let peer = Peer::Incoming(addr);
+    let fingerprint = crate::connect::peer_fingerprint(&conn)
+        .await
+        .unwrap_or_default();
     let mut b = [0u8; MAX_DATAGRAM_SIZE];
 
     while let Ok(len) = conn.recv(&mut b).await {
@@ -325,7 +328,13 @@ async fn read_loop(
             }
             Ok(Datagram::Event(ProtoEvent::Capabilities(flags))) => {
                 peer_capabilities.borrow_mut().insert(addr, flags);
-                clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
+                clipboard.notify(ClipboardMsg::Capabilities {
+                    peer,
+                    flags,
+                    fingerprint: fingerprint.clone(),
+                    // it opens the file channel to this device
+                    connect_to: None,
+                });
             }
             Ok(Datagram::Event(event)) => {
                 if let ProtoEvent::Leave(_) = event {

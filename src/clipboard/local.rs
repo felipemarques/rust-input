@@ -4,7 +4,7 @@
 //! answer, images have to be converted), so everything happens on a dedicated
 //! thread and the async side only exchanges messages with it.
 
-use std::{borrow::Cow, io::Cursor, sync::mpsc};
+use std::{borrow::Cow, io::Cursor, path::PathBuf, sync::mpsc};
 
 use rustinput_proto::ClipboardKind;
 use sha2::{Digest, Sha256};
@@ -12,6 +12,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 
 use super::Content;
+use crate::files::files_key;
 
 /// decoded images larger than this are refused (8192 x 8192 RGBA)
 const MAX_IMAGE_BYTES: usize = 256 * 1024 * 1024;
@@ -34,9 +35,19 @@ enum ClipboardError {
     HashMismatch,
 }
 
+/// what the clipboard of this machine holds
+#[derive(Debug)]
+pub(crate) enum LocalContent {
+    /// text or an image
+    Data(Content),
+    /// copied files and folders, identified by `key` (see [`files_key`])
+    Files { paths: Vec<PathBuf>, key: u64 },
+}
+
 enum Request {
-    Read(oneshot::Sender<Option<Content>>),
+    Read(oneshot::Sender<Option<LocalContent>>),
     Write(Content),
+    WriteFiles(Vec<PathBuf>),
 }
 
 /// handle to the clipboard thread
@@ -57,8 +68,8 @@ impl LocalClipboard {
         Self { requests }
     }
 
-    /// the current content of the clipboard, if it holds text or an image
-    pub(crate) async fn read(&self) -> Option<Content> {
+    /// the current content of the clipboard: files, text or an image
+    pub(crate) async fn read(&self) -> Option<LocalContent> {
         let (reply, content) = oneshot::channel();
         self.requests.send(Request::Read(reply)).ok()?;
         content.await.ok().flatten()
@@ -67,6 +78,11 @@ impl LocalClipboard {
     /// replaces the content of the clipboard
     pub(crate) fn write(&self, content: Content) {
         let _ = self.requests.send(Request::Write(content));
+    }
+
+    /// puts files on the clipboard, ready to be pasted in a file manager
+    pub(crate) fn write_files(&self, paths: Vec<PathBuf>) {
+        let _ = self.requests.send(Request::WriteFiles(paths));
     }
 }
 
@@ -88,6 +104,7 @@ fn worker(requests: mpsc::Receiver<Request>) {
             Request::Read(reply) => {
                 let _ = reply.send(clipboard.as_mut().and_then(read));
             }
+            Request::WriteFiles(paths) => write_files(clipboard.as_mut(), paths),
             Request::Write(content) => {
                 let Some(clipboard) = clipboard.as_mut() else {
                     continue;
@@ -102,17 +119,46 @@ fn worker(requests: mpsc::Receiver<Request>) {
     }
 }
 
-/// Text wins over an image: applications offering both (spreadsheets, word
-/// processors) mean the text, the image is only a rendering of it.
-fn read(clipboard: &mut arboard::Clipboard) -> Option<Content> {
+fn write_files(clipboard: Option<&mut arboard::Clipboard>, paths: Vec<PathBuf>) {
+    let count = paths.len();
+    // Nemo, Nautilus and friends only paste their own format on X11
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if super::x11_files::is_x11() {
+        match super::x11_files::serve(paths) {
+            Ok(()) => log::debug!("clipboard set to {count} received item(s)"),
+            Err(e) => log::warn!("could not put the received files on the clipboard: {e}"),
+        }
+        return;
+    }
+    let Some(clipboard) = clipboard else {
+        return;
+    };
+    match clipboard.set().file_list(&paths) {
+        Ok(()) => log::debug!("clipboard set to {count} received item(s)"),
+        Err(e) => log::warn!("could not put the received files on the clipboard: {e}"),
+    }
+}
+
+/// Files win over text: file managers offer the paths of copied files as text
+/// too. Text wins over an image: applications offering both (spreadsheets,
+/// word processors) mean the text, the image is only a rendering of it.
+fn read(clipboard: &mut arboard::Clipboard) -> Option<LocalContent> {
+    match clipboard.get().file_list() {
+        Ok(paths) if !paths.is_empty() => {
+            let key = files_key(&paths);
+            return Some(LocalContent::Files { paths, key });
+        }
+        Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
+        Err(e) => log::debug!("could not read files from the clipboard: {e}"),
+    }
     match clipboard.get_text() {
-        Ok(text) if !text.is_empty() => return Some(Content::text(text)),
+        Ok(text) if !text.is_empty() => return Some(LocalContent::Data(Content::text(text))),
         Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
         Err(e) => log::debug!("could not read text from the clipboard: {e}"),
     }
     match clipboard.get_image() {
         Ok(image) => match Content::image(image.width, image.height, &image.bytes) {
-            Ok(content) => Some(content),
+            Ok(content) => Some(LocalContent::Data(content)),
             Err(e) => {
                 log::warn!("could not read the image from the clipboard: {e}");
                 None

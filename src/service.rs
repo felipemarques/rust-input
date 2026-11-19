@@ -7,13 +7,15 @@ use crate::{
     crypto,
     dns::{DnsEvent, DnsResolver},
     emulation::{Emulation, EmulationEvent},
+    files::{self, FilesHandle},
     listen::{ListenerCreationError, RustInputListener},
 };
 use futures::StreamExt;
+use local_channel::mpsc::{Receiver, channel};
 use log;
 use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, FrontendEvent, FrontendRequest, IpcError,
-    IpcListenerCreationError, Position, Status,
+    IpcListenerCreationError, Position, Status, TransferInfo,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -70,6 +72,10 @@ pub struct Service {
     next_trigger_handle: u64,
     /// clipboard synchronization
     clipboard: ClipboardHandle,
+    /// file transfers, if enabled
+    files: Option<FilesHandle>,
+    /// state of the file transfers, whenever it changes
+    transfer_reports: Receiver<Vec<TransferInfo>>,
 }
 
 #[derive(Debug)]
@@ -95,7 +101,8 @@ impl Service {
 
         let authorized_keys = Arc::new(RwLock::new(config.authorized_fingerprints()));
         // listener + connection
-        let (clipboard, clipboard_rx) = ClipboardHandle::new(config.clipboard());
+        let (clipboard, clipboard_rx) =
+            ClipboardHandle::new(config.clipboard(), config.clipboard_files());
         let listener = RustInputListener::new(
             config.port(),
             cert.clone(),
@@ -113,7 +120,17 @@ impl Service {
             outgoing: conn.links(),
             incoming: listener.links(),
         };
-        clipboard::spawn(&clipboard, clipboard_rx, links);
+        let (reports_tx, transfer_reports) = channel();
+        let files = clipboard.files_enabled().then(|| {
+            files::spawn(
+                cert.clone(),
+                authorized_keys.clone(),
+                config.port(),
+                clipboard.clone(),
+                reports_tx,
+            )
+        });
+        clipboard::spawn(&clipboard, clipboard_rx, links, files.clone());
 
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());
@@ -143,6 +160,8 @@ impl Service {
             incoming_conns: Default::default(),
             next_trigger_handle: 0,
             clipboard,
+            files,
+            transfer_reports,
         };
         Ok(service)
     }
@@ -167,6 +186,9 @@ impl Service {
                 event = self.emulation.event() => self.handle_emulation_event(event),
                 event = self.capture.event() => self.handle_capture_event(event),
                 event = self.resolver.event() => self.handle_resolver_event(event),
+                Some(transfers) = self.transfer_reports.recv() => {
+                    self.notify_frontend(FrontendEvent::Transfers(transfers));
+                }
                 _ = self.config.changed() => self.handle_config_change(),
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
@@ -238,6 +260,11 @@ impl Service {
                 self.update_leave_hook(handle, leave_hook)
             }
             FrontendRequest::SaveConfiguration => self.save_config(),
+            FrontendRequest::CancelTransfers => {
+                if let Some(files) = &self.files {
+                    files.cancel_all();
+                }
+            }
         }
     }
 
@@ -323,6 +350,9 @@ impl Service {
             EmulationEvent::PortChanged(port) => match port {
                 Ok(port) => {
                     self.port = port;
+                    if let Some(files) = &self.files {
+                        files.change_port(port);
+                    }
                     self.notify_frontend(FrontendEvent::PortChanged(port, None));
                 }
                 Err(e) => self

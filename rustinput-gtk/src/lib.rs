@@ -47,7 +47,7 @@ pub(crate) fn local_commit_str() -> String {
         .to_string()
 }
 
-use rustinput_ipc::FrontendEvent;
+use rustinput_ipc::{FrontendEvent, TransferState};
 
 use adw::Application;
 use gtk::{IconTheme, gdk::Display, glib::clone, prelude::*};
@@ -298,10 +298,21 @@ fn build_ui(app: &Application) {
         });
     }
 
+    // With a tray icon (the menu bar item on macOS) closing the window
+    // only hides it, see `tray`.
+    #[cfg(not(target_os = "macos"))]
+    let tray = tray::setup(app, &window);
+    #[cfg(not(target_os = "macos"))]
+    let in_tray = tray.is_some();
+    #[cfg(target_os = "macos")]
+    let in_tray = true;
+
     glib::spawn_future_local(clone!(
         #[weak]
         window,
         async move {
+            // received transfers already announced in the window
+            let mut announced = std::collections::HashSet::new();
             loop {
                 let notify = receiver.recv().await.unwrap_or_else(|_| process::exit(1));
                 match notify {
@@ -340,17 +351,32 @@ fn build_ui(app: &Application) {
                     FrontendEvent::IncomingDisconnected(addr) => {
                         window.show_toast(format!("{addr} disconnected").as_str());
                     }
+                    FrontendEvent::Transfers(transfers) => {
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(tray) = &tray {
+                            tray.show_transfers(&transfers);
+                        }
+                        for t in &transfers {
+                            if !t.sending
+                                && t.state == TransferState::Done
+                                && announced.insert(t.id)
+                            {
+                                let files = if t.files == 1 {
+                                    "1 file".to_owned()
+                                } else {
+                                    format!("{} files", t.files)
+                                };
+                                window.show_toast(&format!(
+                                    "{files} received from {}, ready to paste",
+                                    t.peer
+                                ));
+                            }
+                        }
+                    }
                 }
             }
         }
     ));
-
-    // With a tray icon (the menu bar item on macOS) closing the window
-    // only hides it, see `tray`.
-    #[cfg(target_os = "macos")]
-    let in_tray = true;
-    #[cfg(not(target_os = "macos"))]
-    let in_tray = tray::setup(app, &window);
 
     // Present the main window on every launch so the user gets a visible
     // confirmation that the app is running — including the post-grant

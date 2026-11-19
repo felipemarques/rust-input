@@ -8,24 +8,33 @@
 //!
 //! Text and images are supported. Content is only exchanged with peers that
 //! announced [`CAP_CLIPBOARD`] and that are authorized on this machine.
+//! Copied files go to peers that announced [`CAP_FILES`] as well, over the
+//! file channel (see [`crate::files`]).
 
 mod local;
 mod transfer;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod x11_files;
 
 use std::{
     collections::HashMap,
     fmt::Display,
     net::SocketAddr,
+    path::PathBuf,
     time::{Duration, Instant},
 };
 
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::ClientHandle;
-use rustinput_proto::{CAP_CLIPBOARD, ClipboardFrame, ClipboardKind};
+use rustinput_proto::{CAP_CLIPBOARD, CAP_FILES, ClipboardFrame, ClipboardKind};
 use tokio::task::spawn_local;
 
-use crate::{connect::OutgoingLinks, listen::IncomingLinks};
-use local::LocalClipboard;
+use crate::{
+    connect::OutgoingLinks,
+    files::{FilesHandle, PeerInfo},
+    listen::IncomingLinks,
+};
+use local::{LocalClipboard, LocalContent};
 use transfer::{Incoming, MAX_CONTENT_SIZE, Outgoing, Progress};
 
 /// interval at which running transfers are checked for resends and timeouts
@@ -63,7 +72,14 @@ impl Display for Peer {
 
 pub(crate) enum ClipboardMsg {
     /// the (trusted) peer announced its optional features
-    Capabilities { peer: Peer, flags: u32 },
+    Capabilities {
+        peer: Peer,
+        flags: u32,
+        /// fingerprint of the certificate of the peer
+        fingerprint: String,
+        /// where to open the file channel, for peers this device connects to
+        connect_to: Option<SocketAddr>,
+    },
     /// a clipboard frame arrived from the peer
     Frame { peer: Peer, frame: ClipboardFrame },
     /// the connection to the peer is gone
@@ -73,7 +89,14 @@ pub(crate) enum ClipboardMsg {
     /// the local clipboard was read for a push to the peer
     Local {
         peer: Peer,
-        content: Option<Content>,
+        content: Option<LocalContent>,
+    },
+    /// files arrived (from `peer`, if it is still known) and go to the
+    /// clipboard; `key` identifies them (see [`crate::files::files_key`])
+    FilesReceived {
+        peer: Option<Peer>,
+        paths: Vec<PathBuf>,
+        key: u64,
     },
 }
 
@@ -82,17 +105,29 @@ pub(crate) enum ClipboardMsg {
 pub(crate) struct ClipboardHandle {
     tx: Sender<ClipboardMsg>,
     enabled: bool,
+    /// copied files are sent too
+    files: bool,
 }
 
 impl ClipboardHandle {
-    pub(crate) fn new(enabled: bool) -> (Self, Receiver<ClipboardMsg>) {
+    pub(crate) fn new(enabled: bool, files: bool) -> (Self, Receiver<ClipboardMsg>) {
         let (tx, rx) = channel();
-        (Self { tx, enabled }, rx)
+        let files = enabled && files;
+        (Self { tx, enabled, files }, rx)
     }
 
     /// the capability flags to announce to peers
     pub(crate) fn capabilities(&self) -> u32 {
-        if self.enabled { CAP_CLIPBOARD } else { 0 }
+        match (self.enabled, self.files) {
+            (true, true) => CAP_CLIPBOARD | CAP_FILES,
+            (true, false) => CAP_CLIPBOARD,
+            _ => 0,
+        }
+    }
+
+    /// whether copied files are sent to the peers
+    pub(crate) fn files_enabled(&self) -> bool {
+        self.files
     }
 
     pub(crate) fn notify(&self, msg: ClipboardMsg) {
@@ -125,7 +160,12 @@ impl PeerLinks {
 }
 
 /// starts the clipboard task, which runs until the service ends
-pub(crate) fn spawn(handle: &ClipboardHandle, rx: Receiver<ClipboardMsg>, links: PeerLinks) {
+pub(crate) fn spawn(
+    handle: &ClipboardHandle,
+    rx: Receiver<ClipboardMsg>,
+    links: PeerLinks,
+    files: Option<FilesHandle>,
+) {
     if !handle.enabled {
         log::info!("clipboard synchronization is disabled");
         return;
@@ -134,6 +174,7 @@ pub(crate) fn spawn(handle: &ClipboardHandle, rx: Receiver<ClipboardMsg>, links:
         rx,
         tx: handle.tx.clone(),
         links,
+        files,
         local: LocalClipboard::new(),
         peers: HashMap::new(),
         pending: HashMap::new(),
@@ -150,12 +191,16 @@ struct PeerState {
     incoming: Option<Incoming>,
     /// the local clipboard is being read for a push to this peer
     reading: bool,
+    /// the peer takes copied files
+    files: bool,
 }
 
 struct Manager {
     rx: Receiver<ClipboardMsg>,
     tx: Sender<ClipboardMsg>,
     links: PeerLinks,
+    /// file transfers, if enabled
+    files: Option<FilesHandle>,
     local: LocalClipboard,
     /// peers that take part in clipboard synchronization
     peers: HashMap<Peer, PeerState>,
@@ -191,15 +236,32 @@ impl Manager {
 
     async fn handle(&mut self, msg: ClipboardMsg) {
         match msg {
-            ClipboardMsg::Capabilities { peer, flags } => {
+            ClipboardMsg::Capabilities {
+                peer,
+                flags,
+                fingerprint,
+                connect_to,
+            } => {
                 if flags & CAP_CLIPBOARD == 0 {
                     self.forget(peer);
                     return;
                 }
-                self.peers.entry(peer).or_insert_with(|| {
+                let state = self.peers.entry(peer).or_insert_with(|| {
                     log::info!("clipboard is shared with {peer}");
                     PeerState::default()
                 });
+                state.files = flags & CAP_FILES != 0 && self.files.is_some();
+                if let Some(files) = &self.files {
+                    if state.files {
+                        files.add_peer(PeerInfo {
+                            peer,
+                            fingerprint,
+                            connect_to,
+                        });
+                    } else {
+                        files.remove_peer(peer);
+                    }
+                }
                 if let Some(requested) = self.pending.remove(&peer) {
                     if requested.elapsed() < PENDING_PUSH_TTL {
                         self.read_for(peer);
@@ -214,7 +276,18 @@ impl Manager {
                     self.pending.insert(peer, Instant::now());
                 }
             }
-            ClipboardMsg::Local { peer, content } => self.start_transfer(peer, content).await,
+            ClipboardMsg::Local { peer, content } => match content {
+                Some(LocalContent::Files { paths, key }) => self.send_files(peer, paths, key),
+                Some(LocalContent::Data(content)) => self.start_transfer(peer, Some(content)).await,
+                None => self.start_transfer(peer, None).await,
+            },
+            ClipboardMsg::FilesReceived { peer, paths, key } => {
+                // the files came from that peer: they do not go back to it
+                if let Some(state) = peer.and_then(|p| self.peers.get_mut(&p)) {
+                    state.synced = Some(key);
+                }
+                self.local.write_files(paths);
+            }
             ClipboardMsg::Frame { peer, frame } => self.handle_frame(peer, frame).await,
             ClipboardMsg::Disconnected { peer } => self.forget(peer),
         }
@@ -222,6 +295,9 @@ impl Manager {
 
     fn forget(&mut self, peer: Peer) {
         self.pending.remove(&peer);
+        if let Some(files) = &self.files {
+            files.remove_peer(peer);
+        }
         if self.peers.remove(&peer).is_some() {
             log::debug!("clipboard is no longer shared with {peer}");
         }
@@ -241,6 +317,24 @@ impl Manager {
             let content = local.read().await;
             let _ = tx.send(ClipboardMsg::Local { peer, content });
         });
+    }
+
+    /// hands copied files over to the file transfers
+    fn send_files(&mut self, peer: Peer, paths: Vec<PathBuf>, key: u64) {
+        let Some(state) = self.peers.get_mut(&peer) else {
+            return;
+        };
+        state.reading = false;
+        if state.synced == Some(key) {
+            return;
+        }
+        let Some(files) = self.files.as_ref().filter(|_| state.files) else {
+            log::info!("{peer} does not take files, the copied files stay here");
+            return;
+        };
+        // recorded right away so a second push of the same files is a no-op
+        state.synced = Some(key);
+        files.send(peer, paths);
     }
 
     async fn start_transfer(&mut self, peer: Peer, content: Option<Content>) {

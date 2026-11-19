@@ -10,6 +10,10 @@ port = 4242
 # on by default; each device only shares with devices it has authorized
 clipboard = true
 
+# send copied files and folders along with the clipboard (on by default),
+# over a TCP connection on the same port number
+clipboard_files = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]

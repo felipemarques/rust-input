@@ -28,6 +28,11 @@ pub const CAP_CLIPBOARD: u32 = 1 << 0;
 /// position along the edge it crosses
 pub const CAP_CURSOR_POSITION: u32 = 1 << 1;
 
+/// capability flag: the peer exchanges copied files over its file channel, a
+/// TLS connection over TCP on the port number of the input channel (see
+/// the RustInput documentation); implies [`CAP_CLIPBOARD`]
+pub const CAP_FILES: u32 = 1 << 2;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///

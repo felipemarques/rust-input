@@ -8,5 +8,6 @@ mod crypto;
 mod dns;
 mod emulation;
 pub mod emulation_test;
+mod files;
 mod listen;
 pub mod service;
