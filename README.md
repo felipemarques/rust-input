@@ -201,7 +201,7 @@ Releases are published by the [Release workflow](.github/workflows/release.yml),
 ```sh
 # Install dependencies
 brew install libadwaita pkg-config imagemagick
-cargo install cargo-bundle
+cargo install cargo-bundle --locked
 # Create the macOS icon file
 scripts/makeicns.sh
 # Create the .app bundle
