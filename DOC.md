@@ -158,3 +158,45 @@ This is an optional feature (`CAP_CURSOR_POSITION`):
 Releasing with the release bind still returns the pointer to where it left.
 Placing the pointer is implemented for X11 and Windows; the other backends keep
 the previous behavior.
+
+## File channel
+
+Copied files are an optional feature (`CAP_FILES`, which needs
+`CAP_CLIPBOARD`). They do not travel over the DTLS connection of the input
+channel: a large transfer would hold up mouse and keyboard, and DTLS over UDP
+is not meant for bulk data. Instead every pair of devices shares a TLS 1.3
+connection over TCP, on the same port number as the input channel:
+
+- the connecting side of the input channel opens it as soon as the peer
+  announced `CAP_FILES`, and reopens it when it drops;
+- both sides present the certificate of the input channel. The accepting side
+  only lets in authorized fingerprints, the connecting side only talks to the
+  fingerprint it saw on the input channel;
+- both sides send the magic `RIF1` first, then frames: a type byte, a big
+  endian u32 length and the payload, which starts with the transfer id.
+
+```mermaid
+sequenceDiagram
+    Sender->>Receiver: Offer(id, entries)
+    Receiver-->>Sender: Accept(id) or Decline(id, reason)
+    loop every file, in the order of the offer
+        Sender->>Receiver: Data(id, bytes)
+    end
+    Receiver-->>Sender: Complete(id)
+```
+
+The entries of an offer list every file and folder with its path inside the
+transfer (components separated by `/`), its size and its modification time.
+Data frames carry the contents of the files in order, a chunk never spans two
+files, so the receiver knows where every byte goes without further framing.
+Transfers to a device run one after the other on its connection.
+
+Either side can give up: the sender with `Cancel(id)`, the receiver with
+`Abort(id)`, which the sender answers with `Cancel(id)` once it stopped
+sending. The receiver then removes what it wrote.
+
+The receiver writes a transfer into a folder of its own, refusing paths that
+would leave it and adjusting names its file system does not accept. When the
+transfer is complete, the clipboard points at its top level items. On X11 the
+clipboard is offered in the GNOME format (`x-special/gnome-copied-files`) as
+well as `text/uri-list`, as the GTK file managers only paste the former.

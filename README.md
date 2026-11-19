@@ -24,10 +24,10 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
 | 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
+| 📁 Copy files and folders on one computer, paste them on the other | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
-| 📁 Copy and paste files | planned | planned | planned | planned |
 
 Used every day between **Windows 11** and **Linux Mint 22 (Cinnamon, X11)**: the ✅ in those two columns are tested by hand.
 The Wayland and macOS builds come from the same code and pass CI, but have not been tested by hand yet.
@@ -35,6 +35,8 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 ¹ GNOME ≥ 45, KDE Plasma ≥ 6.1 and most wlroots compositors, see [Detailed OS Support](#detailed-os-support).
 ² Built, not tested by hand yet. On Wayland it needs a compositor with the data-control protocol (KDE, wlroots).
 ³ Needs a desktop with a system tray: Windows, Cinnamon, KDE, XFCE, MATE, GNOME with the AppIndicator extension.
+⁴ New in 0.16.0: tested in automated runs between two Linux (X11) computers, including pasting in Nemo, not yet by hand
+on Windows.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="420" alt="The RustInput window">
@@ -85,6 +87,30 @@ Content is only transferred when it differs from what the two devices exchanged 
 > - Files are not transferred, and neither is content larger than 64 MiB.
 
 To turn the clipboard synchronization off, set `clipboard = false` in the [configuration](#configuration) file.
+
+## Copy and paste files
+
+Files and folders copied in a file manager (Explorer, Nemo, Nautilus, Dolphin...) go along with the pointer like the
+rest of the clipboard: when the pointer moves to the other computer, they are sent there, one file after the other.
+Once everything arrived, the clipboard of that computer holds them, and pasting in a file manager puts them in the
+folder you paste into.
+
+- Files travel over a connection of their own, encrypted with TLS, so mouse and keyboard stay responsive during large
+  transfers. It uses TCP on the same port number as the rest of RustInput (4242 by default): firewalls have to let
+  TCP through as well.
+- The menu of the [tray icon](#system-tray) shows the transfers on both computers, with their progress, and can
+  cancel them. The window shows a notice when files arrived.
+- Received files are kept in `~/.cache/rustinput/received` (Linux), `%LOCALAPPDATA%\rustinput\received` (Windows) or
+  `~/Library/Caches/rustinput/received` (macOS) until they are pasted; only the last three transfers are kept.
+- Moving back and forth without copying anything new does not send the files again.
+
+> [!Important]
+> - Both computers need RustInput 0.16.0 or newer, and have to authorize each other like for the clipboard.
+> - The transfer starts when the pointer moves, not when pasting: what is copied is sent even if it is never pasted,
+>   and pasting before the transfer finished pastes what the clipboard held before.
+> - On Wayland, file managers that only paste the GNOME clipboard format may not paste received files yet.
+
+To send the clipboard without files, set `clipboard_files = false` in the [configuration](#configuration) file.
 
 ## Pointer position
 
@@ -478,6 +504,10 @@ port = 4242
 # synchronize the clipboard with the connected devices (on by default)
 clipboard = true
 
+# send copied files and folders along with the clipboard (on by default),
+# over a TCP connection on the same port number
+clipboard_files = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
@@ -525,7 +555,8 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
 - [x] Pointer keeps its relative position across computers (Windows, X11)
-- [ ] Copy and paste files
+- [x] Copy and paste files and folders, with progress in the tray
+- [ ] Paste files on demand, while they are transferred (like RustDesk)
 - [ ] Authorize the controlled computer from the controlling one with one click
 
 
