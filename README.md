@@ -186,6 +186,14 @@ git config core.hooksPath .githooks
 
 The `pre-commit` script runs `cargo fmt --all` (and fails if files were modified), `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --workspace --all-features`.
 
+### Releases
+
+Releases are published by the [Release workflow](.github/workflows/release.yml), which builds the Linux, Windows and macOS binaries on every push to `main`:
+
+- If the `version` in the root [Cargo.toml](./Cargo.toml) has no `v<version>` tag yet, the workflow creates that tag and a release for it. To publish a new version, bump `version` in the pull request.
+- Otherwise it publishes a pre-release named `main-<short commit>`.
+- Pushing a `v*` tag by hand also publishes a release for that tag.
+
 ### Dependencies & Compiling from Source
 <details>
     <summary>MacOS</summary>
