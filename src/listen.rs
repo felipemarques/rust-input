@@ -1,6 +1,6 @@
 use futures::{Stream, StreamExt};
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{MAX_EVENT_SIZE, ProtoEvent};
+use rustinput_proto::{Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent};
 use rustls::pki_types::CertificateDer;
 use std::{
     collections::{HashMap, VecDeque},
@@ -22,6 +22,8 @@ use webrtc_dtls::{
 };
 use webrtc_util::{Conn, Error, conn::Listener};
 
+use crate::clipboard::{ClipboardHandle, ClipboardMsg, Peer};
+use crate::config::local_commit;
 use crate::crypto;
 
 #[derive(Error, Debug)]
@@ -33,6 +35,29 @@ pub enum ListenerCreationError {
 }
 
 type ArcConn = Arc<dyn Conn + Send + Sync>;
+
+/// sends raw datagrams over the connections accepted by the listener
+#[derive(Clone)]
+pub(crate) struct IncomingLinks {
+    conns: Rc<AsyncMutex<Vec<(SocketAddr, ArcConn)>>>,
+}
+
+impl IncomingLinks {
+    /// returns whether the datagram was handed to a connection
+    pub(crate) async fn send(&self, addr: SocketAddr, datagram: &[u8]) -> bool {
+        let conn = self
+            .conns
+            .lock()
+            .await
+            .iter()
+            .find(|(a, _)| *a == addr)
+            .map(|(_, c)| c.clone());
+        match conn {
+            Some(conn) => conn.send(datagram).await.is_ok(),
+            None => false,
+        }
+    }
+}
 
 pub(crate) enum ListenEvent {
     Msg {
@@ -68,6 +93,7 @@ impl RustInputListener {
         port: u16,
         cert: Certificate,
         authorized_keys: Arc<RwLock<HashMap<String, String>>>,
+        clipboard: ClipboardHandle,
     ) -> Result<Self, ListenerCreationError> {
         let (listen_tx, listen_rx) = channel();
         let (request_port_change, mut request_port_change_rx) = channel();
@@ -135,7 +161,7 @@ impl RustInputListener {
                                 let cert = certs.first().expect("cert");
                                 let fingerprint = crypto::generate_fingerprint(cert);
                                 listen_tx.send(ListenEvent::Accept { addr, fingerprint }).expect("channel closed");
-                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone()));
+                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone(), clipboard.clone()));
                             },
                             Err(e) => {
                                 if let Error::Std(ref e) = e {
@@ -184,6 +210,12 @@ impl RustInputListener {
             port_changed,
             request_port_change,
         })
+    }
+
+    pub(crate) fn links(&self) -> IncomingLinks {
+        IncomingLinks {
+            conns: self.conns.clone(),
+        }
     }
 
     pub(crate) fn request_port_change(&mut self, port: u16) {
@@ -250,14 +282,42 @@ async fn read_loop(
     addr: SocketAddr,
     conn: ArcConn,
     dtls_tx: Sender<ListenEvent>,
+    clipboard: ClipboardHandle,
 ) -> Result<(), Error> {
-    let mut b = [0u8; MAX_EVENT_SIZE];
+    // every connection reaching this point presented an authorized certificate
+    let peer = Peer::Incoming(addr);
+    let mut b = [0u8; MAX_DATAGRAM_SIZE];
 
-    while conn.recv(&mut b).await.is_ok() {
-        match b.try_into() {
-            Ok(event) => dtls_tx
-                .send(ListenEvent::Msg { event, addr })
-                .expect("channel closed"),
+    while let Ok(len) = conn.recv(&mut b).await {
+        match Datagram::decode(&b[..len]) {
+            Ok(Datagram::Event(ProtoEvent::Ack(HANDSHAKE_PROBE))) => {
+                // The connect side asks whether we know the newer
+                // events: answer with our build and features. It will
+                // then send its own (see `connect::receive_loop`).
+                let hello = ProtoEvent::Hello {
+                    commit: local_commit(),
+                };
+                for event in [hello, ProtoEvent::Capabilities(clipboard.capabilities())] {
+                    let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
+                    let _ = conn.send(&buf[..len]).await;
+                }
+            }
+            Ok(Datagram::Event(ProtoEvent::Capabilities(flags))) => {
+                clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
+            }
+            Ok(Datagram::Event(event)) => {
+                if let ProtoEvent::Leave(_) = event {
+                    // the peer stopped controlling this device: whatever
+                    // was copied here in the meantime goes back with it
+                    clipboard.push(peer);
+                }
+                dtls_tx
+                    .send(ListenEvent::Msg { event, addr })
+                    .expect("channel closed")
+            }
+            Ok(Datagram::Clipboard(frame)) => {
+                clipboard.notify(ClipboardMsg::Frame { peer, frame });
+            }
             Err(e) => {
                 // Skip the malformed/unknown datagram and keep
                 // listening. Each DTLS recv returns one full
@@ -273,6 +333,7 @@ async fn read_loop(
         }
     }
     log::info!("dtls client disconnected {addr:?}");
+    clipboard.notify(ClipboardMsg::Disconnected { peer });
     let mut conns = conns.lock().await;
     let index = conns
         .iter()

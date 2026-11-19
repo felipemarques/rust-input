@@ -30,6 +30,30 @@ Focus lies on performance, ease of use and a maintainable implementation that ca
 RustInput encrypts all network traffic using the DTLS implementation provided by [WebRTC.rs](https://github.com/webrtc-rs/webrtc).
 There are currently no mitigations in place for timing side-channel attacks.
 
+## Clipboard
+
+RustInput keeps the clipboard of the connected devices in sync. The clipboard follows the pointer:
+
+- when the pointer enters a client, the clipboard of the controlling device is sent to that client;
+- when the pointer comes back, through the screen edge or the release bind, the clipboard of the client is sent back.
+
+Text and images are supported, which includes screenshots copied to the clipboard with the Print Screen key.
+Content is only transferred when it differs from what the two devices exchanged last.
+
+> [!Important]
+> - Both devices need RustInput 0.13.0 or newer. Lan Mouse devices keep working, without the clipboard.
+> - The clipboard is only shared between devices that authorized each other: the fingerprint of each device has to be
+> listed under "Incoming Connections" (`authorized_fingerprints`) on the other one, also on the device that only controls.
+> - Files are not transferred, and neither is content larger than 64 MiB.
+
+To turn the clipboard synchronization off, set `clipboard = false` in the [configuration](#configuration) file.
+
+## Compatibility with Lan Mouse
+
+RustInput uses the network protocol of Lan Mouse and can be mixed with it.
+Controlling a Lan Mouse 0.11.0 device from RustInput is tested; RustInput only uses its newer protocol events
+(build identification, clipboard) after the other side showed that it knows them.
+
 ## OS Support
 
 Most current desktop environments and operating systems are fully supported, this includes
@@ -379,6 +403,9 @@ release_bind = [ "KeyA", "KeyS", "KeyD", "KeyF" ]
 # optional port (defaults to 4242)
 port = 4242
 
+# synchronize the clipboard with the connected devices (on by default)
+clipboard = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
@@ -423,7 +450,8 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] X11 Input Capture
 - [ ] Latency measurement and visualization
 - [ ] Bandwidth usage measurement and visualization
-- [ ] Clipboard support
+- [x] Clipboard support (text and images)
+- [ ] Clipboard: files
 
 
 ## Detailed OS Support

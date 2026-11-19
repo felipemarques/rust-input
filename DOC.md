@@ -75,3 +75,63 @@ This ensures that
 - b) As soon as a virtual input enters another client, rustinput will stop receiving events,
 which ensures clients can only be controlled directly and not indirectly through other clients.
 
+
+## Handshake and optional features
+
+Lan Mouse up to 0.11.0 closes a connection when it receives an event type it
+does not know. Newer events are therefore never sent blindly:
+
+```mermaid
+sequenceDiagram
+    Connect side->>+Listen side: Ack(HANDSHAKE_PROBE)
+    Note right of Listen side: old versions ignore this
+    Listen side-->>-Connect side: Hello(commit), Capabilities(flags)
+    Connect side->>Listen side: Hello(commit), Capabilities(flags)
+```
+
+The probe is an ordinary `Ack` with a reserved serial, which every version
+ignores when it comes from the connect side. A listener that knows the probe
+answers with its build and its capability flags, and only then does the connect
+side send its own. A peer that never sends `Capabilities` has no optional
+features.
+
+RustInput specific event types start at `0x80` to stay clear of event types
+added upstream.
+
+## Clipboard
+
+Clipboard synchronization is an optional feature (`CAP_CLIPBOARD`) and follows
+the pointer:
+
+- the controlling device sends its clipboard once the client acknowledged
+  `Enter`,
+- the controlled device sends its clipboard when control ends, that is when it
+  sends or receives `Leave`.
+
+A device only announces the capability to peers whose certificate fingerprint
+it has authorized, and ignores clipboard frames from everyone else.
+
+Contents do not fit into the fixed size events, so they travel in clipboard
+frames (`0x81` to `0x84`) of up to `MAX_DATAGRAM_SIZE` bytes over the same DTLS
+connection. As that connection is datagram based, a transfer is a small
+reliable stream:
+
+```mermaid
+sequenceDiagram
+    Sender->>Receiver: Offer(transfer, kind, size, hash)
+    Receiver-->>Sender: Ack(transfer, 0)
+    loop until everything is acknowledged
+        Sender->>Receiver: Data(transfer, offset, bytes)
+        Receiver-->>Sender: Ack(transfer, received)
+    end
+```
+
+The receiver only accepts data in order and acknowledges the number of
+contiguous bytes it holds. The sender keeps a window of unacknowledged data in
+flight and goes back to the last acknowledged byte when the receiver repeats an
+acknowledgement or stays silent. A receiver that already has the offered
+content (same hash) answers with `Cancel`.
+
+Text is sent as UTF-8, images as PNG (8 bit RGBA). The hash of an image is taken
+over its pixels, so an image read back from the clipboard is recognized no
+matter how it was compressed.

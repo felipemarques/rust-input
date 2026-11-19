@@ -67,6 +67,7 @@ struct ConfigToml {
     port: Option<u16>,
     release_bind: Option<Vec<scancode::Linux>>,
     cert_path: Option<PathBuf>,
+    clipboard: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
@@ -490,6 +491,14 @@ impl Config {
             .flatten()
             .map(From::<TomlClient>::from)
             .collect()
+    }
+
+    /// whether the clipboard is synchronized with the connected devices
+    pub fn clipboard(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.clipboard)
+            .unwrap_or(true)
     }
 
     /// release bind for returning control to the host

@@ -1,6 +1,7 @@
 use crate::{
     capture::{Capture, CaptureType, ICaptureEvent},
     client::ClientManager,
+    clipboard::{self, ClipboardHandle, Peer, PeerLinks},
     config::{Config, ConfigClient},
     connect::RustInputConnection,
     crypto,
@@ -67,6 +68,8 @@ pub struct Service {
     /// map from capture handle to connection info
     incoming_conn_info: HashMap<ClientHandle, Incoming>,
     next_trigger_handle: u64,
+    /// clipboard synchronization
+    clipboard: ClipboardHandle,
 }
 
 #[derive(Debug)]
@@ -92,9 +95,25 @@ impl Service {
 
         let authorized_keys = Arc::new(RwLock::new(config.authorized_fingerprints()));
         // listener + connection
-        let listener =
-            RustInputListener::new(config.port(), cert.clone(), authorized_keys.clone()).await?;
-        let conn = RustInputConnection::new(cert.clone(), client_manager.clone());
+        let (clipboard, clipboard_rx) = ClipboardHandle::new(config.clipboard());
+        let listener = RustInputListener::new(
+            config.port(),
+            cert.clone(),
+            authorized_keys.clone(),
+            clipboard.clone(),
+        )
+        .await?;
+        let conn = RustInputConnection::new(
+            cert.clone(),
+            client_manager.clone(),
+            authorized_keys.clone(),
+            clipboard.clone(),
+        );
+        let links = PeerLinks {
+            outgoing: conn.links(),
+            incoming: listener.links(),
+        };
+        clipboard::spawn(&clipboard, clipboard_rx, links);
 
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());
@@ -123,6 +142,7 @@ impl Service {
             incoming_conn_info: Default::default(),
             incoming_conns: Default::default(),
             next_trigger_handle: 0,
+            clipboard,
         };
         Ok(service)
     }
@@ -341,6 +361,9 @@ impl Service {
                 // => notify it that its capture should be released
                 if let Some(incoming) = self.incoming_conn_info.get(&handle) {
                     self.emulation.send_leave_event(incoming.addr);
+                    // control goes back to that device, and so does
+                    // what was copied here in the meantime
+                    self.clipboard.push(Peer::Incoming(incoming.addr));
                 }
             }
             ICaptureEvent::CaptureDisabled => {
@@ -358,6 +381,10 @@ impl Service {
             ICaptureEvent::ClientLeft(handle) => {
                 log::info!("leaving client {handle} ...");
                 self.spawn_hook_command(handle, HookKind::Leave);
+            }
+            ICaptureEvent::ClientAcknowledged(handle) => {
+                // the client is being controlled now: bring the clipboard along
+                self.clipboard.push(Peer::Outgoing(handle));
             }
         }
     }

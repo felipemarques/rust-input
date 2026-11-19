@@ -1,15 +1,17 @@
 use crate::client::ClientManager;
+use crate::clipboard::{ClipboardHandle, ClipboardMsg, Peer};
 use crate::config::local_commit;
+use crate::crypto;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
-use rustinput_proto::{MAX_EVENT_SIZE, ProtoEvent};
+use rustinput_proto::{Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     io,
     net::SocketAddr,
     rc::Rc,
-    sync::Arc,
+    sync::{Arc, RwLock},
     time::Duration,
 };
 use thiserror::Error;
@@ -92,18 +94,64 @@ async fn connect_any(
     }
 }
 
+type Conns = Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>;
+
+/// sends raw datagrams over the connections to the clients
+#[derive(Clone)]
+pub(crate) struct OutgoingLinks {
+    client_manager: ClientManager,
+    conns: Conns,
+}
+
+impl OutgoingLinks {
+    /// returns whether the datagram was handed to a connection
+    pub(crate) async fn send(&self, handle: ClientHandle, datagram: &[u8]) -> bool {
+        let Some(addr) = self.client_manager.active_addr(handle) else {
+            return false;
+        };
+        let conn = self.conns.lock().await.get(&addr).cloned();
+        match conn {
+            Some(conn) => conn.send(datagram).await.is_ok(),
+            None => false,
+        }
+    }
+}
+
+/// state shared by the tasks serving the connections to the clients
+#[derive(Clone)]
+struct Shared {
+    client_manager: ClientManager,
+    conns: Conns,
+    tx: Sender<(ClientHandle, ProtoEvent)>,
+    ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
+}
+
+/// what a connection needs to take part in clipboard synchronization
+#[derive(Clone)]
+struct ClipboardContext {
+    clipboard: ClipboardHandle,
+    /// fingerprints authorized on this machine
+    authorized_keys: Arc<RwLock<HashMap<String, String>>>,
+}
+
 pub(crate) struct RustInputConnection {
     cert: Certificate,
     client_manager: ClientManager,
-    conns: Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>,
+    conns: Conns,
     connecting: Rc<Mutex<HashSet<ClientHandle>>>,
     recv_rx: Receiver<(ClientHandle, ProtoEvent)>,
     recv_tx: Sender<(ClientHandle, ProtoEvent)>,
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
+    clipboard: ClipboardContext,
 }
 
 impl RustInputConnection {
-    pub(crate) fn new(cert: Certificate, client_manager: ClientManager) -> Self {
+    pub(crate) fn new(
+        cert: Certificate,
+        client_manager: ClientManager,
+        authorized_keys: Arc<RwLock<HashMap<String, String>>>,
+        clipboard: ClipboardHandle,
+    ) -> Self {
         let (recv_tx, recv_rx) = channel();
         Self {
             cert,
@@ -113,6 +161,17 @@ impl RustInputConnection {
             recv_rx,
             recv_tx,
             ping_response: Default::default(),
+            clipboard: ClipboardContext {
+                clipboard,
+                authorized_keys,
+            },
+        }
+    }
+
+    pub(crate) fn links(&self) -> OutgoingLinks {
+        OutgoingLinks {
+            client_manager: self.client_manager.clone(),
+            conns: self.conns.clone(),
         }
     }
 
@@ -153,14 +212,18 @@ impl RustInputConnection {
         if !connecting.contains(&handle) {
             connecting.insert(handle);
             // connect in the background
+            let shared = Shared {
+                client_manager: self.client_manager.clone(),
+                conns: self.conns.clone(),
+                tx: self.recv_tx.clone(),
+                ping_response: self.ping_response.clone(),
+            };
             spawn_local(connect_to_handle(
-                self.client_manager.clone(),
+                shared,
                 self.cert.clone(),
                 handle,
-                self.conns.clone(),
                 self.connecting.clone(),
-                self.recv_tx.clone(),
-                self.ping_response.clone(),
+                self.clipboard.clone(),
             ));
         }
         Err(RustInputConnectionError::NotConnected)
@@ -168,14 +231,18 @@ impl RustInputConnection {
 }
 
 async fn connect_to_handle(
-    client_manager: ClientManager,
+    shared: Shared,
     cert: Certificate,
     handle: ClientHandle,
-    conns: Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>,
     connecting: Rc<Mutex<HashSet<ClientHandle>>>,
-    tx: Sender<(ClientHandle, ProtoEvent)>,
-    ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
+    clipboard: ClipboardContext,
 ) -> Result<(), RustInputConnectionError> {
+    let Shared {
+        client_manager,
+        conns,
+        ping_response,
+        ..
+    } = shared.clone();
     log::info!("client {handle} connecting ...");
     // sending did not work, figure out active conn.
     if let Some(addrs) = client_manager.get_ips(handle) {
@@ -198,17 +265,27 @@ async fn connect_to_handle(
         conns.lock().await.insert(addr, conn.clone());
         connecting.lock().await.remove(&handle);
 
-        // Best-effort version handshake. Send our commit hash once
-        // immediately after the DTLS handshake; the listen side
-        // mirrors a Hello back so the receive loop can populate
-        // `peer_commit`. Old peers will silently skip this event
-        // per the forward-compat handler in [`receive_loop`].
-        let (buf, len) = ProtoEvent::Hello {
-            commit: local_commit(),
-        }
-        .into();
+        // Find out whether the peer knows the newer events without
+        // sending one: Lan Mouse up to 0.11.0 disconnects on event types
+        // it does not know, but ignores this acknowledgement. A newer
+        // listener answers it with its Hello and Capabilities, to which
+        // [`receive_loop`] replies with ours.
+        let (buf, len) = ProtoEvent::Ack(HANDSHAKE_PROBE).into();
         if let Err(e) = conn.send(&buf[..len]).await {
-            log::debug!("hello send to {addr} failed: {e}");
+            log::debug!("handshake probe to {addr} failed: {e}");
+        }
+
+        // Optional features. The clipboard is only shared with a peer
+        // whose certificate is authorized here: the connect side does
+        // not verify who answers at the configured address, and the
+        // clipboard must not go to (or come from) a stranger. The
+        // peer learns this from the flags and will not offer its own.
+        let trusted = peer_is_authorized(&conn, &clipboard.authorized_keys).await;
+        if !trusted && clipboard.clipboard.capabilities() != 0 {
+            log::info!(
+                "clipboard is not shared with client {handle} @ {addr}: \
+                 its fingerprint is not authorized on this device"
+            );
         }
 
         // poll connection for active
@@ -216,13 +293,11 @@ async fn connect_to_handle(
 
         // receiver
         spawn_local(receive_loop(
-            client_manager,
+            shared,
             handle,
             addr,
             conn,
-            conns,
-            tx,
-            ping_response.clone(),
+            trusted.then_some(clipboard.clipboard),
         ));
         return Ok(());
     }
@@ -258,20 +333,70 @@ async fn ping_pong(
     }
 }
 
+/// whether the certificate presented by the peer is authorized on this device
+async fn peer_is_authorized(
+    conn: &Arc<dyn Conn + Send + Sync>,
+    authorized_keys: &RwLock<HashMap<String, String>>,
+) -> bool {
+    let Some(conn) = conn.as_any().downcast_ref::<DTLSConn>() else {
+        return false;
+    };
+    let certs = conn.connection_state().await.peer_certificates;
+    let Some(cert) = certs.first() else {
+        return false;
+    };
+    let fingerprint = crypto::generate_fingerprint(cert);
+    authorized_keys
+        .read()
+        .expect("lock")
+        .contains_key(&fingerprint)
+}
+
+/// tells the peer our build and optional features
+async fn introduce(conn: &Arc<dyn Conn + Send + Sync>, addr: SocketAddr, flags: u32) {
+    let hello = ProtoEvent::Hello {
+        commit: local_commit(),
+    };
+    for event in [hello, ProtoEvent::Capabilities(flags)] {
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
+        if let Err(e) = conn.send(&buf[..len]).await {
+            log::debug!("sending {event} to {addr} failed: {e}");
+        }
+    }
+}
+
 async fn receive_loop(
-    client_manager: ClientManager,
+    shared: Shared,
     handle: ClientHandle,
     addr: SocketAddr,
     conn: Arc<dyn Conn + Send + Sync>,
-    conns: Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>,
-    tx: Sender<(ClientHandle, ProtoEvent)>,
-    ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
+    // set if the clipboard may be shared with this peer
+    clipboard: Option<ClipboardHandle>,
 ) {
-    let mut buf = [0u8; MAX_EVENT_SIZE];
-    while conn.recv(&mut buf).await.is_ok() {
-        match buf.try_into() {
-            Ok(event) => {
+    let Shared {
+        client_manager,
+        conns,
+        tx,
+        ping_response,
+    } = shared;
+    let peer = Peer::Outgoing(handle);
+    let flags = clipboard.as_ref().map_or(0, |c| c.capabilities());
+    // whether the peer was told our build and features
+    let mut introduced = false;
+    let mut buf = [0u8; MAX_DATAGRAM_SIZE];
+    while let Ok(len) = conn.recv(&mut buf).await {
+        match Datagram::decode(&buf[..len]) {
+            Ok(Datagram::Event(event)) => {
                 log::trace!("{addr} <==<==<== {event}");
+                if matches!(
+                    event,
+                    ProtoEvent::Hello { .. } | ProtoEvent::Capabilities(_)
+                ) && !introduced
+                {
+                    // the peer answered the probe: it knows these events
+                    introduced = true;
+                    introduce(&conn, addr, flags).await;
+                }
                 match event {
                     ProtoEvent::Pong(b) => {
                         client_manager.set_active_addr(handle, Some(addr));
@@ -281,7 +406,17 @@ async fn receive_loop(
                     ProtoEvent::Hello { commit } => {
                         client_manager.set_peer_commit(handle, Some(commit));
                     }
+                    ProtoEvent::Capabilities(flags) => {
+                        if let Some(clipboard) = &clipboard {
+                            clipboard.notify(ClipboardMsg::Capabilities { peer, flags });
+                        }
+                    }
                     event => tx.send((handle, event)).expect("channel closed"),
+                }
+            }
+            Ok(Datagram::Clipboard(frame)) => {
+                if let Some(clipboard) = &clipboard {
+                    clipboard.notify(ClipboardMsg::Frame { peer, frame });
                 }
             }
             // Skip undecodable datagrams without dropping the
@@ -292,6 +427,9 @@ async fn receive_loop(
         }
     }
     log::warn!("recv error");
+    if let Some(clipboard) = &clipboard {
+        clipboard.notify(ClipboardMsg::Disconnected { peer });
+    }
     disconnect(&client_manager, handle, addr, &conns).await;
 }
 

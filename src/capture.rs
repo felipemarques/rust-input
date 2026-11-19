@@ -44,6 +44,9 @@ pub(crate) enum ICaptureEvent {
     /// remote `Leave`, explicit `Release` request, send
     /// failure, or destroy of the active capture).
     ClientLeft(u64),
+    /// The client entered confirmed that it is now being controlled,
+    /// from here on input events reach it.
+    ClientAcknowledged(u64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -290,6 +293,11 @@ impl CaptureTask {
                         // connection acknowlegded => set state to Sending
                         ProtoEvent::Ack(_) => {
                             log::info!("client {handle} acknowledged the connection!");
+                            if self.state != State::Sending && self.active_client == Some(handle) {
+                                self.event_tx
+                                    .send(ICaptureEvent::ClientAcknowledged(handle))
+                                    .expect("channel closed");
+                            }
                             self.state = State::Sending;
                         }
                         // client disconnected

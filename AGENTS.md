@@ -25,6 +25,7 @@ RustInput is an open-source Software KVM sharing mouse/keyboard input across loc
 - **input-emulation:** Replays events via the `Emulation` trait (`consume`, `create`, `destroy`, `terminate`). Maintains `pressed_keys` and releases them on disconnect.
 - **rustinput-ipc / rustinput-proto:** Protocol glue and serialization. Events are UDP; connection requests are TCP on the same port. Version bumps required when serialization changes.
 - **input-event:** Shared scancode enums and abstract event types—extend here, don't duplicate translations.
+- **clipboard (src/clipboard):** Optional clipboard synchronization following the pointer. Frames and the handshake that guards newer events are described in [DOC.md](DOC.md); never send an event type old peers do not know before the peer answered the handshake probe.
 
 ## Feature & cfg discipline
 

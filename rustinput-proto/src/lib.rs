@@ -12,6 +12,28 @@ use thiserror::Error;
 /// type: u8, time: u32, dx: f64, dy: f64
 pub const MAX_EVENT_SIZE: usize = size_of::<u8>() + size_of::<u32>() + 2 * size_of::<f64>();
 
+pub mod clipboard;
+
+pub use clipboard::{ClipboardFrame, ClipboardKind};
+
+/// largest datagram a peer may send, receive buffers are sized after it
+pub const MAX_DATAGRAM_SIZE: usize = 1200;
+
+/// capability flag: the peer synchronizes the clipboard
+/// (see [`ProtoEvent::Capabilities`])
+pub const CAP_CLIPBOARD: u32 = 1 << 0;
+
+/// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
+/// connecting to find out whether the peer knows the newer events.
+///
+/// Lan Mouse up to 0.11.0 closes the connection when it receives an event
+/// type it does not know, so [`ProtoEvent::Hello`] and
+/// [`ProtoEvent::Capabilities`] can not be sent blindly. An `Ack` coming
+/// from the connect side on the other hand is ignored by every version. A
+/// listener that understands the probe answers with its `Hello` and
+/// `Capabilities`; only then does the connect side send its own.
+pub const HANDSHAKE_PROBE: u32 = 0x5249_4e50;
+
 /// error type for protocol violations
 #[derive(Debug, Error)]
 pub enum ProtocolError {
@@ -21,6 +43,12 @@ pub enum ProtocolError {
     /// position type does not exist
     #[error("invalid event id: `{0}`")]
     InvalidPosition(#[from] TryFromPrimitiveError<Position>),
+    /// clipboard content type does not exist
+    #[error("invalid clipboard kind: `{0}`")]
+    InvalidClipboardKind(#[from] TryFromPrimitiveError<ClipboardKind>),
+    /// the datagram is empty, cut short or longer than its type allows
+    #[error("malformed datagram of {0} bytes")]
+    Malformed(usize),
 }
 
 /// Position of a client
@@ -72,6 +100,13 @@ pub enum ProtoEvent {
     /// recognize the event type silently skip it per the
     /// forward-compat handling in the receive loop.
     Hello { commit: [u8; 8] },
+    /// Optional features of the sending peer as a set of `CAP_*` flags.
+    /// The listen side sends its flags in answer to [`HANDSHAKE_PROBE`],
+    /// the connect side follows with its own. A peer that never sends
+    /// this event has no optional features: datagrams larger than
+    /// [`MAX_EVENT_SIZE`] must only be sent to peers that announced the
+    /// feature they belong to.
+    Capabilities(u32),
 }
 
 impl Display for ProtoEvent {
@@ -93,6 +128,7 @@ impl Display for ProtoEvent {
                 let s = std::str::from_utf8(commit).unwrap_or("????????");
                 write!(f, "Hello({s})")
             }
+            ProtoEvent::Capabilities(flags) => write!(f, "Capabilities({flags:#x})"),
         }
     }
 }
@@ -112,6 +148,9 @@ pub enum EventType {
     Leave,
     Ack,
     Hello,
+    // RustInput extensions start at 0x80 to stay clear of event types
+    // added upstream; 0x81 to 0x84 are the clipboard frames
+    Capabilities = 0x80,
 }
 
 impl ProtoEvent {
@@ -135,6 +174,7 @@ impl ProtoEvent {
             ProtoEvent::Leave(_) => EventType::Leave,
             ProtoEvent::Ack(_) => EventType::Ack,
             ProtoEvent::Hello { .. } => EventType::Hello,
+            ProtoEvent::Capabilities(_) => EventType::Capabilities,
         }
     }
 }
@@ -196,6 +236,7 @@ impl TryFrom<[u8; MAX_EVENT_SIZE]> for ProtoEvent {
                 }
                 Ok(Self::Hello { commit })
             }
+            EventType::Capabilities => Ok(Self::Capabilities(decode_u32(&mut buf)?)),
         }
     }
 }
@@ -265,9 +306,36 @@ impl From<ProtoEvent> for ([u8; MAX_EVENT_SIZE], usize) {
                         encode_u8(buf, len, *b);
                     }
                 }
+                ProtoEvent::Capabilities(flags) => encode_u32(buf, len, flags),
             }
         }
         (buf, len)
+    }
+}
+
+/// anything a peer can send in one datagram
+#[derive(Clone, Debug)]
+pub enum Datagram {
+    Event(ProtoEvent),
+    Clipboard(ClipboardFrame),
+}
+
+impl Datagram {
+    /// decodes one received datagram
+    pub fn decode(datagram: &[u8]) -> Result<Self, ProtocolError> {
+        let Some(&event_type) = datagram.first() else {
+            return Err(ProtocolError::Malformed(0));
+        };
+        if clipboard::is_clipboard_frame(event_type) {
+            return ClipboardFrame::decode(datagram).map(Self::Clipboard);
+        }
+        if datagram.len() > MAX_EVENT_SIZE {
+            return Err(ProtocolError::Malformed(datagram.len()));
+        }
+        // events are decoded from a fixed size buffer
+        let mut buf = [0u8; MAX_EVENT_SIZE];
+        buf[..datagram.len()].copy_from_slice(datagram);
+        ProtoEvent::try_from(buf).map(Self::Event)
     }
 }
 
@@ -307,3 +375,68 @@ encode_impl!(u8);
 encode_impl!(u32);
 encode_impl!(i32);
 encode_impl!(f64);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn roundtrip(event: ProtoEvent) -> ProtoEvent {
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
+        match Datagram::decode(&buf[..len]).expect("decode") {
+            Datagram::Event(event) => event,
+            Datagram::Clipboard(frame) => panic!("unexpected clipboard frame {frame:?}"),
+        }
+    }
+
+    #[test]
+    fn capabilities_roundtrip() {
+        match roundtrip(ProtoEvent::Capabilities(CAP_CLIPBOARD | 0x8000_0000)) {
+            ProtoEvent::Capabilities(flags) => assert_eq!(flags, CAP_CLIPBOARD | 0x8000_0000),
+            event => panic!("unexpected event {event}"),
+        }
+    }
+
+    #[test]
+    fn events_keep_their_wire_format() {
+        // the first byte is the event type, upstream peers rely on it
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::Ping.into();
+        assert_eq!(&buf[..len], &[6]);
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::Ack(1).into();
+        assert_eq!(&buf[..len], &[10, 0, 0, 0, 1]);
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::Capabilities(1).into();
+        assert_eq!(&buf[..len], &[0x80, 0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn input_event_roundtrip() {
+        let motion = ProtoEvent::Input(InputEvent::Pointer(PointerEvent::Motion {
+            time: 42,
+            dx: -1.5,
+            dy: 3.0,
+        }));
+        match roundtrip(motion) {
+            ProtoEvent::Input(InputEvent::Pointer(PointerEvent::Motion { time, dx, dy })) => {
+                assert_eq!((time, dx, dy), (42, -1.5, 3.0));
+            }
+            event => panic!("unexpected event {event}"),
+        }
+    }
+
+    #[test]
+    fn malformed_datagrams_are_rejected() {
+        assert!(matches!(
+            Datagram::decode(&[]),
+            Err(ProtocolError::Malformed(0))
+        ));
+        // unknown event type
+        assert!(matches!(
+            Datagram::decode(&[0x7f]),
+            Err(ProtocolError::InvalidEventId(_))
+        ));
+        // an event can not be longer than the largest event
+        assert!(matches!(
+            Datagram::decode(&[6; MAX_EVENT_SIZE + 1]),
+            Err(ProtocolError::Malformed(_))
+        ));
+    }
+}
