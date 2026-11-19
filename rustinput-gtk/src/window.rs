@@ -443,6 +443,8 @@ impl Window {
         self.request(FrontendRequest::RemoveAuthorizedKey(fp));
     }
 
+    /// used by the tray icon, macOS has its own menu bar item
+    #[cfg(not(target_os = "macos"))]
     pub(super) fn request_cancel_transfers(&self) {
         self.request(FrontendRequest::CancelTransfers);
     }
