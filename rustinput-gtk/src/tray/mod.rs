@@ -33,7 +33,12 @@ use crate::window::Window;
 /// Returns `false` if there is no system tray, in which case nothing changes.
 pub(crate) fn setup(app: &Application, window: &Window) -> bool {
     let (actions_tx, actions) = async_channel::unbounded();
-    let Some(handle) = platform::spawn(actions_tx) else {
+    // shown in the tooltip and at the top of the menu
+    let label = format!(
+        "RustInput {}",
+        crate::APP_VERSION.get().copied().unwrap_or_default()
+    );
+    let Some(handle) = platform::spawn(actions_tx, label) else {
         return false;
     };
     log::info!("tray icon shown, closing the window keeps RustInput running");

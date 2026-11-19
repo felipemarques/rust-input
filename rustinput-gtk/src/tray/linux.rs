@@ -9,6 +9,8 @@ use super::{TrayAction, icon};
 struct RustInputTray {
     actions: Sender<TrayAction>,
     icons: Vec<ksni::Icon>,
+    /// name and version, shown in the tooltip and at the top of the menu
+    label: String,
 }
 
 impl RustInputTray {
@@ -33,7 +35,7 @@ impl ksni::Tray for RustInputTray {
 
     fn tool_tip(&self) -> ToolTip {
         ToolTip {
-            title: "RustInput".into(),
+            title: self.label.clone(),
             description: "Mouse and keyboard sharing".into(),
             ..Default::default()
         }
@@ -45,6 +47,13 @@ impl ksni::Tray for RustInputTray {
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
         vec![
+            StandardItem {
+                label: self.label.clone(),
+                enabled: false,
+                ..Default::default()
+            }
+            .into(),
+            MenuItem::Separator,
             StandardItem {
                 label: "Show RustInput".into(),
                 activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Show)),
@@ -85,9 +94,14 @@ impl Drop for Handle {
 }
 
 /// shows the tray icon, `None` if the desktop has no system tray
-pub(super) fn spawn(actions: Sender<TrayAction>) -> Option<Handle> {
+pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle> {
     let icons = icon::icons().into_iter().map(argb).collect();
-    match (RustInputTray { actions, icons }).spawn() {
+    let tray = RustInputTray {
+        actions,
+        icons,
+        label,
+    };
+    match tray.spawn() {
         Ok(handle) => Some(Handle(handle)),
         Err(e) => {
             log::info!("no system tray available: {e}");

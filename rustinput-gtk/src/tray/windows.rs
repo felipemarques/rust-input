@@ -45,22 +45,24 @@ impl Drop for Handle {
     }
 }
 
-/// shows the tray icon, `None` if it could not be created
-pub(super) fn spawn(actions: Sender<TrayAction>) -> Option<Handle> {
+/// shows the tray icon, `None` if it could not be created; `label` (name and
+/// version) is shown in the tooltip and at the top of the menu
+pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle> {
     let (ready_tx, ready_rx) = mpsc::channel();
-    let spawned = thread::Builder::new()
-        .name("tray".into())
-        .spawn(move || match create(actions) {
-            Ok(tray) => {
-                let _ = ready_tx.send(Some(unsafe { GetCurrentThreadId() }));
-                run_message_loop();
-                drop(tray);
-            }
-            Err(e) => {
-                log::warn!("could not create the tray icon: {e}");
-                let _ = ready_tx.send(None);
-            }
-        });
+    let spawned =
+        thread::Builder::new()
+            .name("tray".into())
+            .spawn(move || match create(actions, &label) {
+                Ok(tray) => {
+                    let _ = ready_tx.send(Some(unsafe { GetCurrentThreadId() }));
+                    run_message_loop();
+                    drop(tray);
+                }
+                Err(e) => {
+                    log::warn!("could not create the tray icon: {e}");
+                    let _ = ready_tx.send(None);
+                }
+            });
     let thread = match spawned {
         Ok(thread) => thread,
         Err(e) => {
@@ -80,15 +82,22 @@ pub(super) fn spawn(actions: Sender<TrayAction>) -> Option<Handle> {
     }
 }
 
-fn create(actions: Sender<TrayAction>) -> Result<TrayIcon, String> {
+fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> {
     let icon = icon::icon(ICON_SIZE).ok_or("no tray icon could be decoded")?;
     let icon = Icon::from_rgba(icon.pixels, icon.width, icon.height).map_err(|e| e.to_string())?;
 
+    let header = MenuItem::new(label, false, None);
     let show = MenuItem::new("Show RustInput", true, None);
     let quit = MenuItem::new("Quit RustInput", true, None);
     let menu = Menu::new();
-    menu.append_items(&[&show, &PredefinedMenuItem::separator(), &quit])
-        .map_err(|e| e.to_string())?;
+    menu.append_items(&[
+        &header,
+        &PredefinedMenuItem::separator(),
+        &show,
+        &PredefinedMenuItem::separator(),
+        &quit,
+    ])
+    .map_err(|e| e.to_string())?;
 
     // The handlers are global and run on this thread. Only the first call
     // installs one, which is fine as there is a single tray icon.
@@ -123,7 +132,7 @@ fn create(actions: Sender<TrayAction>) -> Result<TrayIcon, String> {
 
     TrayIconBuilder::new()
         .with_icon(icon)
-        .with_tooltip("RustInput")
+        .with_tooltip(label)
         .with_menu(Box::new(menu))
         // the left button shows the window, the right one opens the menu
         .with_menu_on_left_click(false)
