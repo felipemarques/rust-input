@@ -36,6 +36,7 @@ Most current desktop environments and operating systems are fully supported, thi
 - GNOME >= 45
 - KDE Plasma >= 6.1
 - Most wlroots based compositors, including Sway (>= 1.8), Hyprland and Wayfire
+- X11 sessions (Xorg), e.g. Cinnamon, XFCE or MATE
 - Windows
 - MacOS
 
@@ -43,7 +44,9 @@ Most current desktop environments and operating systems are fully supported, thi
 ### Caveats / Known Issues
 
 > [!Important]
-> - **X11** currently only has support for input emulation, i.e. can only be used on the receiving end.
+> - **X11**: capturing needs a relative pointing device (mouse or touchpad). A pointer that is moved in absolute coordinates
+> (graphics tablets, virtual machine pointers, tools that warp the pointer through XTest) does not trigger the screen edges.
+> While input is captured the keyboard is grabbed, so screen lockers may fail to engage on the capturing machine.
 >
 > - **Sway / wlroots**: Wlroots based compositors without libei support on the receiving end currently do not handle modifier events on the client side.
 > This results in CTRL / SHIFT / ALT / SUPER keys not working with a sending device that is NOT using the `layer-shell` backend
@@ -417,7 +420,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] MacOS Input Capture
 - [x] Windows Input Capture
 - [x] Encryption
-- [ ] X11 Input Capture
+- [x] X11 Input Capture
 - [ ] Latency measurement and visualization
 - [ ] Bandwidth usage measurement and visualization
 - [ ] Clipboard support
@@ -461,10 +464,10 @@ The following sections detail the emulation and capture backends provided by rus
 | Wayland (Gnome)           |                          | :heavy_check_mark:       |                          |                                        |     |
 | Windows                   |                          |                          | :heavy_check_mark:       |                                        |     |
 | MacOS                     |                          |                          |                          |   :heavy_check_mark:                   |     |
-| X11                       |                          |                          |                          |                                        | WIP |
+| X11                       |                          |                          |                          |                                        | :heavy_check_mark: |
 
 - `layer-shell`: This backend creates a single pixel wide window on the edges of Displays to capture the cursor using the [layer-shell protocol](https://wayland.app/protocols/wlr-layer-shell-unstable-v1).
 - `libei`: This backend uses [libei](https://gitlab.freedesktop.org/libinput/libei) and is supported by GNOME >= 45 or KDE Plasma >= 6.1.
 - `windows`: Backend for input capture on Windows.
 - `macos`: Backend for input capture on MacOS.
-- `x11`: TODO (not yet supported)
+- `x11`: Backend for X11 sessions. It watches the pointer through XInput2 raw motion events and grabs pointer and keyboard once the pointer reaches a screen edge with a client. Requires the XInput2 extension; XKB and RandR are used when available.

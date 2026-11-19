@@ -31,6 +31,12 @@ pub enum CaptureError {
     EndOfStream,
     #[error("io error: `{0}`")]
     Io(#[from] std::io::Error),
+    #[cfg(x11)]
+    #[error("X connection error: `{0}`")]
+    X11Connection(#[from] x11rb::errors::ConnectionError),
+    #[cfg(x11)]
+    #[error("X request failed: `{0}`")]
+    X11Reply(#[from] x11rb::errors::ReplyError),
     #[cfg(libei)]
     #[error("libei error: `{0}`")]
     Reis(#[from] reis::Error),
@@ -137,8 +143,20 @@ pub enum LayerShellCaptureCreationError {
 #[cfg(x11)]
 #[derive(Debug, Error)]
 pub enum X11InputCaptureCreationError {
-    #[error("X11 input capture is not yet implemented :(")]
-    NotImplemented,
+    #[error("the session runs on Wayland, where X11 capture only sees X11 windows")]
+    Wayland,
+    #[error("could not connect to the X server: `{0}`")]
+    Connect(#[from] x11rb::errors::ConnectError),
+    #[error("X connection error: `{0}`")]
+    Connection(#[from] x11rb::errors::ConnectionError),
+    #[error("X request failed: `{0}`")]
+    Reply(#[from] x11rb::errors::ReplyError),
+    #[error("X request failed: `{0}`")]
+    ReplyOrId(#[from] x11rb::errors::ReplyOrIdError),
+    #[error("the X server lacks the `{0}` extension")]
+    MissingExtension(&'static str),
+    #[error("io error: `{0}`")]
+    Io(#[from] std::io::Error),
 }
 
 #[cfg(target_os = "macos")]
