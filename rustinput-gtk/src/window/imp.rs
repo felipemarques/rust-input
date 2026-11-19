@@ -18,6 +18,8 @@ pub struct Window {
     #[template_child]
     pub fingerprint_row: TemplateChild<ActionRow>,
     #[template_child]
+    pub version_row: TemplateChild<ActionRow>,
+    #[template_child]
     pub port_edit_apply: TemplateChild<Button>,
     #[template_child]
     pub port_edit_cancel: TemplateChild<Button>,

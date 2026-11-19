@@ -23,6 +23,19 @@ use window::Window;
 /// soft-warn version-mismatch indicator.
 pub(crate) static LOCAL_COMMIT: OnceLock<[u8; 8]> = OnceLock::new();
 
+/// Version of the application, set once by [`run`]. The frontend is a
+/// crate of its own, so its `CARGO_PKG_VERSION` is not the one users see.
+pub(crate) static APP_VERSION: OnceLock<&'static str> = OnceLock::new();
+
+/// the version shown to the user, with the commit it was built from
+pub(crate) fn version_str() -> String {
+    format!(
+        "{} ({})",
+        APP_VERSION.get().copied().unwrap_or("unknown"),
+        local_commit_str()
+    )
+}
+
 /// Convenience: returns the local commit as an 8-char ASCII string,
 /// or a placeholder if unset (which would indicate a programmer
 /// error since [`run`] always sets it).
@@ -51,8 +64,9 @@ pub enum GtkError {
     NonZeroExitCode(i32),
 }
 
-pub fn run(local_commit: [u8; 8]) -> Result<(), GtkError> {
+pub fn run(version: &'static str, local_commit: [u8; 8]) -> Result<(), GtkError> {
     log::debug!("running gtk frontend");
+    APP_VERSION.set(version).expect("version set once");
     LOCAL_COMMIT
         .set(local_commit)
         .expect("local_commit set once");

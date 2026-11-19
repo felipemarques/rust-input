@@ -48,6 +48,9 @@ impl Window {
             .frontend_request_writer
             .borrow_mut()
             .replace(conn);
+        let version = crate::APP_VERSION.get().copied().unwrap_or_default();
+        window.set_title(Some(&format!("RustInput {version}")));
+        window.imp().version_row.set_subtitle(&crate::version_str());
         window
     }
 

@@ -200,6 +200,11 @@
                             </child>
                           </object>
                         </child>
+                        <child>
+                          <object class="AdwActionRow" id="version_row">
+                            <property name="title">version</property>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
