@@ -176,7 +176,7 @@ fn mouse_button(button: u32, state: u32) {
 }
 
 fn scroll(axis: u8, value: i32) {
-    // WHEEL is positive up but HWHEEL positive right, like lan-mouse's horizontal axis
+    // WHEEL is positive up but HWHEEL positive right, like rustinput's horizontal axis
     let (event_type, value) = match axis {
         0 => (MOUSEEVENTF_WHEEL, value.saturating_neg()),
         1 => (MOUSEEVENTF_HWHEEL, value),

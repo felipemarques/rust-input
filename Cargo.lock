@@ -1742,88 +1742,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lan-mouse"
-version = "0.11.0"
-dependencies = [
- "clap",
- "env_logger",
- "futures",
- "input-capture",
- "input-emulation",
- "input-event",
- "lan-mouse-cli",
- "lan-mouse-gtk",
- "lan-mouse-ipc",
- "lan-mouse-proto",
- "libc",
- "local-channel",
- "log",
- "notify",
- "rcgen",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "shadow-rs",
- "slab",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "toml 0.8.23",
- "toml_edit 0.22.27",
- "webrtc-dtls",
- "webrtc-util",
-]
-
-[[package]]
-name = "lan-mouse-cli"
-version = "0.3.0"
-dependencies = [
- "clap",
- "futures",
- "lan-mouse-ipc",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "lan-mouse-gtk"
-version = "0.3.0"
-dependencies = [
- "async-channel",
- "glib-build-tools",
- "gtk4",
- "hostname",
- "lan-mouse-ipc",
- "libadwaita",
- "log",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "lan-mouse-ipc"
-version = "0.3.0"
-dependencies = [
- "futures",
- "log",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
-name = "lan-mouse-proto"
-version = "0.3.0"
-dependencies = [
- "input-event",
- "num_enum",
- "paste",
- "thiserror 2.0.18",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2522,6 +2440,88 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf0c4a6ece9950b9abdb62b1cfcf2a68b3b67a10ba445b3bb85be2a293d0632"
 dependencies = [
  "nom",
+]
+
+[[package]]
+name = "rustinput"
+version = "0.11.0"
+dependencies = [
+ "clap",
+ "env_logger",
+ "futures",
+ "input-capture",
+ "input-emulation",
+ "input-event",
+ "libc",
+ "local-channel",
+ "log",
+ "notify",
+ "rcgen",
+ "rustinput-cli",
+ "rustinput-gtk",
+ "rustinput-ipc",
+ "rustinput-proto",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "shadow-rs",
+ "slab",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "toml 0.8.23",
+ "toml_edit 0.22.27",
+ "webrtc-dtls",
+ "webrtc-util",
+]
+
+[[package]]
+name = "rustinput-cli"
+version = "0.3.0"
+dependencies = [
+ "clap",
+ "futures",
+ "rustinput-ipc",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
+name = "rustinput-gtk"
+version = "0.3.0"
+dependencies = [
+ "async-channel",
+ "glib-build-tools",
+ "gtk4",
+ "hostname",
+ "libadwaita",
+ "log",
+ "rustinput-ipc",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "rustinput-ipc"
+version = "0.3.0"
+dependencies = [
+ "futures",
+ "log",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-stream",
+]
+
+[[package]]
+name = "rustinput-proto"
+version = "0.3.0"
+dependencies = [
+ "input-event",
+ "num_enum",
+ "paste",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

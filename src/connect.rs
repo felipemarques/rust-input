@@ -1,8 +1,8 @@
 use crate::client::ClientManager;
 use crate::config::local_commit;
-use lan_mouse_ipc::{ClientHandle, DEFAULT_PORT};
-use lan_mouse_proto::{MAX_EVENT_SIZE, ProtoEvent};
 use local_channel::mpsc::{Receiver, Sender, channel};
+use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
+use rustinput_proto::{MAX_EVENT_SIZE, ProtoEvent};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
@@ -26,7 +26,7 @@ use webrtc_dtls::{
 use webrtc_util::Conn;
 
 #[derive(Debug, Error)]
-pub(crate) enum LanMouseConnectionError {
+pub(crate) enum RustInputConnectionError {
     #[error(transparent)]
     Bind(#[from] io::Error),
     #[error(transparent)]
@@ -46,7 +46,7 @@ const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 async fn connect(
     addr: SocketAddr,
     cert: Certificate,
-) -> Result<(Arc<dyn Conn + Sync + Send>, SocketAddr), (SocketAddr, LanMouseConnectionError)> {
+) -> Result<(Arc<dyn Conn + Sync + Send>, SocketAddr), (SocketAddr, RustInputConnectionError)> {
     log::info!("connecting to {addr} ...");
     let conn = Arc::new(
         UdpSocket::bind("0.0.0.0:0")
@@ -63,7 +63,7 @@ async fn connect(
     };
     let timeout = tokio::time::sleep(DEFAULT_CONNECTION_TIMEOUT);
     tokio::select! {
-        _ = timeout => Err((addr, LanMouseConnectionError::Timeout)),
+        _ = timeout => Err((addr, RustInputConnectionError::Timeout)),
         result = DTLSConn::new(conn, config, true, None) => match result {
             Ok(dtls_conn) => Ok((Arc::new(dtls_conn), addr)),
             Err(e) => Err((addr, e.into())),
@@ -74,14 +74,14 @@ async fn connect(
 async fn connect_any(
     addrs: &[SocketAddr],
     cert: Certificate,
-) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), LanMouseConnectionError> {
+) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), RustInputConnectionError> {
     let mut joinset = JoinSet::new();
     for &addr in addrs {
         joinset.spawn_local(connect(addr, cert.clone()));
     }
     loop {
         match joinset.join_next().await {
-            None => return Err(LanMouseConnectionError::NotConnected),
+            None => return Err(RustInputConnectionError::NotConnected),
             Some(r) => match r.expect("join error") {
                 Ok(conn) => return Ok(conn),
                 Err((a, e)) => {
@@ -92,7 +92,7 @@ async fn connect_any(
     }
 }
 
-pub(crate) struct LanMouseConnection {
+pub(crate) struct RustInputConnection {
     cert: Certificate,
     client_manager: ClientManager,
     conns: Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>,
@@ -102,7 +102,7 @@ pub(crate) struct LanMouseConnection {
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
 }
 
-impl LanMouseConnection {
+impl RustInputConnection {
     pub(crate) fn new(cert: Certificate, client_manager: ClientManager) -> Self {
         let (recv_tx, recv_rx) = channel();
         Self {
@@ -124,7 +124,7 @@ impl LanMouseConnection {
         &self,
         event: ProtoEvent,
         handle: ClientHandle,
-    ) -> Result<(), LanMouseConnectionError> {
+    ) -> Result<(), RustInputConnectionError> {
         let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
         let buf = &buf[..len];
         if let Some(addr) = self.client_manager.active_addr(handle) {
@@ -134,7 +134,7 @@ impl LanMouseConnection {
             };
             if let Some(conn) = conn {
                 if !self.client_manager.alive(handle) {
-                    return Err(LanMouseConnectionError::TargetEmulationDisabled);
+                    return Err(RustInputConnectionError::TargetEmulationDisabled);
                 }
                 match conn.send(buf).await {
                     Ok(_) => {}
@@ -163,7 +163,7 @@ impl LanMouseConnection {
                 self.ping_response.clone(),
             ));
         }
-        Err(LanMouseConnectionError::NotConnected)
+        Err(RustInputConnectionError::NotConnected)
     }
 }
 
@@ -175,7 +175,7 @@ async fn connect_to_handle(
     connecting: Rc<Mutex<HashSet<ClientHandle>>>,
     tx: Sender<(ClientHandle, ProtoEvent)>,
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
-) -> Result<(), LanMouseConnectionError> {
+) -> Result<(), RustInputConnectionError> {
     log::info!("client {handle} connecting ...");
     // sending did not work, figure out active conn.
     if let Some(addrs) = client_manager.get_ips(handle) {
@@ -227,7 +227,7 @@ async fn connect_to_handle(
         return Ok(());
     }
     connecting.lock().await.remove(&handle);
-    Err(LanMouseConnectionError::NotConnected)
+    Err(RustInputConnectionError::NotConnected)
 }
 
 async fn ping_pong(

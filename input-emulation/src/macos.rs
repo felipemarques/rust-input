@@ -65,7 +65,7 @@ fn drag_event_type(button: u32) -> CGEventType {
 
 /// Whether "Natural Scrolling" (`com.apple.swipescrolldirection`) is on. Real HID devices get
 /// this applied before their CGEvent exists; synthetic events bypass it, so we replicate it here
-/// to match what a real mouse would do on this Mac. See lan-mouse#481.
+/// to match what a real mouse would do on this Mac. See rustinput#481.
 fn natural_scroll_enabled(key: &CFString) -> bool {
     let mut key_exists_and_valid = 0;
     let value = unsafe {
@@ -173,7 +173,7 @@ fn request_macos_emulation_permissions() -> Result<(), MacOSEmulationCreationErr
 
 fn request_accessibility_permission() -> bool {
     // Silent check. The GUI owns the one-time user-visible prompt at
-    // startup (see lan_mouse_gtk::macos_privacy).
+    // startup (see rustinput_gtk::macos_privacy).
     unsafe { AXIsProcessTrusted() }
 }
 
@@ -269,7 +269,7 @@ fn modifier_key_event(event_source: CGEventSource, key: u16, depressed: XMods) {
 /// hardware-faithful and safe for every app — no VM/bundle-id detection is
 /// required. See issue #450 and https://developer.apple.com/forums/thread/766014
 fn modifier_flags_changed_flags(depressed: XMods) -> CGEventFlags {
-    // Device-dependent left/right modifier bits (IOLLEvent.h). lan-mouse collapses
+    // Device-dependent left/right modifier bits (IOLLEvent.h). rustinput collapses
     // left and right modifiers into a single mask, so we emit the left-hand device
     // bit; AltGr (Mod5 / ISO_Level3_Shift) is physically the right Alt, so it maps
     // to the right Option bit.

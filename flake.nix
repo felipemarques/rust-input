@@ -1,5 +1,5 @@
 {
-  description = "Nix Flake for lan-mouse";
+  description = "Nix Flake for rustinput";
   inputs = {
     # 26.05 used here to keep allowing builds on x86_64-darwin, bump this to unstable once they deprecate 26.05
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05";
@@ -78,11 +78,11 @@
             cargo = rustToolchainForBuild;
             rustc = rustToolchainForBuild;
           };
-          lan-mouse = pkgs.callPackage ./nix { rustPlatform = customRustPlatform; };
+          rustinput = pkgs.callPackage ./nix { rustPlatform = customRustPlatform; };
         in
         {
-          default = lan-mouse;
-          inherit lan-mouse;
+          default = rustinput;
+          inherit rustinput;
         }
       );
       devShells = forEachPkgs (

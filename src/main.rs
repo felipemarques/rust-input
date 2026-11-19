@@ -1,16 +1,16 @@
 use env_logger::Env;
 use input_capture::InputCaptureError;
 use input_emulation::InputEmulationError;
-use lan_mouse::{
+use rustinput::{
     capture_test,
     config::{self, Command, Config, ConfigError},
     emulation_test,
     service::{Service, ServiceError},
 };
-use lan_mouse_cli::CliError;
+use rustinput_cli::CliError;
 #[cfg(feature = "gtk")]
-use lan_mouse_gtk::GtkError;
-use lan_mouse_ipc::{IpcError, IpcListenerCreationError};
+use rustinput_gtk::GtkError;
+use rustinput_ipc::{IpcError, IpcListenerCreationError};
 use std::{
     future::Future,
     io,
@@ -20,7 +20,7 @@ use thiserror::Error;
 use tokio::task::LocalSet;
 
 #[derive(Debug, Error)]
-enum LanMouseError {
+enum RustInputError {
     #[error(transparent)]
     Service(#[from] ServiceError),
     #[error(transparent)]
@@ -42,7 +42,7 @@ enum LanMouseError {
 
 fn main() {
     // init logging
-    let env = Env::default().filter_or("LAN_MOUSE_LOG_LEVEL", "info");
+    let env = Env::default().filter_or("RUSTINPUT_LOG_LEVEL", "info");
     env_logger::init_from_env(env);
 
     if let Err(e) = run() {
@@ -51,17 +51,17 @@ fn main() {
     }
 }
 
-fn run() -> Result<(), LanMouseError> {
+fn run() -> Result<(), RustInputError> {
     let config = config::Config::new()?;
     match config.command() {
         Some(command) => match command {
             Command::TestEmulation(args) => run_async(emulation_test::run(config, args))?,
             Command::TestCapture(args) => run_async(capture_test::run(config, args))?,
-            Command::Cli(cli_args) => run_async(lan_mouse_cli::run(cli_args))?,
+            Command::Cli(cli_args) => run_async(rustinput_cli::run(cli_args))?,
             Command::Daemon => {
                 // if daemon is specified we run the service
                 match run_async(run_service(config)) {
-                    Err(LanMouseError::Service(ServiceError::IpcListen(
+                    Err(RustInputError::Service(ServiceError::IpcListen(
                         IpcListenerCreationError::AlreadyRunning,
                     ))) => log::info!("service already running!"),
                     r => r?,
@@ -74,13 +74,13 @@ fn run() -> Result<(), LanMouseError> {
             #[cfg(feature = "gtk")]
             {
                 // Only spawn a new daemon if one isn't already running
-                let mut service = if lan_mouse_ipc::is_service_running() {
+                let mut service = if rustinput_ipc::is_service_running() {
                     log::info!("daemon already running, connecting to existing instance");
                     None
                 } else {
                     Some(start_service()?)
                 };
-                let res = lan_mouse_gtk::run(config::local_commit());
+                let res = rustinput_gtk::run(config::local_commit());
                 if let Some(ref mut service) = service {
                     #[cfg(unix)]
                     {
@@ -99,7 +99,7 @@ fn run() -> Result<(), LanMouseError> {
             {
                 // run daemon if gtk is diabled
                 match run_async(run_service(config)) {
-                    Err(LanMouseError::Service(ServiceError::IpcListen(
+                    Err(RustInputError::Service(ServiceError::IpcListen(
                         IpcListenerCreationError::AlreadyRunning,
                     ))) => log::info!("service already running!"),
                     r => r?,
@@ -111,10 +111,10 @@ fn run() -> Result<(), LanMouseError> {
     Ok(())
 }
 
-fn run_async<F, E>(f: F) -> Result<(), LanMouseError>
+fn run_async<F, E>(f: F) -> Result<(), RustInputError>
 where
     F: Future<Output = Result<(), E>>,
-    LanMouseError: From<E>,
+    RustInputError: From<E>,
 {
     // create single threaded tokio runtime
     let runtime = tokio::runtime::Builder::new_current_thread()

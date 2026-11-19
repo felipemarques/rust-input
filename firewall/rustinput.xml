@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- for packaging: /usr/lib/firewalld/services/rustinput.xml -->
+<!-- configure manually: /etc/firewalld/services/rustinput.xml -->
+<service>
+  <short>RustInput</short>
+  <description>mouse and keyboard sharing via LAN</description>
+  <port port="4242" protocol="udp"/>
+</service>

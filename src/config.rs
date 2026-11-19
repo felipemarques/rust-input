@@ -16,8 +16,8 @@ use thiserror::Error;
 use toml;
 use toml_edit::{self, DocumentMut};
 
-use lan_mouse_cli::CliArgs;
-use lan_mouse_ipc::{DEFAULT_PORT, Position};
+use rustinput_cli::CliArgs;
+use rustinput_ipc::{DEFAULT_PORT, Position};
 
 use input_event::scancode::{
     self,
@@ -29,7 +29,7 @@ use shadow_rs::shadow;
 shadow!(build);
 
 /// Local build's 8-byte ASCII short commit hash, suitable for use
-/// in [`lan_mouse_proto::ProtoEvent::Hello`]. Pads with `'?'` if
+/// in [`rustinput_proto::ProtoEvent::Hello`]. Pads with `'?'` if
 /// shadow_rs returns an unexpected length so the field is always
 /// well-formed on the wire.
 pub fn local_commit() -> [u8; 8] {
@@ -41,21 +41,21 @@ pub fn local_commit() -> [u8; 8] {
 }
 
 const CONFIG_FILE_NAME: &str = "config.toml";
-const CERT_FILE_NAME: &str = "lan-mouse.pem";
+const CERT_FILE_NAME: &str = "rustinput.pem";
 
 fn default_path() -> Result<PathBuf, VarError> {
     #[cfg(unix)]
     let default_path = {
         let xdg_config_home =
             env::var("XDG_CONFIG_HOME").unwrap_or(format!("{}/.config", env::var("HOME")?));
-        format!("{xdg_config_home}/lan-mouse/")
+        format!("{xdg_config_home}/rustinput/")
     };
 
     #[cfg(not(unix))]
     let default_path = {
         let app_data =
             env::var("LOCALAPPDATA").unwrap_or(format!("{}/.config", env::var("USERPROFILE")?));
-        format!("{app_data}\\lan-mouse\\")
+        format!("{app_data}\\rustinput\\")
     };
     Ok(PathBuf::from(default_path))
 }
@@ -93,7 +93,7 @@ impl ConfigToml {
 #[derive(Parser, Debug)]
 #[command(author, version=build::CLAP_LONG_VERSION, about, long_about = None)]
 struct Args {
-    /// the listen port for lan-mouse
+    /// the listen port for rustinput
     #[arg(short, long)]
     port: Option<u16>,
 
@@ -124,7 +124,7 @@ pub enum Command {
     TestEmulation(TestEmulationArgs),
     /// test input capture
     TestCapture(TestCaptureArgs),
-    /// Lan Mouse commandline interface
+    /// RustInput commandline interface
     Cli(CliArgs),
     /// run in daemon mode
     Daemon,

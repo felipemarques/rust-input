@@ -2,18 +2,18 @@ use crate::{
     capture::{Capture, CaptureType, ICaptureEvent},
     client::ClientManager,
     config::{Config, ConfigClient},
-    connect::LanMouseConnection,
+    connect::RustInputConnection,
     crypto,
     dns::{DnsEvent, DnsResolver},
     emulation::{Emulation, EmulationEvent},
-    listen::{LanMouseListener, ListenerCreationError},
+    listen::{ListenerCreationError, RustInputListener},
 };
 use futures::StreamExt;
-use lan_mouse_ipc::{
+use log;
+use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, FrontendEvent, FrontendRequest, IpcError,
     IpcListenerCreationError, Position, Status,
 };
-use log;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     io,
@@ -93,8 +93,8 @@ impl Service {
         let authorized_keys = Arc::new(RwLock::new(config.authorized_fingerprints()));
         // listener + connection
         let listener =
-            LanMouseListener::new(config.port(), cert.clone(), authorized_keys.clone()).await?;
-        let conn = LanMouseConnection::new(cert.clone(), client_manager.clone());
+            RustInputListener::new(config.port(), cert.clone(), authorized_keys.clone()).await?;
+        let conn = RustInputConnection::new(cert.clone(), client_manager.clone());
 
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());

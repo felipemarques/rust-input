@@ -9,12 +9,12 @@ use input_capture::{
     CaptureError, CaptureEvent, CaptureHandle, InputCapture, InputCaptureError, Position,
 };
 use input_event::{Event, KeyboardEvent, scancode};
-use lan_mouse_proto::ProtoEvent;
 use local_channel::mpsc::{Receiver, Sender, channel};
+use rustinput_proto::ProtoEvent;
 use tokio::task::{JoinHandle, spawn_local};
 use tokio_util::sync::CancellationToken;
 
-use crate::connect::LanMouseConnection;
+use crate::connect::RustInputConnection;
 
 pub(crate) struct Capture {
     cancellation_token: CancellationToken,
@@ -73,7 +73,7 @@ enum CaptureRequest {
 impl Capture {
     pub(crate) fn new(
         backend: Option<input_capture::Backend>,
-        conn: LanMouseConnection,
+        conn: RustInputConnection,
         release_bind: Vec<scancode::Linux>,
     ) -> Self {
         let (request_tx, request_rx) = channel();
@@ -116,7 +116,7 @@ impl Capture {
     pub(crate) fn create(
         &self,
         handle: CaptureHandle,
-        pos: lan_mouse_ipc::Position,
+        pos: rustinput_ipc::Position,
         capture_type: CaptureType,
     ) {
         let pos = to_capture_pos(pos);
@@ -168,7 +168,7 @@ struct CaptureTask {
     backend: Option<input_capture::Backend>,
     cancellation_token: CancellationToken,
     captures: Vec<(CaptureHandle, Position, CaptureType)>,
-    conn: LanMouseConnection,
+    conn: RustInputConnection,
     event_tx: Sender<ICaptureEvent>,
     release_bind: Rc<RefCell<Vec<scancode::Linux>>>,
     request_rx: Receiver<CaptureRequest>,
@@ -459,21 +459,21 @@ enum State {
     Sending,
 }
 
-fn to_capture_pos(pos: lan_mouse_ipc::Position) -> input_capture::Position {
+fn to_capture_pos(pos: rustinput_ipc::Position) -> input_capture::Position {
     match pos {
-        lan_mouse_ipc::Position::Left => input_capture::Position::Left,
-        lan_mouse_ipc::Position::Right => input_capture::Position::Right,
-        lan_mouse_ipc::Position::Top => input_capture::Position::Top,
-        lan_mouse_ipc::Position::Bottom => input_capture::Position::Bottom,
+        rustinput_ipc::Position::Left => input_capture::Position::Left,
+        rustinput_ipc::Position::Right => input_capture::Position::Right,
+        rustinput_ipc::Position::Top => input_capture::Position::Top,
+        rustinput_ipc::Position::Bottom => input_capture::Position::Bottom,
     }
 }
 
-fn to_proto_pos(pos: input_capture::Position) -> lan_mouse_proto::Position {
+fn to_proto_pos(pos: input_capture::Position) -> rustinput_proto::Position {
     match pos {
-        input_capture::Position::Left => lan_mouse_proto::Position::Left,
-        input_capture::Position::Right => lan_mouse_proto::Position::Right,
-        input_capture::Position::Top => lan_mouse_proto::Position::Top,
-        input_capture::Position::Bottom => lan_mouse_proto::Position::Bottom,
+        input_capture::Position::Left => rustinput_proto::Position::Left,
+        input_capture::Position::Right => rustinput_proto::Position::Right,
+        input_capture::Position::Top => rustinput_proto::Position::Top,
+        input_capture::Position::Bottom => rustinput_proto::Position::Bottom,
     }
 }
 

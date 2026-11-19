@@ -3,19 +3,19 @@ members = [
     "input-capture",
     "input-emulation",
     "input-event",
-    "lan-mouse-ipc",
-    "lan-mouse-cli",
-    "lan-mouse-gtk",
-    "lan-mouse-proto",
+    "rustinput-ipc",
+    "rustinput-cli",
+    "rustinput-gtk",
+    "rustinput-proto",
 ]
 
 [package]
-name = "lan-mouse"
+name = "rustinput"
 description = "Software KVM Switch / mouse & keyboard sharing software for Local Area Networks"
 version = "0.11.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/feschber/lan-mouse"
+repository = "https://github.com/felipemarques/rust-input"
 
 [profile.release]
 codegen-units = 1
@@ -30,10 +30,10 @@ shadow-rs = "1.2.0"
 input-event = { path = "input-event", version = "0.4.0" }
 input-emulation = { path = "input-emulation", version = "0.4.0", default-features = false }
 input-capture = { path = "input-capture", version = "0.4.0", default-features = false }
-lan-mouse-cli = { path = "lan-mouse-cli", version = "0.3.0" }
-lan-mouse-gtk = { path = "lan-mouse-gtk", version = "0.3.0", optional = true }
-lan-mouse-ipc = { path = "lan-mouse-ipc", version = "0.3.0" }
-lan-mouse-proto = { path = "lan-mouse-proto", version = "0.3.0" }
+rustinput-cli = { path = "rustinput-cli", version = "0.3.0" }
+rustinput-gtk = { path = "rustinput-gtk", version = "0.3.0", optional = true }
+rustinput-ipc = { path = "rustinput-ipc", version = "0.3.0" }
+rustinput-proto = { path = "rustinput-proto", version = "0.3.0" }
 shadow-rs = { version = "1.2.0", features = ["metadata"] }
 
 toml = "0.8"
@@ -82,7 +82,7 @@ default = [
     "rdp_emulation",
     "x11_emulation",
 ]
-gtk = ["dep:lan-mouse-gtk"]
+gtk = ["dep:rustinput-gtk"]
 layer_shell_capture = ["input-capture/layer_shell"]
 x11_capture = ["input-capture/x11"]
 libei_capture = ["input-event/libei", "input-capture/libei"]
@@ -92,9 +92,9 @@ x11_emulation = ["input-emulation/x11"]
 rdp_emulation = ["input-emulation/remote_desktop_portal"]
 
 [package.metadata.bundle]
-name = "Lan Mouse"
-icon = ["target/icon.icns", "lan-mouse-gtk/resources/de.feschber.LanMouse.svg"]
-identifier = "de.feschber.LanMouse"
+name = "RustInput"
+icon = ["target/icon.icns", "rustinput-gtk/resources/io.github.felipemarques.RustInput.svg"]
+identifier = "io.github.felipemarques.RustInput"
 deb_depends = [ "libadwaita-1-0" ]
 resources = ["target/menubar-template.png"]
 

@@ -2,7 +2,7 @@
 set -eu
 
 homebrew_path=""
-default_exec_path="target/debug/bundle/osx/Lan Mouse.app/Contents/MacOS/lan-mouse"
+default_exec_path="target/debug/bundle/osx/RustInput.app/Contents/MacOS/rustinput"
 exec_path="$default_exec_path"
 
 usage() {

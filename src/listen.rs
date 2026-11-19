@@ -1,6 +1,6 @@
 use futures::{Stream, StreamExt};
-use lan_mouse_proto::{MAX_EVENT_SIZE, ProtoEvent};
 use local_channel::mpsc::{Receiver, Sender, channel};
+use rustinput_proto::{MAX_EVENT_SIZE, ProtoEvent};
 use rustls::pki_types::CertificateDer;
 use std::{
     collections::{HashMap, VecDeque},
@@ -48,7 +48,7 @@ pub(crate) enum ListenEvent {
     },
 }
 
-pub(crate) struct LanMouseListener {
+pub(crate) struct RustInputListener {
     listen_rx: Receiver<ListenEvent>,
     listen_tx: Sender<ListenEvent>,
     listen_task: JoinHandle<()>,
@@ -63,7 +63,7 @@ type VerifyPeerCertificateFn = Arc<
         + Sync,
 >;
 
-impl LanMouseListener {
+impl RustInputListener {
     pub(crate) async fn new(
         port: u16,
         cert: Certificate,
@@ -234,7 +234,7 @@ impl LanMouseListener {
     }
 }
 
-impl Stream for LanMouseListener {
+impl Stream for RustInputListener {
     type Item = ListenEvent;
 
     fn poll_next(
@@ -264,7 +264,7 @@ async fn read_loop(
                 // datagram, so a parse error here can't desync a
                 // stream; the next call gets a fresh, framed
                 // message. This makes the protocol forward-
-                // compatible: a peer running a newer Lan Mouse
+                // compatible: a peer running a newer RustInput
                 // version can introduce additional event types
                 // and old peers will simply ignore them rather
                 // than dropping the connection.
