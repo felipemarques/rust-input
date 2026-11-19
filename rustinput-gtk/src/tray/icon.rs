@@ -1,6 +1,6 @@
 //! The tray icon, embedded as PNG in a few sizes.
 //!
-//! The files are rendered from the logo by `scripts/render-tray-icons.py`, so
+//! The files are rendered from the logo by `scripts/render-icons.py`, so
 //! no SVG renderer is needed at runtime.
 
 use std::io::Cursor;

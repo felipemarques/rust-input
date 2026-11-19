@@ -1,0 +1,3 @@
+// Resources of the Windows executable, compiled by build.rs.
+// rc.exe runs from the repository root, paths are relative to it.
+1 ICON "build-aux/windows/rustinput.ico"

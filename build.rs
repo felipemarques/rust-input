@@ -6,6 +6,15 @@ fn main() {
         .build()
         .expect("shadow build");
 
+    // Icon of the Windows executable, shown by Explorer, the taskbar and
+    // Alt+Tab; GTK also takes the window icon from it. No rerun-if-changed:
+    // the script has to run on every change for shadow-rs anyway.
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        embed_resource::compile("build-aux/windows/rustinput.rc", embed_resource::NONE)
+            .manifest_required()
+            .expect("could not compile the Windows resources");
+    }
+
     let unix = cfg!(unix);
     let macos = cfg!(target_os = "macos");
 
