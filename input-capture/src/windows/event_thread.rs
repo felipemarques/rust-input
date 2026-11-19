@@ -122,6 +122,8 @@ thread_local! {
     static PREV_POS: Cell<Option<(i32, i32)>> = const { Cell::new(None) };
     /// displays and generation counter
     static DISPLAYS: RefCell<(Vec<RECT>, i32)> = const { RefCell::new((Vec::new(), 0)) };
+    /// keys held down while capturing, to recognize auto-repeat
+    static HELD_KEYS: RefCell<HashSet<u32>> = RefCell::new(HashSet::new());
 }
 
 fn get_msg() -> Option<MSG> {
@@ -291,6 +293,7 @@ fn check_client_activation(wparam: WPARAM, lparam: LPARAM) -> bool {
 
     /* update active client and entry point */
     ACTIVE_CLIENT.replace(Some(pos));
+    HELD_KEYS.with_borrow_mut(HashSet::clear);
     let entry_point = DISPLAYS.with_borrow(|(displays, _)| {
         display_util::clamp_to_display_bounds(displays, prev_pos, curr_pos)
     });
@@ -341,6 +344,16 @@ unsafe extern "system" fn kybrd_proc(ncode: i32, wparam: WPARAM, lparam: LPARAM)
     let Some(key_event) = to_key_event(wparam, lparam) else {
         return LRESULT(1);
     };
+
+    /* Windows repeats a held key as further key-down events. Every receiving
+     * side repeats on its own (the X server, the compositor, the Windows and
+     * macOS emulation), forwarding these would repeat twice as fast, so they
+     * are dropped like the other capture backends do. */
+    if let KeyboardEvent::Key { key, state, .. } = key_event {
+        if HELD_KEYS.with_borrow_mut(|held| is_repeat(held, key, state)) {
+            return LRESULT(1);
+        }
+    }
 
     if let Err(e) = try_send_event(client, CaptureEvent::Input(Event::Keyboard(key_event))) {
         log::warn!("e: {e}");
@@ -431,6 +444,16 @@ fn update_clients(request: ClientUpdate) {
             }
             CLIENTS.with_borrow_mut(|clients| clients.remove(&pos));
         }
+    }
+}
+
+/// records a key press or release, returns whether a press is an auto-repeat
+fn is_repeat(held: &mut HashSet<u32>, key: u32, state: u8) -> bool {
+    if state == 1 {
+        !held.insert(key)
+    } else {
+        held.remove(&key);
+        false
     }
 }
 
@@ -545,5 +568,27 @@ fn to_mouse_event(wparam: WPARAM, lparam: LPARAM) -> Option<PointerEvent> {
             log::warn!("unknown mouse event: {w:?}");
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auto_repeat_is_recognized() {
+        let mut held = HashSet::new();
+        assert!(!is_repeat(&mut held, 30, 1));
+        // the key stays down: Windows sends more presses
+        assert!(is_repeat(&mut held, 30, 1));
+        assert!(is_repeat(&mut held, 30, 1));
+        // another key in between is a real press
+        assert!(!is_repeat(&mut held, 29, 1));
+        assert!(!is_repeat(&mut held, 30, 0));
+        // pressed again after the release
+        assert!(!is_repeat(&mut held, 30, 1));
+        // releases are never repeats
+        assert!(!is_repeat(&mut held, 29, 0));
+        assert!(!is_repeat(&mut held, 29, 0));
     }
 }
