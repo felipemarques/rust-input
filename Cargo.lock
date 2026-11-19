@@ -2855,7 +2855,7 @@ dependencies = [
 
 [[package]]
 name = "rustinput"
-version = "0.14.2"
+version = "0.14.3"
 dependencies = [
  "arboard",
  "clap",
