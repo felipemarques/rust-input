@@ -8,6 +8,8 @@ mod key_row;
 mod macos_privacy;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
+#[cfg(not(target_os = "macos"))]
+mod tray;
 mod window;
 
 use std::{env, process, str, sync::OnceLock};
@@ -329,18 +331,21 @@ fn build_ui(app: &Application) {
         }
     ));
 
-    #[cfg(not(target_os = "macos"))]
-    window.present();
-
-    // On macOS, default to presenting the main window on every launch
-    // so the user gets a visible confirmation that the app is running
-    // — including the post-grant relaunch and normal Dock/Finder/`open`
-    // launches. Opt out by setting `RUSTINPUT_HIDDEN=1` in the
-    // environment (useful for a LaunchAgent / login-item configuration
-    // where the user wants the app to come up quietly into the menu
-    // bar only, with no window on boot).
+    // With a tray icon (the menu bar item on macOS) closing the window
+    // only hides it, see `tray`.
     #[cfg(target_os = "macos")]
-    if env::var_os("RUSTINPUT_HIDDEN").is_none() {
+    let in_tray = true;
+    #[cfg(not(target_os = "macos"))]
+    let in_tray = tray::setup(app, &window);
+
+    // Present the main window on every launch so the user gets a visible
+    // confirmation that the app is running — including the post-grant
+    // relaunch on macOS and normal launches from a menu or a file manager.
+    // Opt out by setting `RUSTINPUT_HIDDEN=1` in the environment (useful
+    // for starting with the session, coming up quietly into the tray or
+    // menu bar only). Without a tray the window is always shown, as there
+    // would be no other way to reach it.
+    if !in_tray || env::var_os("RUSTINPUT_HIDDEN").is_none() {
         window.present();
     }
 }

@@ -325,6 +325,19 @@ the gtk frontend (see conditional compilation).
 
 By default the gtk frontend will open when running `rustinput`.
 
+#### System tray
+
+When the desktop has a system tray (Windows, KDE, Cinnamon, XFCE, MATE, GNOME with the AppIndicator extension),
+RustInput shows an icon there and closing the window only hides it: mouse, keyboard and clipboard keep being shared.
+Click the icon (or choose "Show RustInput" in its menu) to bring the window back, and choose "Quit RustInput" in the
+icon menu or in the window menu to stop RustInput. Starting RustInput again while it runs in the tray also shows the window.
+On macOS the same is done by the menu bar item.
+
+Without a system tray, closing the window quits RustInput as before.
+
+To start RustInput with the session without opening the window, set `RUSTINPUT_HIDDEN=1`, for example in an
+autostart entry: `Exec=env RUSTINPUT_HIDDEN=1 rustinput`. The window is still shown when there is no tray to reach it.
+
 To connect a device you want to control, simply click the `Add` button and enter the hostname
 of the device.
 
@@ -451,6 +464,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [ ] Latency measurement and visualization
 - [ ] Bandwidth usage measurement and visualization
 - [x] Clipboard support (text and images)
+- [x] System tray icon, closing the window keeps RustInput running
 - [ ] Clipboard: files
 
 
