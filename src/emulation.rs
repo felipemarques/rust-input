@@ -51,8 +51,14 @@ pub(crate) enum EmulationEvent {
     EmulationDisabled,
     /// emulation was enabled
     EmulationEnabled,
-    /// capture should be released
-    ReleaseNotify,
+    /// Another device entered this one: the capture must be released. When
+    /// that device said where, the pointer goes to that position along the
+    /// edge, but only once the capture is released: placed while the
+    /// pointer is still grabbed, the capture would take the jump for a motion,
+    /// forward it and park the pointer again.
+    ReleaseNotify {
+        at: Option<(Edge, f64)>,
+    },
     /// peer sent us a Hello with its build commit hash. Used to
     /// populate `client_manager.peer_commit` from the listen side
     /// too — without this, peer-version visibility silently fails
@@ -71,6 +77,8 @@ enum EmulationRequest {
     /// the pointer leaves this device for the one at the address, at the
     /// given position along the edge if known
     Release(SocketAddr, Option<f64>),
+    /// place the pointer at a position along an edge
+    Warp(Edge, f64),
     ChangePort(u16),
     Terminate,
 }
@@ -100,6 +108,13 @@ impl Emulation {
     pub(crate) fn send_leave_event(&self, addr: SocketAddr, fraction: Option<f64>) {
         self.request_tx
             .send(EmulationRequest::Release(addr, fraction))
+            .expect("channel closed");
+    }
+
+    /// places the pointer at `fraction` along `edge`
+    pub(crate) fn warp(&self, edge: Edge, fraction: f64) {
+        self.request_tx
+            .send(EmulationRequest::Warp(edge, fraction))
             .expect("channel closed");
     }
 
@@ -154,17 +169,19 @@ impl ListenTask {
                         last_response.insert(addr, Instant::now());
                         match event {
                             ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) => {
-                                if let ProtoEvent::EnterAt(_, fraction) = event {
-                                    if entered.insert(addr) {
+                                // the pointer is only placed on the first of
+                                // the (repeated) Enter events
+                                let first = entered.insert(addr);
+                                let at = match event {
+                                    ProtoEvent::EnterAt(_, fraction) if first => {
                                         log::debug!("{addr} entered at {fraction:.3} along the {pos} edge");
-                                        self.emulation_proxy.warp(to_edge(pos), fraction);
+                                        Some((to_edge(pos), fraction))
                                     }
-                                } else {
-                                    entered.insert(addr);
-                                }
+                                    _ => None,
+                                };
                                 if let Some(fingerprint) = self.listener.get_certificate_fingerprint(addr).await {
                                     log::info!("releasing capture: {addr} entered this device");
-                                    self.event_tx.send(EmulationEvent::ReleaseNotify).expect("channel closed");
+                                    self.event_tx.send(EmulationEvent::ReleaseNotify { at }).expect("channel closed");
                                     self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                                     self.event_tx.send(EmulationEvent::Entered{addr, pos: to_ipc_pos(pos), fingerprint}).expect("channel closed");
                                 }
@@ -220,6 +237,7 @@ impl ListenTask {
                         };
                         self.listener.reply(addr, leave).await
                     }
+                    EmulationRequest::Warp(edge, fraction) => self.emulation_proxy.warp(edge, fraction),
                     EmulationRequest::ChangePort(port) => {
                         self.listener.request_port_change(port);
                         let result = self.listener.port_changed().await;

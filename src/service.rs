@@ -366,7 +366,10 @@ impl Service {
                 self.emulation_status = Status::Enabled;
                 self.notify_frontend(FrontendEvent::EmulationStatus(self.emulation_status));
             }
-            EmulationEvent::ReleaseNotify => self.capture.release(),
+            EmulationEvent::ReleaseNotify { at } => match at {
+                Some((edge, fraction)) => self.capture.release_at(edge, fraction),
+                None => self.capture.release(),
+            },
             EmulationEvent::Connected { addr, fingerprint } => {
                 self.notify_frontend(FrontendEvent::DeviceConnected { addr, fingerprint });
             }
@@ -417,6 +420,7 @@ impl Service {
                 // the client is being controlled now: bring the clipboard along
                 self.clipboard.push(Peer::Outgoing(handle));
             }
+            ICaptureEvent::PlacePointer(edge, fraction) => self.emulation.warp(edge, fraction),
         }
     }
 

@@ -155,6 +155,14 @@ This is an optional feature (`CAP_CURSOR_POSITION`):
   with `LeaveAt(fraction)` instead of `Leave`, and the controlling device puts
   its pointer at that fraction of the edge it captured.
 
+When both devices list each other as clients, the capture of the controlled
+device is still active while the pointer is on the controlling one (it is how
+the pointer went there). Entering it again therefore first releases that
+capture and only then places the pointer: placed while it is still grabbed, the
+capture would take the jump for a motion, forward it, and park the pointer
+again, and releasing it afterwards would send the pointer back to where it last
+left the device.
+
 Releasing with the release bind still returns the pointer to where it left.
 Placing the pointer is implemented for X11 and Windows; the other backends keep
 the previous behavior.

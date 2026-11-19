@@ -8,7 +8,7 @@ use futures::StreamExt;
 use input_capture::{
     CaptureError, CaptureEvent, CaptureHandle, InputCapture, InputCaptureError, Position,
 };
-use input_event::{Event, KeyboardEvent, scancode};
+use input_event::{Event, KeyboardEvent, edge::Edge, scancode};
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_proto::{CAP_CURSOR_POSITION, ProtoEvent};
 use tokio::task::{JoinHandle, spawn_local};
@@ -48,6 +48,9 @@ pub(crate) enum ICaptureEvent {
     /// The client entered confirmed that it is now being controlled,
     /// from here on input events reach it.
     ClientAcknowledged(u64),
+    /// The capture is released after another device entered this one: the
+    /// pointer can be placed where that device entered.
+    PlacePointer(Edge, f64),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +67,9 @@ pub(crate) enum CaptureType {
 enum CaptureRequest {
     /// capture must release the mouse
     Release,
+    /// another device entered at `fraction` along `edge`: release the mouse,
+    /// then have the pointer placed there
+    ReleaseAt(Edge, f64),
     /// add a capture client
     Create(CaptureHandle, Position, CaptureType),
     /// destory a capture client
@@ -139,6 +145,14 @@ impl Capture {
     pub(crate) fn release(&self) {
         self.request_tx
             .send(CaptureRequest::Release)
+            .expect("channel closed");
+    }
+
+    /// releases the mouse because another device entered at `fraction` along
+    /// `edge`, answered by [`ICaptureEvent::PlacePointer`]
+    pub(crate) fn release_at(&self, edge: Edge, fraction: f64) {
+        self.request_tx
+            .send(CaptureRequest::ReleaseAt(edge, fraction))
             .expect("channel closed");
     }
 
@@ -225,6 +239,10 @@ impl CaptureTask {
                         CaptureRequest::Create(h, p, t) => self.add_capture(h, p, t),
                         CaptureRequest::Destroy(h) => self.remove_capture(h),
                         CaptureRequest::Release => { /* nothing to do */ }
+                        CaptureRequest::ReleaseAt(edge, fraction) => {
+                            // nothing is grabbed
+                            self.place_pointer(edge, fraction);
+                        }
                         CaptureRequest::SetReleaseBind(bind) => {
                             self.release_bind.borrow_mut().clone_from(&bind);
                         }
@@ -320,6 +338,9 @@ impl CaptureTask {
                 e = self.request_rx.recv() => match e.expect("channel closed") {
                     CaptureRequest::Reenable => { /* already active */ },
                     CaptureRequest::Release => self.release_capture(capture).await?,
+                    CaptureRequest::ReleaseAt(edge, fraction) => {
+                        self.release_capture_at(capture, edge, fraction).await?
+                    }
                     CaptureRequest::Create(h, p, t) => {
                         self.add_capture(h, p, t);
                         capture.create(h, p).await?;
@@ -421,6 +442,36 @@ impl CaptureTask {
 
     async fn release_capture(&mut self, capture: &mut InputCapture) -> Result<(), CaptureError> {
         self.release_capture_to(capture, None).await
+    }
+
+    /// Releases the capture because another device entered this one at
+    /// `fraction` along `edge`, then has the pointer placed there.
+    ///
+    /// The capture puts the pointer there itself when that is the edge it
+    /// captured at, so it does not show up at the old place for a moment.
+    /// Placing it again afterwards does no harm and covers backends that
+    /// can not place the pointer.
+    async fn release_capture_at(
+        &mut self,
+        capture: &mut InputCapture,
+        edge: Edge,
+        fraction: f64,
+    ) -> Result<(), CaptureError> {
+        match self.active_client {
+            Some(handle) if Edge::from(self.get_pos(handle)) == edge => {
+                self.release_capture_to(capture, Some(fraction)).await?
+            }
+            Some(_) => self.release_capture(capture).await?,
+            None => {}
+        }
+        self.place_pointer(edge, fraction);
+        Ok(())
+    }
+
+    fn place_pointer(&self, edge: Edge, fraction: f64) {
+        self.event_tx
+            .send(ICaptureEvent::PlacePointer(edge, fraction))
+            .expect("channel closed");
     }
 
     /// releases the capture, putting the pointer at `fraction` along the edge
