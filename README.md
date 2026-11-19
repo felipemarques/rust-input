@@ -11,6 +11,44 @@
 > It started from Lan Mouse 0.11.0 (upstream commit `69958c6`) and has been modified since 2026-11-19.
 > Like Lan Mouse, it is licensed under GPL-3.0-or-later (see [LICENSE](LICENSE)).
 
+**One mouse, one keyboard and one clipboard for all your computers on the local network.**
+Move the pointer past the edge of the screen and keep working on the next computer, copy on one and paste on the other.
+
+## Features
+
+| Feature | Windows | Linux (X11) | Linux (Wayland) | macOS |
+|---|:---:|:---:|:---:|:---:|
+| 🖱️ Control other computers with this mouse and keyboard | ✅ | ✅ | ✅ ¹ | ✅ |
+| 🖥️ Be controlled by another computer | ✅ | ✅ | ✅ ¹ | ✅ |
+| ↔️ Move between computers through the screen edge, both ways | ✅ | ✅ | ✅ ¹ | ✅ |
+| 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
+| 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
+| 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
+| 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
+| 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
+| 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
+| 📁 Copy and paste files | planned | planned | planned | planned |
+
+Used every day between **Windows 11** and **Linux Mint 22 (Cinnamon, X11)**: the ✅ in those two columns are tested by hand.
+The Wayland and macOS builds come from the same code and pass CI, but have not been tested by hand yet.
+
+¹ GNOME ≥ 45, KDE Plasma ≥ 6.1 and most wlroots compositors, see [Detailed OS Support](#detailed-os-support).
+² Built, not tested by hand yet. On Wayland it needs a compositor with the data-control protocol (KDE, wlroots).
+³ Needs a desktop with a system tray: Windows, Cinnamon, KDE, XFCE, MATE, GNOME with the AppIndicator extension.
+
+<p align="center">
+  <img src="screenshots/main-window.png" width="420" alt="The RustInput window">
+</p>
+
+<p align="center">
+  <img src="screenshots/windows-clipboard-log.png" width="820" alt="RustInput log on Windows">
+  <br>
+  <em>The Windows side of a session, with debug logging: keys typed on Linux go through Windows, the pointer comes back
+  from Linux through the screen edge, and the text copied on Linux arrives in the Windows clipboard.</em>
+</p>
+
+## About
+
 RustInput is a *cross-platform* mouse and keyboard sharing software similar to universal-control on Apple devices.
 It allows for using multiple PCs via a single set of mouse and keyboard.
 This is also known as a Software KVM switch.
@@ -48,11 +86,32 @@ Content is only transferred when it differs from what the two devices exchanged 
 
 To turn the clipboard synchronization off, set `clipboard = false` in the [configuration](#configuration) file.
 
+## Pointer position
+
+Like Synergy and Deskflow, the pointer keeps its relative position along the edge it crosses: leaving the top of the left
+edge of one computer enters the top of the right edge of the next one, and coming back works the same way.
+All monitors of a computer count as one rectangle, so screens of different sizes map proportionally.
+Releasing with the release bind returns the pointer to where it left.
+
+This needs RustInput 0.15.0 or newer on both computers and works on Windows and Linux (X11); with the other backends
+the pointer keeps the previous behavior.
+
+## Authorizing computers
+
+Every computer has a certificate fingerprint, shown in its window. Connections are encrypted and only accepted from
+authorized fingerprints:
+
+- **to control a computer**, that computer has to authorize the one controlling it. When an unknown computer tries
+  to connect, the window asks whether to authorize it;
+- **to share the clipboard**, both computers have to authorize each other, so the controlling computer also has to
+  authorize the controlled one with the "Authorize" button and its fingerprint. Without it the clipboard could be sent
+  to whoever answers at the configured address.
+
 ## Compatibility with Lan Mouse
 
 RustInput uses the network protocol of Lan Mouse and can be mixed with it.
 Controlling a Lan Mouse 0.11.0 device from RustInput is tested; RustInput only uses its newer protocol events
-(build identification, clipboard) after the other side showed that it knows them.
+(build identification, clipboard, pointer position) after the other side showed that it knows them.
 
 ## OS Support
 
@@ -465,7 +524,9 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [ ] Bandwidth usage measurement and visualization
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
-- [ ] Clipboard: files
+- [x] Pointer keeps its relative position across computers (Windows, X11)
+- [ ] Copy and paste files
+- [ ] Authorize the controlled computer from the controlling one with one click
 
 
 ## Detailed OS Support
