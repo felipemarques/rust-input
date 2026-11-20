@@ -8,8 +8,8 @@ mod key_row;
 mod macos_privacy;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
-#[cfg(not(target_os = "macos"))]
 mod transfers;
+#[cfg(not(target_os = "macos"))]
 mod tray;
 mod window;
 

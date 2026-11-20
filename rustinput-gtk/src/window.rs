@@ -514,7 +514,9 @@ impl Window {
         }
     }
 
-    /// what happens to copied files, once the service said so
+    /// what happens to copied files, once the service said so (for the tray,
+    /// macOS has its own menu bar item)
+    #[cfg(not(target_os = "macos"))]
     pub(crate) fn file_options(&self) -> Option<FileOptions> {
         self.imp().file_options.get()
     }
