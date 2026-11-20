@@ -136,6 +136,14 @@ Text is sent as UTF-8, images as PNG (8 bit RGBA). The hash of an image is taken
 over its pixels, so an image read back from the clipboard is recognized no
 matter how it was compressed.
 
+Formatted text (kind `Html`) goes only to peers that announced
+`CAP_CLIPBOARD_HTML`, as older ones refuse a kind they do not know; the others
+get its plain text. The payload is the length of the HTML (big endian u32),
+the HTML and the plain text, all UTF-8. Formatted text wins over plain text
+and images when the clipboard offers several, unless the HTML has no text at
+all (browsers copying an image offer it as an `<img>` too); without plain
+text the receiver gets the text of the HTML without its tags.
+
 ## Pointer position across devices
 
 Like Synergy and Deskflow, the pointer keeps its relative position along the

@@ -24,6 +24,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
 | 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
+| 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
@@ -39,6 +40,7 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 ⁴ Tested in automated runs between two Linux (X11) computers, including pasting in Nemo, and by hand from Linux to
 Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are new in 0.17.0, not tested on Windows yet.
 ⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
+⁶ New in 0.19.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 
 <p align="center">
   <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
@@ -83,11 +85,14 @@ RustInput keeps the clipboard of the connected devices in sync. The clipboard fo
 - when the pointer enters a client, the clipboard of the controlling device is sent to that client;
 - when the pointer comes back, through the screen edge or the release bind, the clipboard of the client is sent back.
 
-Text and images are supported, which includes screenshots copied to the clipboard with the Print Screen key.
-Content is only transferred when it differs from what the two devices exchanged last.
+Text and images are supported, which includes screenshots copied to the clipboard with the Print Screen key, and so
+is formatted text: what is copied in a browser, Word, LibreOffice or an email keeps its bold, links, lists and tables
+when pasted on the other computer, and applications without formatting get the plain text. Content is only
+transferred when it differs from what the two devices exchanged last.
 
 > [!Important]
-> - Both devices need RustInput 0.13.0 or newer. Lan Mouse devices keep working, without the clipboard.
+> - Both devices need RustInput 0.13.0 or newer, 0.19.0 for formatted text (older ones get the plain text).
+>   Lan Mouse devices keep working, without the clipboard.
 > - The clipboard is only shared between devices that authorized each other: the fingerprint of each device has to be
 > listed under "Incoming Connections" (`authorized_fingerprints`) on the other one, also on the device that only controls.
 > - Files are not transferred, and neither is content larger than 64 MiB.
