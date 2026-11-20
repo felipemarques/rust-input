@@ -26,7 +26,8 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
-| 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ ⁷ | ✅ | — | — |
+| 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
+| 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
@@ -42,7 +43,7 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are new in 0.17.0, not tested on Windows yet.
 ⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁶ New in 0.19.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
-⁷ New in 0.20.0: tested in automated runs on Linux (X11), not yet on Windows.
+⁷ New in 0.21.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 
 <p align="center">
   <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
@@ -168,6 +169,27 @@ count. While the wheel shows the pointer stays inside it, and afterwards it goes
 in Portuguese when the system is, in English otherwise.
 
 The wheel needs X11 or Windows. To turn it off, set `radial_menu = false` in the [configuration](#configuration) file.
+
+## Latency and network usage
+
+While a computer in **Connections** is connected, its latency shows next to its name. Opening it shows the last minute:
+
+<p align="center">
+  <img src="screenshots/link-stats.png" width="540" alt="Latency and traffic of a connection">
+</p>
+
+- **Latency** is the time a ping takes to reach the other computer and its answer to come back. RustInput already
+  pings every connected computer twice a second to notice a dead connection; now it also times the pings. Only the
+  computer that connects pings, so the latency shows on the computer that has the other one as a client. Pings left
+  without an answer are marked under the chart and counted in the text.
+- **Traffic** is what goes over the connection each second, both ways: keys, pointer, clipboard and pings, including
+  the DTLS, UDP and IP headers of each datagram (an estimate of 65 bytes each), and the total since it connected.
+  Files go over a channel of their own and show in the [transfers window](#copy-and-paste-files).
+
+An idle connection uses about 130 bytes per second each way, the pings. Each pointer movement is a datagram of about
+90 bytes, so moving the pointer on the other computer takes about 10 KB/s with a mouse that reports 125 times a second,
+more with gaming mice. Nothing new is needed from the other computer: the latency is measured with older RustInput
+versions and Lan Mouse too.
 
 ## Pointer position
 
@@ -662,17 +684,15 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Windows Input Capture
 - [x] Encryption
 - [x] X11 Input Capture
-- [ ] Latency measurement and visualization
-- [ ] Bandwidth usage measurement and visualization
+- [x] Latency measurement and visualization
+- [x] Bandwidth usage measurement and visualization
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
-- [ ] Paste files on demand, while they are transferred (like RustDesk)
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
-- [ ] Screenshot tool like Flameshot, from the radial menu
 
 
 ## Detailed OS Support

@@ -300,3 +300,32 @@ network: the device the pointer is on shows it, because the keys go there.
   its edge at its current height (`Capture::enter`, X11 and Windows).
   "Keep the pointer here" makes the capture release every capture right away,
   except one asked for with "Go to".
+
+## Latency and network usage
+
+Every connection of the input channel, made or accepted, is wrapped in a
+`MeteredConn` (`src/netstats.rs`) that counts the bytes of the datagrams it
+sends and receives, plus 65 bytes each for the DTLS record (header, nonce and
+tag of AES-GCM), the UDP and the IPv4 header.
+
+The latency needs nothing new on the wire. The connect side already sends a
+`Ping` every 500 ms to notice a dead connection (`connect::ping_pong`), and
+every version answers with a `Pong`. The meter notes when a ping leaves and
+times the next pong against it; a ping still waiting when the next one leaves
+counts as lost. Pings carry no serial, so a pong more than 500 ms late would
+be timed against the following ping: fine on a local network, where a round
+trip takes a millisecond or two. The listen side answers pings and sends none,
+so it measures traffic only.
+
+Once a second the service adds up the meters per address of the other device
+(the connection each way between two devices that have each other as a
+client) and sends `FrontendEvent::LinkStats` to the frontends: per device the
+client handle (`None` for a device that is not a client here), the average
+round trip time of the pings answered in that second, the lost pings, the bytes
+per second each way and the totals since the connections were made. The
+window keeps the last 60 reports of each client for its charts. The file
+channel is not counted: its transfers have their own progress.
+
+Events to the frontends are queued per frontend and written by a task of its
+own (`rustinput-ipc/src/listen.rs`), so a frontend that stops reading never
+holds up the service; one with 1024 events waiting is disconnected.
