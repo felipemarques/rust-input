@@ -274,6 +274,25 @@ Use the precompiled binaries from the [releases section](https://github.com/feli
 <details>
     <summary>Windows</summary>
 
+To install or update, paste this into PowerShell (no administrator rights needed):
+
+```powershell
+iwr -UseBasicParsing https://github.com/felipemarques/rust-input/releases/latest/download/update-rustinput.ps1 -OutFile $env:TEMP\update-rustinput.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\update-rustinput.ps1
+```
+
+The script ([scripts/update-rustinput.ps1](scripts/update-rustinput.ps1)) goes step by step:
+1. It shows the installed version, the newest one and what changed between them.
+2. It downloads the newest version with a progress bar and checks its SHA-256 against GitHub.
+3. It closes RustInput and installs it into `%LOCALAPPDATA%\Programs\RustInput`, keeping the previous copy in
+   `RustInput.previous`.
+4. It starts RustInput again and shows whether it came up: the ports it listens on and the end of its logs.
+5. It adds **RustInput** and **Update RustInput** to the Start menu, so the next update is one click.
+
+Everything it shows also goes to `%LOCALAPPDATA%\rustinput\logs\update.log`. `-Version 0.18.0` installs an older
+version, `-Restore` goes back to the previous copy, `-Force` reinstalls the same version and `-NoStart` leaves
+RustInput closed. Run `Get-Help` on the script for the others.
+
+Or by hand:
 - Download `rustinput-windows-x86_64.zip` from the releases page
 - Unzip it (the required GTK libraries are included)
 - Run `rustinput.exe`

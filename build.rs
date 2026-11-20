@@ -10,6 +10,7 @@ fn main() {
     // Alt+Tab; GTK also takes the window icon from it. No rerun-if-changed:
     // the script has to run on every change for shadow-rs anyway.
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        write_windows_version();
         embed_resource::compile("build-aux/windows/rustinput.rc", embed_resource::NONE)
             .manifest_required()
             .expect("could not compile the Windows resources");
@@ -67,4 +68,28 @@ fn main() {
     if x11_emulation {
         println!("cargo::rustc-cfg=x11_emulation");
     }
+}
+
+/// Writes the version of Cargo.toml where `build-aux/windows/rustinput.rc`
+/// includes it from, for the version resource of the executable.
+fn write_windows_version() {
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| "0".into());
+    let numbers = ["MAJOR", "MINOR", "PATCH"].map(|part| {
+        var(&format!("CARGO_PKG_VERSION_{part}"))
+            .parse::<u16>()
+            .unwrap_or(0)
+    });
+    let header = format!(
+        "#define RUSTINPUT_VERSION {},{},{},0\n#define RUSTINPUT_VERSION_STR \"{}\"\n",
+        numbers[0],
+        numbers[1],
+        numbers[2],
+        var("CARGO_PKG_VERSION"),
+    );
+    let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR");
+    std::fs::write(
+        std::path::Path::new(&out_dir).join("rustinput-version.h"),
+        header,
+    )
+    .expect("could not write rustinput-version.h");
 }

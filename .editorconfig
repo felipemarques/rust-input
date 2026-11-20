@@ -22,3 +22,9 @@ indent_size = 4
 [*.nix]
 indent_style = space
 indent_size = 2
+
+# Windows PowerShell 5.1 reads scripts without a BOM as ANSI, garbling accents
+[*.ps1]
+charset = utf-8-bom
+indent_style = space
+indent_size = 4

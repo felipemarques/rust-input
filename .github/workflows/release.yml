@@ -119,6 +119,7 @@ jobs:
         mkdir "rustinput-windows"
         Get-Childitem -Path "C:\\gtk-build\\gtk\\x64\\release\\bin\\*.dll" -File -Recurse | Copy-Item -Destination "rustinput-windows"
         Copy-Item -Path "target\release\rustinput.exe" -Destination "rustinput-windows"
+        Copy-Item -Path "scripts\update-rustinput.ps1" -Destination "rustinput-windows"
         Compress-Archive -Path "rustinput-windows\*" -DestinationPath rustinput-windows-x86_64.zip
     - name: Upload build artifact
       uses: actions/upload-artifact@v6
@@ -264,3 +265,4 @@ jobs:
           rustinput-macos-intel/rustinput-macos-intel.zip
           rustinput-macos-arm64/rustinput-macos-arm64.zip
           rustinput-windows-x86_64/rustinput-windows-x86_64.zip
+          scripts/update-rustinput.ps1
