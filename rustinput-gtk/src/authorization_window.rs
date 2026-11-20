@@ -11,9 +11,15 @@ glib::wrapper! {
 }
 
 impl AuthorizationWindow {
-    pub(crate) fn new(fingerprint: &str) -> Self {
+    pub(crate) fn new(fingerprint: &str, code: Option<&str>) -> Self {
         let window: Self = Object::builder().build();
         window.imp().set_fingerprint(fingerprint);
+        window.imp().set_code(code);
         window
+    }
+
+    /// the fingerprint the window asks about
+    pub(crate) fn fingerprint(&self) -> String {
+        self.imp().fingerprint.text().trim().to_owned()
     }
 }

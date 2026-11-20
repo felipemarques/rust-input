@@ -82,6 +82,14 @@ pub(crate) async fn write_magic<W: AsyncWrite + Unpin>(writer: &mut W) -> io::Re
     writer.flush().await
 }
 
+/// the first four bytes of a connection on the TCP port: [`MAGIC`] for the
+/// file channel, [`crate::pairing::MAGIC`] for pairing
+pub(crate) async fn read_any_magic<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<[u8; 4]> {
+    let mut magic = [0; 4];
+    reader.read_exact(&mut magic).await?;
+    Ok(magic)
+}
+
 pub(crate) async fn read_magic<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<()> {
     let mut magic = [0; 4];
     reader.read_exact(&mut magic).await?;

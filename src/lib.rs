@@ -10,4 +10,5 @@ mod emulation;
 pub mod emulation_test;
 mod files;
 mod listen;
+mod pairing;
 pub mod service;

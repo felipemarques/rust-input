@@ -29,6 +29,8 @@ pub struct ClientRow {
     #[template_child]
     pub delete_button: TemplateChild<gtk::Button>,
     #[template_child]
+    pub pair_button: TemplateChild<gtk::Button>,
+    #[template_child]
     pub dns_loading_indicator: TemplateChild<gtk::Spinner>,
     pub bindings: RefCell<Vec<Binding>>,
     hostname_change_handler: RefCell<Option<SignalHandlerId>>,
@@ -66,6 +68,11 @@ impl ObjectImpl for ClientRow {
             move |button| {
                 row.handle_client_delete(button);
             }
+        ));
+        self.pair_button.connect_clicked(clone!(
+            #[weak(rename_to = row)]
+            self,
+            move |_| row.obj().emit_by_name::<()>("request-pair", &[])
         ));
         let handler = self.hostname.connect_changed(clone!(
             #[weak(rename_to = row)]
@@ -112,6 +119,7 @@ impl ObjectImpl for ClientRow {
                     .param_types([bool::static_type()])
                     .build(),
                 Signal::builder("request-delete").build(),
+                Signal::builder("request-pair").build(),
                 Signal::builder("request-dns").build(),
                 Signal::builder("request-hostname-change")
                     .param_types([String::static_type()])

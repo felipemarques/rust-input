@@ -15,6 +15,10 @@ pub struct AuthorizationWindow {
     #[template_child]
     pub fingerprint: TemplateChild<Label>,
     #[template_child]
+    pub code: TemplateChild<Label>,
+    #[template_child]
+    pub code_box: TemplateChild<gtk::Box>,
+    #[template_child]
     pub cancel_button: TemplateChild<Button>,
     #[template_child]
     pub confirm_button: TemplateChild<Button>,
@@ -53,6 +57,16 @@ impl AuthorizationWindow {
 
     pub(super) fn set_fingerprint(&self, fingerprint: &str) {
         self.fingerprint.set_text(fingerprint);
+    }
+
+    /// the code to enter on the other device, "482 913"
+    pub(super) fn set_code(&self, code: Option<&str>) {
+        let shown = code.map(|c| {
+            let (a, b) = c.split_at(c.len() / 2);
+            format!("{a} {b}")
+        });
+        self.code.set_text(shown.as_deref().unwrap_or_default());
+        self.code_box.set_visible(code.is_some());
     }
 }
 

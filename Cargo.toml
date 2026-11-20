@@ -74,6 +74,10 @@ arboard = { version = "3.7.0", features = ["wayland-data-control"] }
 png = "0.18.1"
 # ring like the rest of rustls here: aws-lc-rs needs CMake and NASM on Windows
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
+# authorizing two devices on each other with a code (see src/pairing.rs)
+spake2 = { version = "0.4.0", features = ["getrandom"] }
+getrandom = "0.3.4"
+hostname = "0.4.2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.148"

@@ -2,9 +2,12 @@
 //!
 //! Certificates are self signed, so the usual chain validation does not
 //! apply: a connection is trusted by the fingerprint of the certificate
-//! instead, like the input channel does. The accepting side only lets in
-//! authorized fingerprints, the connecting side only talks to the exact
-//! fingerprint of the device it already talks to over the input channel.
+//! instead, like the input channel does. The accepting side requires a
+//! certificate and then decides by what the client asks for: the file channel
+//! only for authorized fingerprints, pairing (see [`crate::pairing`]) for
+//! anyone holding the code. The connecting side of the file channel only
+//! talks to the exact fingerprint of the device it already talks to over the
+//! input channel; pairing learns the fingerprint and checks it with the code.
 
 use std::{
     collections::HashMap,
@@ -34,14 +37,11 @@ fn identity(cert: &Certificate) -> (Vec<CertificateDer<'static>>, PrivateKeyDer<
     (cert.certificate.clone(), PrivateKeyDer::Pkcs8(key))
 }
 
-/// configuration of the accepting side
-pub(crate) fn server_config(
-    cert: &Certificate,
-    authorized: AuthorizedKeys,
-) -> Result<Arc<ServerConfig>, Error> {
+/// configuration of the accepting side: any certificate gets through, the
+/// fingerprint decides afterwards
+pub(crate) fn server_config(cert: &Certificate) -> Result<Arc<ServerConfig>, Error> {
     let provider = provider();
-    let verifier = AuthorizedClients {
-        authorized,
+    let verifier = AnyClient {
         provider: provider.clone(),
     };
     let (chain, key) = identity(cert);
@@ -60,6 +60,22 @@ pub(crate) fn client_config(
     let provider = provider();
     let verifier = PinnedServer {
         fingerprint,
+        provider: provider.clone(),
+    };
+    let (chain, key) = identity(cert);
+    let config = ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .dangerous()
+        .with_custom_certificate_verifier(Arc::new(verifier))
+        .with_client_auth_cert(chain, key)?;
+    Ok(Arc::new(config))
+}
+
+/// configuration of the connecting side of pairing, which accepts any
+/// certificate: pairing checks its fingerprint with the code
+pub(crate) fn any_server_config(cert: &Certificate) -> Result<Arc<ClientConfig>, Error> {
+    let provider = provider();
+    let verifier = AnyServer {
         provider: provider.clone(),
     };
     let (chain, key) = identity(cert);
@@ -90,34 +106,73 @@ fn signature_schemes(provider: &CryptoProvider) -> Vec<SignatureScheme> {
 }
 
 #[derive(Debug)]
-struct AuthorizedClients {
-    authorized: AuthorizedKeys,
+struct AnyClient {
     provider: Arc<CryptoProvider>,
 }
 
-impl ClientCertVerifier for AuthorizedClients {
+impl ClientCertVerifier for AnyClient {
     fn root_hint_subjects(&self) -> &[DistinguishedName] {
         &[]
     }
 
     fn verify_client_cert(
         &self,
-        end_entity: &CertificateDer<'_>,
+        _end_entity: &CertificateDer<'_>,
         _intermediates: &[CertificateDer<'_>],
         _now: UnixTime,
     ) -> Result<ClientCertVerified, Error> {
-        let fingerprint = crypto::generate_fingerprint(end_entity);
-        if self
-            .authorized
-            .read()
-            .expect("lock")
-            .contains_key(&fingerprint)
-        {
-            Ok(ClientCertVerified::assertion())
-        } else {
-            log::info!("file channel: refused the unauthorized device {fingerprint}");
-            Err(Error::General("device not authorized".into()))
-        }
+        // the signature in the handshake still proves the key behind it
+        Ok(ClientCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.provider.signature_verification_algorithms,
+        )
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        signature_schemes(&self.provider)
+    }
+}
+
+#[derive(Debug)]
+struct AnyServer {
+    provider: Arc<CryptoProvider>,
+}
+
+impl ServerCertVerifier for AnyServer {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &CertificateDer<'_>,
+        _intermediates: &[CertificateDer<'_>],
+        _server_name: &ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: UnixTime,
+    ) -> Result<ServerCertVerified, Error> {
+        Ok(ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -222,17 +277,10 @@ mod tests {
 
     async fn handshake(
         server: &Certificate,
-        authorized: &[&Certificate],
         client: &Certificate,
         pinned: &Certificate,
     ) -> Result<String, String> {
-        let keys: HashMap<_, _> = authorized
-            .iter()
-            .map(|c| (crypto::certificate_fingerprint(c), "peer".to_owned()))
-            .collect();
-        let acceptor = TlsAcceptor::from(
-            server_config(server, Arc::new(RwLock::new(keys))).expect("server config"),
-        );
+        let acceptor = TlsAcceptor::from(server_config(server).expect("server config"));
         let connector = TlsConnector::from(
             client_config(client, crypto::certificate_fingerprint(pinned)).expect("client config"),
         );
@@ -261,32 +309,20 @@ mod tests {
         accepted
     }
 
+    /// whether the file channel is authorized is decided after the
+    /// handshake, by the fingerprint it reports
     #[tokio::test]
-    async fn authorized_devices_connect() {
+    async fn the_server_learns_the_client_fingerprint() {
         let (server, client) = (cert(), cert());
-        let fingerprint = handshake(&server, &[&client], &client, &server)
+        let fingerprint = handshake(&server, &client, &server)
             .await
             .expect("handshake");
         assert_eq!(fingerprint, crypto::certificate_fingerprint(&client));
     }
 
     #[tokio::test]
-    async fn unauthorized_clients_are_refused() {
-        let (server, client, other) = (cert(), cert(), cert());
-        assert!(
-            handshake(&server, &[&other], &client, &server)
-                .await
-                .is_err()
-        );
-    }
-
-    #[tokio::test]
     async fn a_different_server_is_refused() {
         let (server, client, expected) = (cert(), cert(), cert());
-        assert!(
-            handshake(&server, &[&client], &client, &expected)
-                .await
-                .is_err()
-        );
+        assert!(handshake(&server, &client, &expected).await.is_err());
     }
 }

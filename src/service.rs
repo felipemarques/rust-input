@@ -9,13 +9,14 @@ use crate::{
     emulation::{Emulation, EmulationEvent},
     files::{self, FilesHandle},
     listen::{ListenerCreationError, RustInputListener},
+    pairing::{self, PairError, Paired, Pairing, PairingEvent},
 };
 use futures::StreamExt;
-use local_channel::mpsc::{Receiver, channel};
+use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, FileOptions, FrontendEvent, FrontendRequest, IpcError,
-    IpcListenerCreationError, Position, Status, TransferInfo,
+    AsyncFrontendListener, ClientHandle, DEFAULT_PORT, FileOptions, FrontendEvent, FrontendRequest,
+    IpcError, IpcListenerCreationError, Position, Status, TransferInfo,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -25,6 +26,7 @@ use std::{
 };
 use thiserror::Error;
 use tokio::{process::Command, signal, sync::Notify};
+use webrtc_dtls::crypto::Certificate;
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
@@ -74,8 +76,20 @@ pub struct Service {
     clipboard: ClipboardHandle,
     /// file transfers, if enabled
     files: Option<FilesHandle>,
+    /// the TCP port: file channels and pairing
+    file_channel: FilesHandle,
     /// what happens to copied files
     file_options: FileOptions,
+    /// codes for devices that tried to connect, and pairing with them
+    pairing: Pairing,
+    pairing_events: Receiver<PairingEvent>,
+    /// outcomes of pairing started here, with the client
+    pair_results: Receiver<(ClientHandle, Result<Paired, PairError>)>,
+    pair_results_tx: Sender<(ClientHandle, Result<Paired, PairError>)>,
+    /// own certificate, for pairing
+    cert: Certificate,
+    /// how this device introduces itself when pairing
+    name: String,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
 }
@@ -123,15 +137,24 @@ impl Service {
             incoming: listener.links(),
         };
         let (reports_tx, transfer_reports) = channel();
-        let files = clipboard.files_enabled().then(|| {
-            files::spawn(
-                cert.clone(),
-                authorized_keys.clone(),
-                config.port(),
-                clipboard.clone(),
-                reports_tx,
-            )
-        });
+        let name = hostname::get()
+            .ok()
+            .and_then(|h| h.into_string().ok())
+            .unwrap_or_else(|| "RustInput".into());
+        let (pairing_tx, pairing_events) = channel();
+        let pairing = Pairing::new(name.clone(), pairing_tx);
+        // the TCP port is open for pairing even without file transfers
+        let file_channel = files::spawn(
+            cert.clone(),
+            authorized_keys.clone(),
+            config.port(),
+            clipboard.clone(),
+            reports_tx,
+            pairing.clone(),
+            clipboard.files_enabled(),
+        );
+        let files = clipboard.files_enabled().then(|| file_channel.clone());
+        let (pair_results_tx, pair_results) = channel();
         clipboard::spawn(&clipboard, clipboard_rx, links, files.clone());
         let file_options = config.file_options();
         clipboard.set_send_copied(file_options.available && file_options.send_copied);
@@ -166,8 +189,15 @@ impl Service {
             next_trigger_handle: 0,
             clipboard,
             files,
+            file_channel,
             file_options,
             transfer_reports,
+            pairing,
+            pairing_events,
+            pair_results,
+            pair_results_tx,
+            cert,
+            name,
         };
         Ok(service)
     }
@@ -196,6 +226,8 @@ impl Service {
                     self.notify_frontend(FrontendEvent::Transfers(transfers));
                 }
                 _ = self.config.changed() => self.handle_config_change(),
+                Some(event) = self.pairing_events.recv() => self.handle_pairing_event(event),
+                Some((handle, result)) = self.pair_results.recv() => self.pairing_done(handle, result),
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
         }
@@ -276,6 +308,7 @@ impl Service {
                     files.cancel(id);
                 }
             }
+            FrontendRequest::Pair { handle, code } => self.pair(handle, code),
             FrontendRequest::RemoveReceivedFiles => {
                 if let Some(files) = &self.files {
                     files.remove_received();
@@ -367,7 +400,8 @@ impl Service {
     fn handle_emulation_event(&mut self, event: EmulationEvent) {
         match event {
             EmulationEvent::ConnectionAttempt { fingerprint } => {
-                self.notify_frontend(FrontendEvent::ConnectionAttempt { fingerprint });
+                let code = Some(self.pairing.code_for(&fingerprint));
+                self.notify_frontend(FrontendEvent::ConnectionAttempt { fingerprint, code });
             }
             EmulationEvent::Entered {
                 addr,
@@ -394,9 +428,7 @@ impl Service {
             EmulationEvent::PortChanged(port) => match port {
                 Ok(port) => {
                     self.port = port;
-                    if let Some(files) = &self.files {
-                        files.change_port(port);
-                    }
+                    self.file_channel.change_port(port);
                     self.notify_frontend(FrontendEvent::PortChanged(port, None));
                 }
                 Err(e) => self
@@ -567,6 +599,66 @@ impl Service {
     fn notify_frontend(&mut self, event: FrontendEvent) {
         self.pending_frontend_events.push_back(event);
         self.frontend_event_pending.notify_one();
+    }
+
+    /// the other device entered the code shown here, or that code is used up
+    fn handle_pairing_event(&mut self, event: PairingEvent) {
+        match event {
+            PairingEvent::Paired(Paired { fingerprint, name }) => {
+                self.add_authorized_key(name.clone(), fingerprint.clone());
+                self.save_config();
+                self.notify_frontend(FrontendEvent::Paired { fingerprint, name });
+            }
+            PairingEvent::NewCode { fingerprint, code } => {
+                self.notify_frontend(FrontendEvent::ConnectionAttempt {
+                    fingerprint,
+                    code: Some(code),
+                });
+            }
+        }
+    }
+
+    /// authorizes this device and the client on each other with the code the
+    /// client shows
+    fn pair(&mut self, handle: ClientHandle, code: String) {
+        let port = self.client_manager.get_port(handle).unwrap_or(DEFAULT_PORT);
+        let mut addrs: Vec<SocketAddr> = self
+            .client_manager
+            .active_addr(handle)
+            .into_iter()
+            .collect();
+        for ip in self.client_manager.get_ips(handle).unwrap_or_default() {
+            let addr = SocketAddr::new(ip, port);
+            if !addrs.contains(&addr) {
+                addrs.push(addr);
+            }
+        }
+        log::info!("pairing with client {handle} at {addrs:?}");
+        let (cert, name, results) = (
+            self.cert.clone(),
+            self.name.clone(),
+            self.pair_results_tx.clone(),
+        );
+        tokio::task::spawn_local(async move {
+            let result = pairing::pair(cert, addrs, code, name).await;
+            let _ = results.send((handle, result));
+        });
+    }
+
+    fn pairing_done(&mut self, handle: ClientHandle, result: Result<Paired, PairError>) {
+        let result = match result {
+            Ok(Paired { fingerprint, name }) => {
+                log::info!("paired with client {handle}: {name}");
+                self.add_authorized_key(name.clone(), fingerprint);
+                self.save_config();
+                Ok(name)
+            }
+            Err(e) => {
+                log::warn!("pairing with client {handle} failed: {e}");
+                Err(e.to_string())
+            }
+        };
+        self.notify_frontend(FrontendEvent::PairingResult { handle, result });
     }
 
     fn add_authorized_key(&mut self, desc: String, fp: String) {

@@ -69,6 +69,19 @@
 				</property>
 			</object>
 		</child>
+		<!-- authorize both computers on each other with a code -->
+		<child>
+			<object class="AdwActionRow" id="pair_row">
+				<property name="title">authorize with a code</property>
+				<property name="subtitle">The other computer shows a code when this one tries to connect: entering it here authorizes both computers on each other</property>
+				<child>
+					<object class="GtkButton" id="pair_button">
+						<property name="label">Enter code…</property>
+						<property name="valign">center</property>
+					</object>
+				</child>
+			</object>
+		</child>
 		<!-- delete button -->
 		<child>
 			<object class="AdwActionRow" id="delete_row">

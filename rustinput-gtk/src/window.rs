@@ -205,6 +205,20 @@ impl Window {
                         ),
                     );
                     row.connect_closure(
+                        "request-pair",
+                        false,
+                        closure_local!(
+                            #[strong]
+                            window,
+                            move |row: ClientRow| {
+                                if let Some(client) = window.client_by_idx(row.index() as u32) {
+                                    let data = client.get_data();
+                                    window.open_pairing_dialog(data.handle, data.hostname);
+                                }
+                            }
+                        ),
+                    );
+                    row.connect_closure(
                         "request-dns",
                         false,
                         closure_local!(
@@ -641,11 +655,116 @@ impl Window {
         self.imp().fingerprint_row.set_subtitle(fingerprint);
     }
 
-    pub(super) fn request_authorization(&self, fingerprint: &str) {
+    /// asks for the code another computer shows, to authorize both on each
+    /// other
+    fn open_pairing_dialog(&self, handle: ClientHandle, hostname: Option<String>) {
+        let name = hostname.unwrap_or_else(|| "the other computer".into());
+        let entry = gtk::Entry::builder()
+            .placeholder_text("123 456")
+            .input_purpose(gtk::InputPurpose::Digits)
+            .max_length(7)
+            .halign(gtk::Align::Center)
+            .width_chars(9)
+            .activates_default(true)
+            .css_classes(["title-2"])
+            .build();
+        let text = gtk::Label::builder()
+            .label(format!(
+                "When this computer tries to connect, {name} asks whether to authorize it and \
+                 shows a code. Enter it here to authorize both computers on each other: for \
+                 control, clipboard and files."
+            ))
+            .wrap(true)
+            .max_width_chars(48)
+            .build();
+        let cancel = gtk::Button::with_label("Cancel");
+        let authorize = gtk::Button::builder()
+            .label("Authorize")
+            .css_classes(["suggested-action"])
+            .sensitive(false)
+            .build();
+        let buttons = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(12)
+            .halign(gtk::Align::End)
+            .build();
+        buttons.append(&cancel);
+        buttons.append(&authorize);
+        let content = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(18)
+            .margin_top(24)
+            .margin_bottom(24)
+            .margin_start(24)
+            .margin_end(24)
+            .build();
+        content.append(&text);
+        content.append(&entry);
+        content.append(&buttons);
+        let page = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .build();
+        page.append(
+            &adw::HeaderBar::builder()
+                .title_widget(&adw::WindowTitle::new(
+                    &format!("Authorize with {name}"),
+                    "",
+                ))
+                .build(),
+        );
+        page.append(&content);
+        let dialog = adw::Window::builder()
+            .transient_for(self)
+            .modal(true)
+            .resizable(false)
+            .content(&page)
+            .build();
+        dialog.set_default_widget(Some(&authorize));
+        entry.connect_changed(clone!(
+            #[weak]
+            authorize,
+            move |entry| {
+                let digits = entry.text().chars().filter(char::is_ascii_digit).count();
+                authorize.set_sensitive(digits == 6);
+            }
+        ));
+        cancel.connect_clicked(clone!(
+            #[weak]
+            dialog,
+            move |_| dialog.close()
+        ));
+        authorize.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            #[weak]
+            dialog,
+            #[weak]
+            entry,
+            move |_| {
+                let code: String = entry.text().chars().filter(char::is_ascii_digit).collect();
+                window.request(FrontendRequest::Pair { handle, code });
+                window.show_toast("Authorizing…");
+                dialog.close();
+            }
+        ));
+        dialog.present();
+        entry.grab_focus();
+    }
+
+    /// the other device entered the code shown here
+    pub(super) fn paired(&self, fingerprint: &str, name: &str) {
+        let shown = self.imp().authorization_window.borrow().clone();
+        if let Some(w) = shown.filter(|w| w.fingerprint() == fingerprint) {
+            w.close();
+        }
+        self.show_toast(&format!("{name} and this computer authorized each other"));
+    }
+
+    pub(super) fn request_authorization(&self, fingerprint: &str, code: Option<&str>) {
         if let Some(w) = self.imp().authorization_window.borrow_mut().take() {
             w.close();
         }
-        let window = AuthorizationWindow::new(fingerprint);
+        let window = AuthorizationWindow::new(fingerprint, code);
         window.set_transient_for(Some(self));
         window.connect_closure(
             "confirm-clicked",

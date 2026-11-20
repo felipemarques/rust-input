@@ -60,6 +60,37 @@
                 </child>
               </object>
             </child>
+            <child>
+              <object class="GtkBox" id="code_box">
+                <property name="orientation">vertical</property>
+                <property name="spacing">6</property>
+                <property name="visible">false</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label" translatable="yes">Or, on the computer that is trying to connect, open RustInput, click “Enter code…” next to this computer and enter:</property>
+                    <property name="wrap">word-wrap</property>
+                    <property name="width-request">100</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="code">
+                    <property name="selectable">true</property>
+                    <style>
+                      <class name="title-1"/>
+                    </style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label" translatable="yes">That authorizes both computers on each other.</property>
+                    <property name="wrap">word-wrap</property>
+                    <style>
+                      <class name="dim-label"/>
+                    </style>
+                  </object>
+                </child>
+              </object>
+            </child>
           </object>
         </child>
         <child>

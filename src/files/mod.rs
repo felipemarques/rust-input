@@ -20,7 +20,7 @@ mod journal;
 mod manifest;
 pub(crate) mod menu;
 mod store;
-mod tls;
+pub(crate) mod tls;
 mod wire;
 
 pub(crate) use manifest::files_key;
@@ -48,7 +48,11 @@ use tokio::{
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use webrtc_dtls::crypto::Certificate;
 
-use crate::clipboard::{ClipboardHandle, ClipboardMsg, Peer};
+use crate::{
+    clipboard::{ClipboardHandle, ClipboardMsg, Peer},
+    crypto,
+    pairing::{self, Pairing},
+};
 use journal::Journal;
 use manifest::Manifest;
 use wire::{CHUNK_SIZE, Entry, Frame};
@@ -161,23 +165,27 @@ impl FilesHandle {
 }
 
 /// Starts the file transfers. Whenever the transfers change, their state is
-/// sent to `reports`.
+/// sent to `reports`. The TCP port also takes pairing (see [`pairing`]); file
+/// channels only if `enabled`.
 pub(crate) fn spawn(
     cert: Certificate,
     authorized: AuthorizedKeys,
     port: u16,
     clipboard: ClipboardHandle,
     reports: Sender<Vec<TransferInfo>>,
+    pairing: Pairing,
+    enabled: bool,
 ) -> FilesHandle {
     let (tx, requests) = channel();
     let (internal_tx, internal_rx) = channel();
-    let received_dir = rustinput_ipc::received_dir();
+    let received_dir = rustinput_ipc::received_dir().filter(|_| enabled);
     match &received_dir {
         // nothing of an earlier run is on the clipboard anymore
         Some(dir) => store::cleanup(dir, 0),
-        None => log::warn!("no folder for received files, they will be refused"),
+        None if enabled => log::warn!("no folder for received files, they will be refused"),
+        None => {}
     }
-    let acceptor = match tls::server_config(&cert, authorized.clone()) {
+    let acceptor = match tls::server_config(&cert) {
         Ok(config) => Some(TlsAcceptor::from(config)),
         Err(e) => {
             log::warn!("file channel: can not accept connections: {e}");
@@ -194,6 +202,8 @@ pub(crate) fn spawn(
         authorized,
         acceptor,
         listener: None,
+        pairing,
+        enabled,
         received_dir,
         journal: Journal::open(),
         peers: HashMap::new(),
@@ -369,6 +379,9 @@ struct Task {
     authorized: AuthorizedKeys,
     acceptor: Option<TlsAcceptor>,
     listener: Option<JoinHandle<()>>,
+    pairing: Pairing,
+    /// file channels are taken
+    enabled: bool,
     received_dir: Option<PathBuf>,
     journal: Journal,
     peers: HashMap<Peer, PeerInfo>,
@@ -423,8 +436,15 @@ impl Task {
         let Some(acceptor) = self.acceptor.clone() else {
             return;
         };
-        let internal = self.internal_tx.clone();
-        self.listener = Some(spawn_local(listen(port, acceptor, internal)));
+        let accept = Accept {
+            acceptor,
+            internal: self.internal_tx.clone(),
+            pairing: self.pairing.clone(),
+            authorized: self.authorized.clone(),
+            own: crypto::certificate_fingerprint(&self.cert),
+            enabled: self.enabled,
+        };
+        self.listener = Some(spawn_local(listen(port, accept)));
     }
 
     /// name of the device with `fingerprint`, as authorized on this one
@@ -1232,8 +1252,82 @@ fn info(
     }
 }
 
-/// accepts the file channels of the devices connecting to this one
-async fn listen(port: u16, acceptor: TlsAcceptor, internal: Sender<Internal>) {
+/// what the TCP port needs to answer connections
+#[derive(Clone)]
+struct Accept {
+    acceptor: TlsAcceptor,
+    internal: Sender<Internal>,
+    pairing: Pairing,
+    authorized: AuthorizedKeys,
+    /// fingerprint of this device
+    own: String,
+    /// file channels are taken
+    enabled: bool,
+}
+
+impl Accept {
+    /// answers one connection: a file channel from an authorized device, or
+    /// pairing
+    async fn connection(self, tcp: TcpStream, addr: SocketAddr) {
+        let handshake = async {
+            let mut stream = self.acceptor.accept(tcp).await?;
+            let magic = wire::read_any_magic(&mut stream).await?;
+            Ok::<_, io::Error>((stream, magic))
+        };
+        let (mut stream, magic) = match timeout(HANDSHAKE_TIMEOUT, handshake).await {
+            Ok(Ok(accepted)) => accepted,
+            Ok(Err(e)) => return log::info!("connection from {addr} on the TCP port: {e}"),
+            Err(_) => return log::info!("connection from {addr}: handshake timed out"),
+        };
+        let certs = stream.get_ref().1.peer_certificates();
+        let Some(fingerprint) = tls::peer_fingerprint(certs) else {
+            return;
+        };
+        if magic == pairing::MAGIC {
+            let answer = async {
+                stream.write_all(&pairing::MAGIC).await?;
+                stream.flush().await?;
+                self.pairing
+                    .serve(&mut stream, &fingerprint, &self.own)
+                    .await
+            };
+            if let Err(e) = timeout(HANDSHAKE_TIMEOUT, answer)
+                .await
+                .unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timed out")))
+            {
+                log::info!("pairing with {addr}: {e}");
+            }
+            return;
+        }
+        if magic != wire::MAGIC {
+            return log::info!("connection from {addr}: not RustInput");
+        }
+        let authorized = self
+            .authorized
+            .read()
+            .expect("lock")
+            .contains_key(&fingerprint);
+        if !authorized || !self.enabled {
+            let why = if authorized {
+                "file transfers are off"
+            } else {
+                "not authorized"
+            };
+            return log::info!("file channel from {addr} refused: {why}");
+        }
+        if wire::write_magic(&mut stream).await.is_ok() && stream.flush().await.is_ok() {
+            let _ = self.internal.send(Internal::Connected {
+                fingerprint,
+                initiated: false,
+                stream: Box::new(stream.into()),
+            });
+        }
+    }
+}
+
+/// accepts the file channels of the devices connecting to this one, and
+/// pairing
+async fn listen(port: u16, accept: Accept) {
     let listener = match TcpListener::bind(("0.0.0.0", port)).await {
         Ok(listener) => listener,
         Err(e) => {
@@ -1252,29 +1346,7 @@ async fn listen(port: u16, acceptor: TlsAcceptor, internal: Sender<Internal>) {
             }
         };
         let _ = tcp.set_nodelay(true);
-        let (acceptor, internal) = (acceptor.clone(), internal.clone());
-        spawn_local(async move {
-            let handshake = async {
-                let mut stream = acceptor.accept(tcp).await?;
-                wire::write_magic(&mut stream).await?;
-                wire::read_magic(&mut stream).await?;
-                Ok::<_, io::Error>(stream)
-            };
-            match timeout(HANDSHAKE_TIMEOUT, handshake).await {
-                Ok(Ok(stream)) => {
-                    let certs = stream.get_ref().1.peer_certificates();
-                    if let Some(fingerprint) = tls::peer_fingerprint(certs) {
-                        let _ = internal.send(Internal::Connected {
-                            fingerprint,
-                            initiated: false,
-                            stream: Box::new(stream.into()),
-                        });
-                    }
-                }
-                Ok(Err(e)) => log::info!("file channel from {addr}: {e}"),
-                Err(_) => log::info!("file channel from {addr}: handshake timed out"),
-            }
-        });
+        spawn_local(accept.clone().connection(tcp, addr));
     }
 }
 

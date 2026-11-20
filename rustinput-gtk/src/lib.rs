@@ -341,9 +341,17 @@ fn build_ui(app: &Application) {
                     FrontendEvent::EmulationStatus(s) => window.set_emulation(s.into()),
                     FrontendEvent::AuthorizedUpdated(keys) => window.set_authorized_keys(keys),
                     FrontendEvent::PublicKeyFingerprint(fp) => window.set_pk_fp(&fp),
-                    FrontendEvent::ConnectionAttempt { fingerprint } => {
-                        window.request_authorization(&fingerprint);
+                    FrontendEvent::ConnectionAttempt { fingerprint, code } => {
+                        window.request_authorization(&fingerprint, code.as_deref());
                     }
+                    FrontendEvent::Paired { fingerprint, name } => {
+                        window.paired(&fingerprint, &name);
+                    }
+                    FrontendEvent::PairingResult { handle: _, result } => match result {
+                        Ok(name) => window
+                            .show_toast(&format!("{name} and this computer authorized each other")),
+                        Err(e) => window.show_toast(&format!("Not authorized: {e}")),
+                    },
                     FrontendEvent::DeviceConnected {
                         fingerprint: _,
                         addr,

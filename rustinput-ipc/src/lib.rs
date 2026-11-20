@@ -316,7 +316,22 @@ pub enum FrontendEvent {
     /// what happens to copied files
     FileOptions(FileOptions),
     /// failed connection attempt (approval for fingerprint required)
-    ConnectionAttempt { fingerprint: String },
+    ConnectionAttempt {
+        fingerprint: String,
+        /// entered on the device that tried to connect, it authorizes both
+        /// devices on each other
+        #[serde(default)]
+        code: Option<String>,
+    },
+    /// the device with `fingerprint` entered the code and is authorized now,
+    /// as `name`
+    Paired { fingerprint: String, name: String },
+    /// outcome of [`FrontendRequest::Pair`]: the name of the other device, or
+    /// what went wrong
+    PairingResult {
+        handle: ClientHandle,
+        result: Result<String, String>,
+    },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -368,6 +383,9 @@ pub enum FrontendRequest {
     SetFileOptions(FileOptions),
     /// remove the received files that were not pasted
     RemoveReceivedFiles,
+    /// authorize this device and the client on each other with the code the
+    /// client shows
+    Pair { handle: ClientHandle, code: String },
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
