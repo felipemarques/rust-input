@@ -10,9 +10,18 @@ port = 4242
 # on by default; each device only shares with devices it has authorized
 clipboard = true
 
-# send copied files and folders along with the clipboard (on by default),
-# over a TCP connection on the same port number
+# file transfers, over a TCP connection on the same port number (on by default)
 clipboard_files = true
+
+# also send files copied in a file manager when the pointer moves to another
+# device, not only those chosen with "Copy to RustInput" (off by default)
+send_copied_files = false
+
+# open the transfers window when a transfer takes more than a moment (on by default)
+show_transfers_window = true
+
+# "Copy to RustInput" in the menu of Explorer, Nemo and Nautilus (on by default)
+file_manager_menu = true
 
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic

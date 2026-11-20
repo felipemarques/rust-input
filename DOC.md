@@ -205,6 +205,34 @@ sending. The receiver then removes what it wrote.
 
 The receiver writes a transfer into a folder of its own, refusing paths that
 would leave it and adjusting names its file system does not accept. When the
-transfer is complete, the clipboard points at its top level items. On X11 the
-clipboard is offered in the GNOME format (`x-special/gnome-copied-files`) as
-well as `text/uri-list`, as the GTK file managers only paste the former.
+transfer is complete, the clipboard points at its top level items as cut
+files, so pasting moves them out of that folder and nothing is left behind:
+on X11 in the GNOME format (`x-special/gnome-copied-files`, starting with
+`cut`; the GTK file managers only paste that one) along with
+`application/x-kde-cutselection` and `text/uri-list`, on Windows as `CF_HDROP`
+with "Preferred DropEffect" set to move. The service watches the folder: once
+all items are gone it reports the transfer as pasted and removes the folder.
+Unpasted files go ten minutes after newer ones replaced them on the clipboard,
+when the service starts, or when the user asks.
+
+### Sending files
+
+Files go out in two ways:
+
+- **"Copy to RustInput"** in the menu of a file manager runs
+  `rustinput send-files <paths>`, which hands them to the running service over
+  its local socket (`FrontendRequest::SendFiles`). The service sends them right
+  away to every connected device that takes files, once per device (two
+  devices listing each other are connected twice). Explorer runs the command
+  once per selected item, so what arrives within 700 ms becomes one transfer.
+  The menu items are a Nemo action, a Nautilus script and a verb in
+  `HKCU\Software\Classes\AllFilesystemObjects\shell`, written when the
+  service starts (`file_manager_menu`).
+- With `send_copied_files`, files copied in a file manager go along with the
+  pointer like the rest of the clipboard. Without it (the default), crossing
+  sends neither the files nor their paths as text, so the clipboard of the
+  other device keeps what it has.
+
+Every transfer is written to a log (`transfers.log` in
+`$XDG_STATE_HOME/rustinput`, `%LOCALAPPDATA%\rustinput` or
+`~/Library/Logs/rustinput`) with its files and sizes.

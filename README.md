@@ -24,7 +24,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
 | 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
-| 📁 Copy files and folders on one computer, paste them on the other | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
+| 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
@@ -35,8 +35,8 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 ¹ GNOME ≥ 45, KDE Plasma ≥ 6.1 and most wlroots compositors, see [Detailed OS Support](#detailed-os-support).
 ² Built, not tested by hand yet. On Wayland it needs a compositor with the data-control protocol (KDE, wlroots).
 ³ Needs a desktop with a system tray: Windows, Cinnamon, KDE, XFCE, MATE, GNOME with the AppIndicator extension.
-⁴ New in 0.16.0: tested in automated runs between two Linux (X11) computers, including pasting in Nemo, not yet by hand
-on Windows.
+⁴ Tested in automated runs between two Linux (X11) computers, including pasting in Nemo, and by hand from Linux to
+Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are new in 0.17.0, not tested on Windows yet.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="420" alt="The RustInput window">
@@ -90,27 +90,38 @@ To turn the clipboard synchronization off, set `clipboard = false` in the [confi
 
 ## Copy and paste files
 
-Files and folders copied in a file manager (Explorer, Nemo, Nautilus, Dolphin...) go along with the pointer like the
-rest of the clipboard: when the pointer moves to the other computer, they are sent there, one file after the other.
-Once everything arrived, the clipboard of that computer holds them, and pasting in a file manager puts them in the
-folder you paste into.
+Right-click files or folders in the file manager and choose **Copy to RustInput** (Explorer, Nemo and Nautilus; in
+Windows 11 it is under "Show more options"). RustInput sends them to the other computer right away, one file after the
+other, and once everything arrived the clipboard there holds them: paste them in any folder of the file manager.
 
+- Pasting **moves** the files out of the temporary folder RustInput received them into (they are on the clipboard as
+  cut files), so no copy is left behind taking up space. On the same drive that is instant. They can only be pasted
+  once.
+- A window shows the progress on both computers: the file being transferred, how much arrived, the speed, the time
+  left, and whether the received files were pasted. It opens by itself when a transfer takes more than a moment and
+  can be reopened from the tray icon or the main window, where it can also cancel transfers.
+- Everything sent and received is written to a log, with every file and its size: **Open log** in that window.
 - Files travel over a connection of their own, encrypted with TLS, so mouse and keyboard stay responsive during large
   transfers. It uses TCP on the same port number as the rest of RustInput (4242 by default): firewalls have to let
   TCP through as well.
-- The menu of the [tray icon](#system-tray) shows the transfers on both computers, with their progress, and can
-  cancel them. The window shows a notice when files arrived.
-- Received files are kept in `~/.cache/rustinput/received` (Linux), `%LOCALAPPDATA%\rustinput\received` (Windows) or
-  `~/Library/Caches/rustinput/received` (macOS) until they are pasted; only the last three transfers are kept.
-- Moving back and forth without copying anything new does not send the files again.
+
+**Send copied files automatically** (off by default, in the tray menu and in the main window) also sends whatever is
+copied in a file manager (Ctrl+C) whenever the pointer moves to the other computer, like the rest of the clipboard.
+It is off by default because working with files means copying them all the time, and every copy would be sent.
+
+Received files wait in `~/.cache/rustinput/received` (Linux), `%LOCALAPPDATA%\rustinput\received` (Windows) or
+`~/Library/Caches/rustinput/received` (macOS). Files that were not pasted are removed ten minutes after newer ones took
+their place on the clipboard, when RustInput starts, or with **Remove unpasted files** in the transfers window.
 
 > [!Important]
-> - Both computers need RustInput 0.16.0 or newer, and have to authorize each other like for the clipboard.
-> - The transfer starts when the pointer moves, not when pasting: what is copied is sent even if it is never pasted,
->   and pasting before the transfer finished pastes what the clipboard held before.
-> - On Wayland, file managers that only paste the GNOME clipboard format may not paste received files yet.
+> - Both computers need RustInput 0.16.0 or newer (0.17.0 for everything above), and have to authorize each other like
+>   for the clipboard.
+> - Pasting before a transfer finished pastes what the clipboard held before.
+> - Explorer offers "Copy to RustInput" for up to 100 selected items: select their folder for more.
+> - On Wayland, file managers that only paste the GNOME clipboard format may not paste received files yet; on Wayland
+>   and macOS pasting copies the files, so they stay in the temporary folder until they are removed.
 
-To send the clipboard without files, set `clipboard_files = false` in the [configuration](#configuration) file.
+To turn file transfers off altogether, set `clipboard_files = false` in the [configuration](#configuration) file.
 
 ## Pointer position
 
@@ -203,6 +214,9 @@ Use the precompiled binaries from the [releases section](https://github.com/feli
 - Download `rustinput-windows-x86_64.zip` from the releases page
 - Unzip it (the required GTK libraries are included)
 - Run `rustinput.exe`
+- Logs: started from a terminal (PowerShell, cmd), RustInput logs there; started otherwise, to
+  `%LOCALAPPDATA%\rustinput\logs` (`rustinput.log` for the window, `daemon.log` for the service). Set
+  `RUSTINPUT_LOG_LEVEL=debug` for more detail.
 
 </details>
 
@@ -504,9 +518,18 @@ port = 4242
 # synchronize the clipboard with the connected devices (on by default)
 clipboard = true
 
-# send copied files and folders along with the clipboard (on by default),
-# over a TCP connection on the same port number
+# file transfers, over a TCP connection on the same port number (on by default)
 clipboard_files = true
+
+# also send files copied in a file manager when the pointer moves to another
+# computer, not only those chosen with "Copy to RustInput" (off by default)
+send_copied_files = false
+
+# open the transfers window when a transfer takes more than a moment (on by default)
+show_transfers_window = true
+
+# "Copy to RustInput" in the menu of Explorer, Nemo and Nautilus (on by default)
+file_manager_menu = true
 
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
