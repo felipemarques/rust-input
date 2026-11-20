@@ -8,6 +8,9 @@
 //! not cross to another device, and it goes back to where it was afterwards.
 //! Available on X11 and Windows.
 
+// the wheel only shows on X11 and Windows: on macOS it is built, never used
+#![cfg_attr(target_os = "macos", allow(dead_code))]
+
 mod chord;
 mod draw;
 #[cfg(windows)]
