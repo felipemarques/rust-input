@@ -88,7 +88,11 @@ fn run() -> Result<(), RustInputError> {
                 } else {
                     Some(start_service()?)
                 };
-                let res = rustinput_gtk::run(env!("CARGO_PKG_VERSION"), config::local_commit());
+                let res = rustinput_gtk::run(
+                    env!("CARGO_PKG_VERSION"),
+                    config::local_commit(),
+                    config.theme(),
+                );
                 if let Some(ref mut service) = service {
                     #[cfg(unix)]
                     {

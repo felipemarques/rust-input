@@ -12,7 +12,7 @@ use gtk::{
 
 use rustinput_ipc::{
     ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FileOptions, FrontendRequest,
-    FrontendRequestWriter, LinkStats, Position,
+    FrontendRequestWriter, LinkStats, Position, Theme,
 };
 
 use crate::{
@@ -477,6 +477,33 @@ impl Window {
 
     /// Adds the settings of the file transfers. They show once the service
     /// said that file transfers are available.
+    /// The appearance row, showing `theme`: picking another applies it right
+    /// away and keeps it in the configuration.
+    pub(super) fn setup_theme(&self, theme: Theme) {
+        self.set_theme(theme);
+        self.imp().theme_row.connect_selected_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |row| {
+                if window.imp().updating_theme.get() {
+                    return;
+                }
+                let theme = theme_at(row.selected());
+                crate::apply_theme(theme);
+                window.request(FrontendRequest::SetTheme(theme));
+            }
+        ));
+    }
+
+    /// `theme` from the configuration: applied and shown
+    pub(super) fn set_theme(&self, theme: Theme) {
+        let imp = self.imp();
+        imp.updating_theme.set(true);
+        imp.theme_row.set_selected(theme_index(theme));
+        imp.updating_theme.set(false);
+        crate::apply_theme(theme);
+    }
+
     pub(super) fn setup_file_settings(&self, open_transfers: impl Fn() + 'static) {
         let switch_row = |title: &str, subtitle: &str| {
             let row = adw::ActionRow::builder()
@@ -800,4 +827,15 @@ impl Window {
         window.present();
         self.imp().authorization_window.replace(Some(window));
     }
+}
+
+/// the themes in the order of the appearance row
+const THEMES: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
+
+fn theme_index(theme: Theme) -> u32 {
+    THEMES.iter().position(|t| *t == theme).unwrap_or(0) as u32
+}
+
+fn theme_at(index: u32) -> Theme {
+    THEMES.get(index as usize).copied().unwrap_or_default()
 }

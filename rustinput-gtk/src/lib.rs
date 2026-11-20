@@ -25,6 +25,22 @@ use window::Window;
 /// soft-warn version-mismatch indicator.
 pub(crate) static LOCAL_COMMIT: OnceLock<[u8; 8]> = OnceLock::new();
 
+/// The theme in the configuration when the frontend started, set once by
+/// [`run`]: applied before the window shows.
+static THEME: OnceLock<Theme> = OnceLock::new();
+
+/// Light or dark windows: `Theme::System` follows the preference of the
+/// system, the others force it. It applies to every window of the
+/// application.
+pub(crate) fn apply_theme(theme: Theme) {
+    let scheme = match theme {
+        Theme::System => adw::ColorScheme::Default,
+        Theme::Light => adw::ColorScheme::ForceLight,
+        Theme::Dark => adw::ColorScheme::ForceDark,
+    };
+    adw::StyleManager::default().set_color_scheme(scheme);
+}
+
 /// Version of the application, set once by [`run`]. The frontend is a
 /// crate of its own, so its `CARGO_PKG_VERSION` is not the one users see.
 pub(crate) static APP_VERSION: OnceLock<&'static str> = OnceLock::new();
@@ -49,7 +65,7 @@ pub(crate) fn local_commit_str() -> String {
         .to_string()
 }
 
-use rustinput_ipc::{FrontendEvent, TransferState};
+use rustinput_ipc::{FrontendEvent, Theme, TransferState};
 
 use adw::Application;
 use gtk::{IconTheme, gdk::Display, glib::clone, prelude::*};
@@ -66,9 +82,10 @@ pub enum GtkError {
     NonZeroExitCode(i32),
 }
 
-pub fn run(version: &'static str, local_commit: [u8; 8]) -> Result<(), GtkError> {
+pub fn run(version: &'static str, local_commit: [u8; 8], theme: Theme) -> Result<(), GtkError> {
     log::debug!("running gtk frontend");
     APP_VERSION.set(version).expect("version set once");
+    THEME.set(theme).expect("theme set once");
     LOCAL_COMMIT
         .set(local_commit)
         .expect("local_commit set once");
@@ -104,6 +121,8 @@ fn gtk_main() -> glib::ExitCode {
         .build();
 
     app.connect_startup(|app| {
+        // before any window shows, so it does not flash in the other theme
+        apply_theme(THEME.get().copied().unwrap_or_default());
         load_css();
         load_icons();
         setup_actions(app);
@@ -300,6 +319,7 @@ fn build_ui(app: &Application) {
         });
     }
 
+    window.setup_theme(THEME.get().copied().unwrap_or_default());
     let transfers = transfers::Transfers::new(&window);
     window.setup_file_settings(clone!(
         #[strong]
@@ -371,6 +391,7 @@ fn build_ui(app: &Application) {
                     }
                     FrontendEvent::Notice(notice) => window.show_toast(&notice),
                     FrontendEvent::LinkStats(stats) => window.update_link_stats(&stats),
+                    FrontendEvent::Theme(theme) => window.set_theme(theme),
                     FrontendEvent::ShowWindow => window.present(),
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {

@@ -18,7 +18,7 @@ use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, DEFAULT_PORT, FileOptions, FrontendEvent, FrontendRequest,
-    IpcError, IpcListenerCreationError, LinkStats, Position, Status, TransferInfo,
+    IpcError, IpcListenerCreationError, LinkStats, Position, Status, Theme, TransferInfo,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -104,6 +104,8 @@ pub struct Service {
     transfer_reports: Receiver<Vec<TransferInfo>>,
     /// bytes and pings of the input channel, reported once a second
     netstats: NetStats,
+    /// light or dark windows, as configured
+    theme: Theme,
 }
 
 #[derive(Debug)]
@@ -178,6 +180,7 @@ impl Service {
             radial::spawn(radial.clone(), radial_tx);
         }
         let file_options = config.file_options();
+        let theme = config.theme();
         clipboard.set_send_copied(file_options.available && file_options.send_copied);
         files::menu::install(file_options.available && file_options.file_manager_menu);
 
@@ -214,6 +217,7 @@ impl Service {
             file_options,
             transfer_reports,
             netstats,
+            theme,
             pairing,
             pairing_events,
             pair_results,
@@ -339,6 +343,12 @@ impl Service {
             }
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
+            FrontendRequest::SetTheme(theme) => {
+                self.theme = theme;
+                self.config.set_theme(theme);
+                self.save_config();
+                self.notify_frontend(FrontendEvent::Theme(theme));
+            }
             FrontendRequest::SendFiles(paths) => match &self.files {
                 Some(files) => files.send_now(paths),
                 None => log::warn!("file transfers are turned off (clipboard_files = false)"),
@@ -427,6 +437,12 @@ impl Service {
         let file_options = self.config.file_options();
         if file_options != self.file_options {
             self.set_file_options(file_options, false);
+        }
+        // changed in the file by hand
+        let theme = self.config.theme();
+        if theme != self.theme {
+            self.theme = theme;
+            self.notify_frontend(FrontendEvent::Theme(theme));
         }
         self.sync_frontend();
     }
@@ -606,6 +622,7 @@ impl Service {
         let keys = self.authorized_keys.read().expect("lock").clone();
         self.notify_frontend(FrontendEvent::AuthorizedUpdated(keys));
         self.notify_frontend(FrontendEvent::FileOptions(self.file_options));
+        self.notify_frontend(FrontendEvent::Theme(self.theme));
     }
 
     const ENTER_HANDLE_BEGIN: u64 = u64::MAX / 2 + 1;

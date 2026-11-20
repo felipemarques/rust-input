@@ -17,7 +17,7 @@ use toml;
 use toml_edit::{self, DocumentMut};
 
 use rustinput_cli::CliArgs;
-use rustinput_ipc::{DEFAULT_PORT, FileOptions, Position};
+use rustinput_ipc::{DEFAULT_PORT, FileOptions, Position, Theme};
 
 use input_event::scancode::{
     self,
@@ -73,6 +73,9 @@ struct ConfigToml {
     show_transfers_window: Option<bool>,
     file_manager_menu: Option<bool>,
     radial_menu: Option<bool>,
+    /// "system", "light" or "dark": a string, so a value this version does
+    /// not know does not make the whole file unreadable
+    theme: Option<String>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
@@ -542,6 +545,22 @@ impl Config {
             .unwrap_or(true)
     }
 
+    /// whether the windows are light, dark or as the system (`theme`)
+    pub fn theme(&self) -> Theme {
+        let Some(name) = self.config_toml.as_ref().and_then(|c| c.theme.as_deref()) else {
+            return Theme::System;
+        };
+        Theme::from_name(name).unwrap_or_else(|| {
+            log::warn!("unknown theme {name:?}, use \"system\", \"light\" or \"dark\"");
+            Theme::System
+        })
+    }
+
+    pub fn set_theme(&mut self, theme: Theme) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.theme = Some(theme.name().to_owned());
+    }
+
     /// changes what happens to copied files
     pub fn set_file_options(&mut self, options: FileOptions) {
         let c = self.config_toml.get_or_insert_with(Default::default);
@@ -640,5 +659,22 @@ impl Config {
         let _ = self.watch();
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_theme_this_version_does_not_know_keeps_the_file_readable() {
+        let c: ConfigToml = toml::from_str("theme = \"purple\"\nport = 4243\n").unwrap();
+        assert_eq!(c.port, Some(4243));
+        assert_eq!(c.theme.as_deref(), Some("purple"));
+        let c: ConfigToml = toml::from_str("theme = \"Dark\"").unwrap();
+        assert_eq!(
+            c.theme.as_deref().and_then(Theme::from_name),
+            Some(Theme::Dark)
+        );
     }
 }

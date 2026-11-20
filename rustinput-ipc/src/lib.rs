@@ -274,6 +274,34 @@ pub struct FileOptions {
     pub file_manager_menu: bool,
 }
 
+/// Whether the windows are light or dark.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Theme {
+    /// as the system: dark when it prefers dark colors
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl Theme {
+    /// the value of `theme` in the configuration file
+    pub fn name(self) -> &'static str {
+        match self {
+            Theme::System => "system",
+            Theme::Light => "light",
+            Theme::Dark => "dark",
+        }
+    }
+
+    /// the theme of a value of `theme` in the configuration file, in any case
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Theme::System, Theme::Light, Theme::Dark]
+            .into_iter()
+            .find(|t| t.name().eq_ignore_ascii_case(name.trim()))
+    }
+}
+
 /// One second of the input channel with a device: what went over the
 /// network and how long the pings took, see [`FrontendEvent::LinkStats`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -365,6 +393,8 @@ pub enum FrontendEvent {
     /// the input channel with every connected device over the last second,
     /// sent once a second
     LinkStats(Vec<LinkStats>),
+    /// light or dark windows, from the configuration
+    Theme(Theme),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -414,6 +444,8 @@ pub enum FrontendRequest {
     SendFiles(Vec<std::path::PathBuf>),
     /// change what happens to copied files (`available` is ignored)
     SetFileOptions(FileOptions),
+    /// light or dark windows, kept in the configuration
+    SetTheme(Theme),
     /// remove the received files that were not pasted
     RemoveReceivedFiles,
     /// authorize this device and the client on each other with the code the
@@ -477,4 +509,19 @@ pub fn is_service_running() -> bool {
 #[cfg(windows)]
 pub fn is_service_running() -> bool {
     std::net::TcpStream::connect("127.0.0.1:5252").is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn theme_names() {
+        for theme in [Theme::System, Theme::Light, Theme::Dark] {
+            assert_eq!(Theme::from_name(theme.name()), Some(theme));
+        }
+        assert_eq!(Theme::from_name(" Dark "), Some(Theme::Dark));
+        assert_eq!(Theme::from_name("escuro"), None);
+        assert_eq!(Theme::default(), Theme::System);
+    }
 }

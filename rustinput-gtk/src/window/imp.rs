@@ -20,6 +20,10 @@ pub struct Window {
     #[template_child]
     pub version_row: TemplateChild<ActionRow>,
     #[template_child]
+    pub theme_row: TemplateChild<adw::ComboRow>,
+    /// the theme row is being set to what the service has
+    pub updating_theme: Cell<bool>,
+    #[template_child]
     pub port_edit_apply: TemplateChild<Button>,
     #[template_child]
     pub port_edit_cancel: TemplateChild<Button>,
