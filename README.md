@@ -41,7 +41,11 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 
 <p align="center">
-  <img src="screenshots/main-window.png" width="420" alt="The RustInput window">
+  <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
+  <img src="screenshots/windows-window.png" width="380" alt="RustInput on Windows 11">
+  <br>
+  <em>The same pair of computers seen from each side: Linux Mint 22 (left) and Windows 11 (right), each listing the
+  other under "Connections" and authorized under "Incoming Connections".</em>
 </p>
 
 <p align="center">
@@ -123,6 +127,13 @@ their place on the clipboard, when RustInput starts, or with **Remove unpasted f
 > - On Wayland, file managers that only paste the GNOME clipboard format may not paste received files yet; on Wayland
 >   and macOS pasting copies the files, so they stay in the temporary folder until they are removed.
 
+<p align="center">
+  <img src="screenshots/transfers-progress.png" width="400" alt="The transfers window during a transfer">
+  <img src="screenshots/windows-transfers.png" width="390" alt="The transfers window on Windows 11">
+  <br>
+  <em>The transfers window while files arrive, and on Windows 11 before the first transfer.</em>
+</p>
+
 To turn file transfers off altogether, set `clipboard_files = false` in the [configuration](#configuration) file.
 
 ## Pointer position
@@ -152,6 +163,12 @@ Both computers are then authorized on each other, for control, clipboard and fil
 network: both sides prove they know it with SPAKE2, a password authenticated key exchange, bound to the certificates
 they see. Someone in between the two computers can not take part, and a code works for three tries and ten minutes.
 The implementation uses the [spake2](https://crates.io/crates/spake2) crate, which has not had an independent audit.
+
+<p align="center">
+  <img src="screenshots/authorize-with-code.png" width="560" alt="The authorization request with the code">
+  <br>
+  <em>The computer being controlled asks whether to authorize the one trying to connect, and shows the code.</em>
+</p>
 
 **On each computer**: the window of the computer being controlled asks whether to authorize the one trying to
 connect; for the clipboard, the controlling computer also has to authorize the controlled one with the "Authorize"
@@ -443,6 +460,8 @@ When the desktop has a system tray (Windows, KDE, Cinnamon, XFCE, MATE, GNOME wi
 RustInput shows an icon there and closing the window only hides it: mouse, keyboard and clipboard keep being shared.
 Click the icon (or choose "Show RustInput" in its menu) to bring the window back, and choose "Quit RustInput" in the
 icon menu or in the window menu to stop RustInput. Starting RustInput again while it runs in the tray also shows the window.
+The menu also lists the running and recent file transfers with their progress, can cancel them, turns
+"Send copied files automatically" on and off, and opens the transfers window ("File transfers…").
 On macOS the same is done by the menu bar item.
 
 Without a system tray, closing the window quits RustInput as before.
@@ -453,7 +472,9 @@ autostart entry: `Exec=env RUSTINPUT_HIDDEN=1 rustinput`. The window is still sh
 To connect a device you want to control, simply click the `Add` button and enter the hostname
 of the device.
 
-On the *remote* device, authorize your *local* device for incoming traffic using the `Authorize` button
+Then authorize the two devices on each other: move the pointer to the other device, which shows a code, and enter it
+with "Enter code…" in the settings of that device on your *local* one (see [Authorizing computers](#authorizing-computers)).
+Alternatively, on the *remote* device, authorize your *local* device for incoming traffic using the `Authorize` button
 under the "Incoming Connections" section.
 The fingerprint for authorization can be found under the general section of your *local* device.
 It is of the form "aa:bb:cc:..."
