@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use adw::subclass::prelude::*;
 use adw::{ActionRow, ComboRow, prelude::*};
@@ -10,6 +11,7 @@ use rustinput_ipc::Position;
 use std::sync::OnceLock;
 
 use crate::client_object::ClientObject;
+use crate::link_stats::History;
 
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/io/github/felipemarques/RustInput/client_row.ui")]
@@ -32,6 +34,20 @@ pub struct ClientRow {
     pub pair_button: TemplateChild<gtk::Button>,
     #[template_child]
     pub dns_loading_indicator: TemplateChild<gtk::Spinner>,
+    #[template_child]
+    pub latency_badge: TemplateChild<gtk::Label>,
+    #[template_child]
+    pub stats_row: TemplateChild<gtk::ListBoxRow>,
+    #[template_child]
+    pub latency_label: TemplateChild<gtk::Label>,
+    #[template_child]
+    pub latency_chart: TemplateChild<gtk::DrawingArea>,
+    #[template_child]
+    pub traffic_label: TemplateChild<gtk::Label>,
+    #[template_child]
+    pub traffic_chart: TemplateChild<gtk::DrawingArea>,
+    /// the last minute of the input channel, drawn by the charts
+    pub(crate) history: Rc<RefCell<History>>,
     pub bindings: RefCell<Vec<Binding>>,
     hostname_change_handler: RefCell<Option<SignalHandlerId>>,
     port_change_handler: RefCell<Option<SignalHandlerId>>,
@@ -62,6 +78,16 @@ impl ObjectSubclass for ClientRow {
 impl ObjectImpl for ClientRow {
     fn constructed(&self) {
         self.parent_constructed();
+        let history = self.history.clone();
+        self.latency_chart
+            .set_draw_func(move |_, cr, width, height| {
+                history.borrow().draw_latency(cr, width, height);
+            });
+        let history = self.history.clone();
+        self.traffic_chart
+            .set_draw_func(move |_, cr, width, height| {
+                history.borrow().draw_traffic(cr, width, height);
+            });
         self.delete_button.connect_clicked(clone!(
             #[weak(rename_to = row)]
             self,

@@ -28,6 +28,7 @@ use webrtc_util::{Conn, Error, conn::Listener};
 use crate::clipboard::{ClipboardHandle, ClipboardMsg, Peer};
 use crate::config::local_commit;
 use crate::crypto;
+use crate::netstats::NetStats;
 
 #[derive(Error, Debug)]
 pub enum ListenerCreationError {
@@ -101,6 +102,7 @@ impl RustInputListener {
         cert: Certificate,
         authorized_keys: Arc<RwLock<HashMap<String, String>>>,
         clipboard: ClipboardHandle,
+        netstats: NetStats,
     ) -> Result<Self, ListenerCreationError> {
         let (listen_tx, listen_rx) = channel();
         let (request_port_change, mut request_port_change_rx) = channel();
@@ -163,6 +165,7 @@ impl RustInputListener {
                         c = listener.accept() => match c {
                             Ok((conn, addr)) => {
                                 log::info!("dtls client connected, ip: {addr}");
+                                let conn = netstats.meter(addr, conn);
                                 let mut conns = conns_clone.lock().await;
                                 conns.push((addr, conn.clone()));
                                 let dtls_conn: &DTLSConn = conn.as_any().downcast_ref().expect("dtls conn");

@@ -274,6 +274,30 @@ pub struct FileOptions {
     pub file_manager_menu: bool,
 }
 
+/// One second of the input channel with a device: what went over the
+/// network and how long the pings took, see [`FrontendEvent::LinkStats`].
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LinkStats {
+    /// the client of the device, `None` for a device that is not a client
+    /// here and only connects to this one
+    pub handle: Option<ClientHandle>,
+    /// address of the device
+    pub ip: IpAddr,
+    /// round trip time of the pings answered in this second, in
+    /// microseconds; `None` if no ping was answered (only the side that
+    /// connects pings)
+    pub rtt_us: Option<u32>,
+    /// pings that went unanswered in this second
+    pub lost: u32,
+    /// bytes per second sent and received, as on the network: the events
+    /// plus an estimate of the DTLS, UDP and IP headers of each datagram
+    pub sent_per_s: u64,
+    pub received_per_s: u64,
+    /// bytes sent and received since the connections were made
+    pub sent_total: u64,
+    pub received_total: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FrontendEvent {
     /// a client was created
@@ -338,6 +362,9 @@ pub enum FrontendEvent {
         handle: ClientHandle,
         result: Result<String, String>,
     },
+    /// the input channel with every connected device over the last second,
+    /// sent once a second
+    LinkStats(Vec<LinkStats>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

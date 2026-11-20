@@ -9,6 +9,7 @@ use crate::{
     emulation::{Emulation, EmulationEvent},
     files::{self, FilesHandle},
     listen::{ListenerCreationError, RustInputListener},
+    netstats::{NetStats, Sample},
     pairing::{self, PairError, Paired, Pairing, PairingEvent},
     radial::{self, Action, Item, Menu, Texts},
 };
@@ -17,7 +18,7 @@ use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, DEFAULT_PORT, FileOptions, FrontendEvent, FrontendRequest,
-    IpcError, IpcListenerCreationError, Position, Status, TransferInfo,
+    IpcError, IpcListenerCreationError, LinkStats, Position, Status, TransferInfo,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -101,6 +102,8 @@ pub struct Service {
     locked: bool,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
+    /// bytes and pings of the input channel, reported once a second
+    netstats: NetStats,
 }
 
 #[derive(Debug)]
@@ -128,11 +131,13 @@ impl Service {
         // listener + connection
         let (clipboard, clipboard_rx) =
             ClipboardHandle::new(config.clipboard(), config.clipboard_files());
+        let netstats = NetStats::default();
         let listener = RustInputListener::new(
             config.port(),
             cert.clone(),
             authorized_keys.clone(),
             clipboard.clone(),
+            netstats.clone(),
         )
         .await?;
         let conn = RustInputConnection::new(
@@ -140,6 +145,7 @@ impl Service {
             client_manager.clone(),
             authorized_keys.clone(),
             clipboard.clone(),
+            netstats.clone(),
         );
         let links = PeerLinks {
             outgoing: conn.links(),
@@ -207,6 +213,7 @@ impl Service {
             file_channel,
             file_options,
             transfer_reports,
+            netstats,
             pairing,
             pairing_events,
             pair_results,
@@ -237,8 +244,17 @@ impl Service {
         // the radial menu has its slices also without a window connected
         self.update_radial();
 
+        let mut link_stats = tokio::time::interval(LINK_STATS_PERIOD);
+        link_stats.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut sampled = std::time::Instant::now();
+
         loop {
             tokio::select! {
+                _ = link_stats.tick() => {
+                    let elapsed = sampled.elapsed();
+                    sampled = std::time::Instant::now();
+                    self.report_link_stats(elapsed);
+                }
                 request = self.frontend_listener.next() => self.handle_frontend_request(request),
                 _ = self.frontend_event_pending.notified() => self.handle_frontend_pending().await,
                 event = self.emulation.event() => self.handle_emulation_event(event),
@@ -413,6 +429,33 @@ impl Service {
             self.set_file_options(file_options, false);
         }
         self.sync_frontend();
+    }
+
+    /// Tells the frontends what went over the input channel since the last
+    /// report, `elapsed` ago, per device.
+    fn report_link_stats(&mut self, elapsed: std::time::Duration) {
+        // also when nobody looks: the next report covers one period only
+        let samples = self.netstats.sample();
+        // sent also without connections, which clears what the window shows
+        if !self.frontend_listener.has_frontends() {
+            return;
+        }
+        let clients = self.client_manager.get_client_states();
+        let stats = samples
+            .into_iter()
+            .filter_map(|sample| {
+                let ip = sample.ip?;
+                // the client connected at that address, or else the one
+                // whose addresses include it (a device that connects here)
+                let handle = clients
+                    .iter()
+                    .find(|(_, _, s)| s.active_addr.is_some_and(|a| a.ip() == ip))
+                    .or_else(|| clients.iter().find(|(_, _, s)| s.ips.contains(&ip)))
+                    .map(|(h, _, _)| *h);
+                Some(link_stats(handle, ip, &sample, elapsed))
+            })
+            .collect();
+        self.notify_frontend(FrontendEvent::LinkStats(stats));
     }
 
     async fn handle_frontend_pending(&mut self) {
@@ -937,5 +980,28 @@ impl std::fmt::Display for HookKind {
             HookKind::Enter => f.write_str("enter"),
             HookKind::Leave => f.write_str("leave"),
         }
+    }
+}
+
+/// how often the frontends hear about the input channel
+const LINK_STATS_PERIOD: std::time::Duration = std::time::Duration::from_secs(1);
+
+/// `sample`, taken over `elapsed`, as the frontends see it
+fn link_stats(
+    handle: Option<ClientHandle>,
+    ip: IpAddr,
+    sample: &Sample,
+    elapsed: std::time::Duration,
+) -> LinkStats {
+    let seconds = elapsed.as_secs_f64().max(0.001);
+    LinkStats {
+        handle,
+        ip,
+        rtt_us: sample.rtt(),
+        lost: sample.lost,
+        sent_per_s: (sample.sent as f64 / seconds).round() as u64,
+        received_per_s: (sample.received as f64 / seconds).round() as u64,
+        sent_total: sample.sent_total,
+        received_total: sample.received_total,
     }
 }

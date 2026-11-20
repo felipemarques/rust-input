@@ -10,6 +10,7 @@ mod emulation;
 pub mod emulation_test;
 mod files;
 mod listen;
+mod netstats;
 mod pairing;
 mod radial;
 pub mod service;

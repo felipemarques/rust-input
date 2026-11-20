@@ -4,6 +4,7 @@ mod client_row;
 mod fingerprint_window;
 mod key_object;
 mod key_row;
+mod link_stats;
 #[cfg(target_os = "macos")]
 mod macos_privacy;
 #[cfg(target_os = "macos")]
@@ -369,6 +370,7 @@ fn build_ui(app: &Application) {
                         window.show_toast(format!("{addr} disconnected").as_str());
                     }
                     FrontendEvent::Notice(notice) => window.show_toast(&notice),
+                    FrontendEvent::LinkStats(stats) => window.update_link_stats(&stats),
                     FrontendEvent::ShowWindow => window.present(),
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {

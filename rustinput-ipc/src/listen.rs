@@ -4,10 +4,12 @@ use std::path::PathBuf;
 use std::{
     io::ErrorKind,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
+use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf};
+use tokio::sync::mpsc::{self, error::TrySendError};
 use tokio_stream::wrappers::LinesStream;
 
 #[cfg(unix)]
@@ -33,10 +35,32 @@ pub struct AsyncFrontendListener {
     line_streams: SelectAll<LinesStream<BufReader<ReadHalf<UnixStream>>>>,
     #[cfg(windows)]
     line_streams: SelectAll<LinesStream<BufReader<ReadHalf<TcpStream>>>>,
-    #[cfg(unix)]
-    tx_streams: Vec<WriteHalf<UnixStream>>,
-    #[cfg(windows)]
-    tx_streams: Vec<WriteHalf<TcpStream>>,
+    /// the queues of the events to the frontends, see [`spawn_writer`]
+    tx_streams: Vec<mpsc::Sender<Arc<str>>>,
+}
+
+/// Events waiting for a frontend that does not read them, a frozen one: past
+/// this it is disconnected. Some 17 minutes of the once a second
+/// [`FrontendEvent::LinkStats`].
+const FRONTEND_QUEUE: usize = 1024;
+
+/// Writes the events queued for one frontend on a task of its own, so a
+/// frontend that does not read them never holds up the service.
+fn spawn_writer<W>(mut tx: W) -> mpsc::Sender<Arc<str>>
+where
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    let (sender, mut queue) = mpsc::channel::<Arc<str>>(FRONTEND_QUEUE);
+    tokio::spawn(async move {
+        while let Some(json) = queue.recv().await {
+            if tx.write_all(json.as_bytes()).await.is_err() {
+                return;
+            }
+        }
+        // dropped by the service: the frontend reads the end of the stream
+        let _ = tx.shutdown().await;
+    });
+    sender
 }
 
 impl AsyncFrontendListener {
@@ -91,25 +115,25 @@ impl AsyncFrontendListener {
         Ok(adapter)
     }
 
+    /// Queues `notify` for every frontend, without waiting for any of them.
     pub async fn broadcast(&mut self, notify: FrontendEvent) {
-        // encode event
         let mut json = serde_json::to_string(&notify).unwrap();
         json.push('\n');
+        let json: Arc<str> = json.into();
+        self.tx_streams
+            .retain(|tx| match tx.try_send(json.clone()) {
+                Ok(()) => true,
+                Err(TrySendError::Full(_)) => {
+                    log::warn!("a frontend does not read its events, disconnecting it");
+                    false
+                }
+                Err(TrySendError::Closed(_)) => false,
+            });
+    }
 
-        let mut keep = vec![];
-        // TODO do simultaneously
-        for tx in self.tx_streams.iter_mut() {
-            // write len + payload
-            if tx.write(json.as_bytes()).await.is_err() {
-                keep.push(false);
-                continue;
-            }
-            keep.push(true);
-        }
-
-        // could not find a better solution because async
-        let mut keep = keep.into_iter();
-        self.tx_streams.retain(|_| keep.next().unwrap());
+    /// whether a frontend is connected
+    pub fn has_frontends(&self) -> bool {
+        !self.tx_streams.is_empty()
     }
 }
 
@@ -135,7 +159,7 @@ impl Stream for AsyncFrontendListener {
             let lines = buf_reader.lines();
             let lines = LinesStream::new(lines);
             self.line_streams.push(lines);
-            self.tx_streams.push(tx);
+            self.tx_streams.push(spawn_writer(tx));
             sync = true;
         }
         if sync {

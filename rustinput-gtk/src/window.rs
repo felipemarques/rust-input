@@ -12,7 +12,7 @@ use gtk::{
 
 use rustinput_ipc::{
     ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FileOptions, FrontendRequest,
-    FrontendRequestWriter, Position,
+    FrontendRequestWriter, LinkStats, Position,
 };
 
 use crate::{
@@ -389,6 +389,18 @@ impl Window {
             crate::client_object::peer_commit_to_string(state.peer_commit),
         );
         row.refresh_version_status();
+    }
+
+    /// the input channel with every client over the last second
+    pub(super) fn update_link_stats(&self, stats: &[LinkStats]) {
+        for idx in 0..self.clients().n_items() {
+            let (Some(client), Some(row)) = (self.client_by_idx(idx), self.row_by_idx(idx as i32))
+            else {
+                continue;
+            };
+            let handle = client.handle();
+            row.show_link_stats(stats.iter().find(|s| s.handle == Some(handle)));
+        }
     }
 
     fn client_object_for_handle(&self, handle: ClientHandle) -> Option<ClientObject> {

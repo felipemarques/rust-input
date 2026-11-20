@@ -4,7 +4,9 @@ use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::glib::{self, Object};
 
-use rustinput_ipc::{DEFAULT_PORT, Position};
+use rustinput_ipc::{DEFAULT_PORT, LinkStats, Position};
+
+use crate::link_stats::format_rtt;
 
 use super::ClientObject;
 
@@ -155,6 +157,39 @@ impl ClientRow {
 
     pub fn set_dns_state(&self, resolved: bool) {
         self.imp().set_dns_state(resolved);
+    }
+
+    /// The latest second of the input channel with this client, `None` when
+    /// it is not connected: the latency next to the title, the charts of the
+    /// last minute inside.
+    pub fn show_link_stats(&self, stats: Option<&LinkStats>) {
+        let imp = self.imp();
+        {
+            let mut history = imp.history.borrow_mut();
+            match stats {
+                Some(stats) => history.push(stats),
+                None if history.is_empty() => return,
+                None => history.clear(),
+            }
+        }
+        let history = imp.history.borrow();
+        let connected = !history.is_empty();
+        imp.stats_row.set_visible(connected);
+        match history.latest_rtt() {
+            Some(rtt) => {
+                imp.latency_badge.set_label(&format_rtt(rtt));
+                imp.latency_badge
+                    .set_tooltip_text(Some("round trip time of the pings to this computer"));
+                imp.latency_badge.set_visible(true);
+            }
+            None => imp.latency_badge.set_visible(false),
+        }
+        if connected {
+            imp.latency_label.set_label(&history.latency_text());
+            imp.traffic_label.set_markup(&history.traffic_markup());
+            imp.latency_chart.queue_draw();
+            imp.traffic_chart.queue_draw();
+        }
     }
 
     /// Recompute the collapsed subtitle (Pango markup) based on the

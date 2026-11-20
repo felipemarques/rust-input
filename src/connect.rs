@@ -2,6 +2,7 @@ use crate::client::ClientManager;
 use crate::clipboard::{ClipboardHandle, ClipboardMsg, Peer};
 use crate::config::local_commit;
 use crate::crypto;
+use crate::netstats::NetStats;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
 use rustinput_proto::{
@@ -145,6 +146,7 @@ pub(crate) struct RustInputConnection {
     recv_tx: Sender<(ClientHandle, ProtoEvent)>,
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
     clipboard: ClipboardContext,
+    netstats: NetStats,
 }
 
 impl RustInputConnection {
@@ -153,6 +155,7 @@ impl RustInputConnection {
         client_manager: ClientManager,
         authorized_keys: Arc<RwLock<HashMap<String, String>>>,
         clipboard: ClipboardHandle,
+        netstats: NetStats,
     ) -> Self {
         let (recv_tx, recv_rx) = channel();
         Self {
@@ -167,6 +170,7 @@ impl RustInputConnection {
                 clipboard,
                 authorized_keys,
             },
+            netstats,
         }
     }
 
@@ -231,6 +235,7 @@ impl RustInputConnection {
                 handle,
                 self.connecting.clone(),
                 self.clipboard.clone(),
+                self.netstats.clone(),
             ));
         }
         Err(RustInputConnectionError::NotConnected)
@@ -243,6 +248,7 @@ async fn connect_to_handle(
     handle: ClientHandle,
     connecting: Rc<Mutex<HashSet<ClientHandle>>>,
     clipboard: ClipboardContext,
+    netstats: NetStats,
 ) -> Result<(), RustInputConnectionError> {
     let Shared {
         client_manager,
@@ -268,6 +274,7 @@ async fn connect_to_handle(
             }
         };
         log::info!("client ({handle}) connected @ {addr}");
+        let conn = netstats.meter(addr, conn);
         client_manager.set_active_addr(handle, Some(addr));
         conns.lock().await.insert(addr, conn.clone());
         connecting.lock().await.remove(&handle);

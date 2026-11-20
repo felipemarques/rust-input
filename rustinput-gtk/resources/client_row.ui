@@ -10,6 +10,17 @@
 				<property name="tooltip-text" translatable="yes">enable</property>
 			</object>
 		</child>
+		<!-- latency, while connected -->
+		<child type="suffix">
+			<object class="GtkLabel" id="latency_badge">
+				<property name="visible">False</property>
+				<property name="valign">center</property>
+				<style>
+					<class name="dim-label"/>
+					<class name="numeric"/>
+				</style>
+			</object>
+		</child>
 		<child type="suffix">
 			<object class="GtkButton" id="dns_button">
 				<signal name="clicked" handler="handle_request_dns" swapped="true"/>
@@ -22,6 +33,52 @@
 		</child>
 		<child type="suffix">
 			<object class="GtkSpinner" id="dns_loading_indicator">
+			</object>
+		</child>
+		<!-- the input channel over the last minute, while connected -->
+		<child>
+			<object class="GtkListBoxRow" id="stats_row">
+				<property name="visible">False</property>
+				<property name="activatable">False</property>
+				<property name="selectable">False</property>
+				<child>
+					<object class="GtkBox">
+						<property name="orientation">vertical</property>
+						<property name="spacing">4</property>
+						<property name="margin-start">12</property>
+						<property name="margin-end">12</property>
+						<property name="margin-top">10</property>
+						<property name="margin-bottom">10</property>
+						<child>
+							<object class="GtkLabel" id="latency_label">
+								<property name="xalign">0</property>
+								<property name="wrap">True</property>
+								<style><class name="numeric"/></style>
+							</object>
+						</child>
+						<child>
+							<object class="GtkDrawingArea" id="latency_chart">
+								<property name="content-height">44</property>
+								<property name="hexpand">True</property>
+								<property name="margin-bottom">6</property>
+							</object>
+						</child>
+						<child>
+							<object class="GtkLabel" id="traffic_label">
+								<property name="xalign">0</property>
+								<property name="wrap">True</property>
+								<property name="use-markup">True</property>
+								<style><class name="numeric"/></style>
+							</object>
+						</child>
+						<child>
+							<object class="GtkDrawingArea" id="traffic_chart">
+								<property name="content-height">44</property>
+								<property name="hexpand">True</property>
+							</object>
+						</child>
+					</object>
+				</child>
 			</object>
 		</child>
 		<!-- host -->

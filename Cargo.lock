@@ -2898,6 +2898,7 @@ name = "rustinput"
 version = "0.20.1"
 dependencies = [
  "arboard",
+ "async-trait",
  "clap",
  "clipboard-win",
  "embed-resource",
