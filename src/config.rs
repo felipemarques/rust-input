@@ -72,6 +72,7 @@ struct ConfigToml {
     send_copied_files: Option<bool>,
     show_transfers_window: Option<bool>,
     file_manager_menu: Option<bool>,
+    radial_menu: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
@@ -531,6 +532,14 @@ impl Config {
             show_window: c.and_then(|c| c.show_transfers_window).unwrap_or(true),
             file_manager_menu: c.and_then(|c| c.file_manager_menu).unwrap_or(true),
         }
+    }
+
+    /// whether holding Ctrl+Alt shows the radial menu (on by default)
+    pub fn radial_menu(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.radial_menu)
+            .unwrap_or(true)
     }
 
     /// changes what happens to copied files

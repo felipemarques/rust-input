@@ -728,6 +728,21 @@ impl Capture for X11InputCapture {
         Ok(())
     }
 
+    async fn enter(&mut self, pos: Position) -> Result<(), CaptureError> {
+        if self.grab.is_some() || !self.zones.contains(&pos) {
+            return Ok(());
+        }
+        let pointer = self.conn.query_pointer(self.root)?.reply()?;
+        let at = (pointer.root_x as i32, pointer.root_y as i32);
+        // as if the pointer crossed the edge right there
+        let entry = desktop(&self.monitors)
+            .map(|d| d.point(pos.into(), d.fraction(pos.into(), at)))
+            .unwrap_or(at);
+        self.begin(pos, (entry.0 as i16, entry.1 as i16))?;
+        self.wake();
+        Ok(())
+    }
+
     fn entry_fraction(&self) -> Option<f64> {
         self.entry_fraction
     }

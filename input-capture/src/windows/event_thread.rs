@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
-use windows::Win32::Foundation::{FALSE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+use windows::Win32::Foundation::{FALSE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
     DEVMODEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICEW, ENUM_CURRENT_SETTINGS,
     EnumDisplayDevicesW, EnumDisplaySettingsW,
@@ -21,13 +21,13 @@ use windows::Win32::UI::HiDpi::{
 use windows::core::{PCWSTR, w};
 
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, CreateWindowExW, DispatchMessageW, EDD_GET_DEVICE_INTERFACE_NAME, GetMessageW,
-    HOOKPROC, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MSG, MSLLHOOKSTRUCT, PostThreadMessageW,
-    RegisterClassW, SetCursorPos, SetWindowsHookExW, TranslateMessage, WH_KEYBOARD_LL, WH_MOUSE_LL,
-    WINDOW_STYLE, WM_DISPLAYCHANGE, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP,
-    WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN,
-    WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
-    WNDPROC,
+    CallNextHookEx, CreateWindowExW, DispatchMessageW, EDD_GET_DEVICE_INTERFACE_NAME, GetCursorPos,
+    GetMessageW, HOOKPROC, KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MSG, MSLLHOOKSTRUCT,
+    PostThreadMessageW, RegisterClassW, SetCursorPos, SetWindowsHookExW, TranslateMessage,
+    WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOW_STYLE, WM_DISPLAYCHANGE, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_USER,
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW, WNDPROC,
 };
 
 use input_event::{
@@ -65,6 +65,15 @@ impl EventThread {
         let request = WPARAM(RequestType::ReleaseTo as usize);
         let fraction = LPARAM(fraction.to_bits() as isize);
         unsafe { PostThreadMessageW(id, WM_USER, request, fraction).unwrap() };
+    }
+
+    /// starts capturing for the client at `pos` as if the pointer crossed
+    /// that edge where it is now
+    pub(crate) fn enter(&self, pos: Position) {
+        let id = self.thread_id;
+        let request = WPARAM(RequestType::Enter as usize);
+        let pos = LPARAM(position_code(pos));
+        unsafe { PostThreadMessageW(id, WM_USER, request, pos).unwrap() };
     }
 
     pub(crate) fn create(&self, pos: Position) {
@@ -107,6 +116,70 @@ enum RequestType {
     /// release with the pointer placed along the edge, the position travels
     /// as the bits of an f64 in the LPARAM
     ReleaseTo = 3,
+    /// start capturing without crossing, the position of the client travels
+    /// in the LPARAM (see [`position_code`])
+    Enter = 4,
+}
+
+fn position_code(pos: Position) -> isize {
+    match pos {
+        Position::Left => 0,
+        Position::Right => 1,
+        Position::Top => 2,
+        Position::Bottom => 3,
+    }
+}
+
+fn position_from_code(code: isize) -> Option<Position> {
+    Some(match code {
+        0 => Position::Left,
+        1 => Position::Right,
+        2 => Position::Top,
+        3 => Position::Bottom,
+        _ => return None,
+    })
+}
+
+/// starts capturing for the client at `pos` as if the pointer crossed that
+/// edge where it is now
+fn enter(pos: Position) {
+    if ACTIVE_CLIENT.get().is_some() || !CLIENTS.with_borrow(|c| c.contains(&pos)) {
+        return;
+    }
+    let desktop = DISPLAYS.with_borrow_mut(|(displays, generation)| {
+        update_display_regions(displays, generation);
+        desktop(displays)
+    });
+    let Some(desktop) = desktop else {
+        return;
+    };
+    let mut point = POINT::default();
+    let entry = unsafe {
+        // the display regions and the hook use physical pixels
+        let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let at = GetCursorPos(&mut point).ok().map(|_| (point.x, point.y));
+        let entry = at.map(|at| {
+            let fraction = desktop.fraction(Edge::from(pos), at);
+            (fraction, desktop.point(Edge::from(pos), fraction))
+        });
+        if let Some((_, (x, y))) = entry {
+            let _ = SetCursorPos(x, y);
+        }
+        if !previous.is_invalid() {
+            SetThreadDpiAwarenessContext(previous);
+        }
+        entry
+    };
+    let Some((fraction, point)) = entry else {
+        return;
+    };
+    ACTIVE_CLIENT.replace(Some(pos));
+    HELD_KEYS.with_borrow_mut(HashSet::clear);
+    ENTRY_POINT.replace(point);
+    PREV_POS.replace(Some(point));
+    ENTRY_FRACTION.store(fraction.to_bits(), Ordering::Relaxed);
+    log::debug!("ENTERED on request @ {point:?}");
+    blocking_send_event(pos, CaptureEvent::Begin);
 }
 
 /// [`f64`] bits of the entry fraction of the current capture, NaN if unknown
@@ -293,6 +366,11 @@ fn start_routine(
                 }
                 x if x == RequestType::ReleaseTo as usize => {
                     release_to(f64::from_bits(msg.lParam.0 as u64));
+                }
+                x if x == RequestType::Enter as usize => {
+                    if let Some(pos) = position_from_code(msg.lParam.0) {
+                        enter(pos);
+                    }
                 }
                 x if x == RequestType::ClientUpdate as usize => {
                     let requests = {

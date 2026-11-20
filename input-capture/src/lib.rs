@@ -191,6 +191,12 @@ impl InputCapture {
         self.capture.release_to(fraction).await
     }
 
+    /// Starts capturing for the client at `pos` as if the pointer crossed
+    /// that edge where it is now (see [`Capture::enter`]).
+    pub async fn enter(&mut self, pos: Position) -> Result<(), CaptureError> {
+        self.capture.enter(pos).await
+    }
+
     /// Where along its edge the pointer left this device when the current
     /// capture began, from 0.0 (top or left end of the desktop) to 1.0.
     /// `None` if the backend does not know.
@@ -317,6 +323,11 @@ trait Capture: Stream<Item = Result<(Position, CaptureEvent), CaptureError>> + U
     /// release mouse, putting the pointer at `fraction` along the edge of the
     /// capture; backends that can not place the pointer just release it
     async fn release_to(&mut self, fraction: f64) -> Result<(), CaptureError>;
+
+    /// Starts capturing for the client at `pos` without the pointer
+    /// crossing the edge, entering it at the height (or width) of the pointer.
+    /// Backends that can not do it log that and do nothing.
+    async fn enter(&mut self, pos: Position) -> Result<(), CaptureError>;
 
     /// where along its edge the pointer was when the current capture began
     fn entry_fraction(&self) -> Option<f64> {

@@ -620,6 +620,11 @@ impl Capture for LayerShellInputCapture {
         Ok(inner.flush_events()?)
     }
 
+    async fn enter(&mut self, _pos: Position) -> Result<(), CaptureError> {
+        log::info!("this capture backend can not enter a client without crossing the edge");
+        Ok(())
+    }
+
     async fn release_to(&mut self, _fraction: f64) -> Result<(), CaptureError> {
         // the pointer can not be placed with this backend
         self.release().await

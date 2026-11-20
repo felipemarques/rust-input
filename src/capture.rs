@@ -70,6 +70,10 @@ enum CaptureRequest {
     /// another device entered at `fraction` along `edge`: release the mouse,
     /// then have the pointer placed there
     ReleaseAt(Edge, f64),
+    /// go to the client without crossing the edge
+    Enter(CaptureHandle),
+    /// keep the pointer on this device: crossing an edge does nothing
+    Lock(bool),
     /// add a capture client
     Create(CaptureHandle, Position, CaptureType),
     /// destory a capture client
@@ -100,6 +104,8 @@ impl Capture {
             release_bind: Rc::new(RefCell::new(release_bind)),
             state: Default::default(),
             entry_fraction: None,
+            locked: false,
+            entering: false,
         };
         let task = spawn_local(capture_task.run());
         Self {
@@ -145,6 +151,20 @@ impl Capture {
     pub(crate) fn release(&self) {
         self.request_tx
             .send(CaptureRequest::Release)
+            .expect("channel closed");
+    }
+
+    /// moves the pointer to the client as if it crossed the edge
+    pub(crate) fn enter(&self, handle: CaptureHandle) {
+        self.request_tx
+            .send(CaptureRequest::Enter(handle))
+            .expect("channel closed");
+    }
+
+    /// keeps the pointer on this device (or lets it go again)
+    pub(crate) fn lock(&self, locked: bool) {
+        self.request_tx
+            .send(CaptureRequest::Lock(locked))
             .expect("channel closed");
     }
 
@@ -194,6 +214,10 @@ struct CaptureTask {
     state: State,
     /// where along its edge the pointer left this device for the active client
     entry_fraction: Option<f64>,
+    /// the pointer stays on this device
+    locked: bool,
+    /// a client is entered on request, which goes through when locked
+    entering: bool,
 }
 
 impl CaptureTask {
@@ -243,6 +267,8 @@ impl CaptureTask {
                             // nothing is grabbed
                             self.place_pointer(edge, fraction);
                         }
+                        CaptureRequest::Enter(_) => { /* no capture to enter with */ }
+                        CaptureRequest::Lock(locked) => self.locked = locked,
                         CaptureRequest::SetReleaseBind(bind) => {
                             self.release_bind.borrow_mut().clone_from(&bind);
                         }
@@ -341,6 +367,21 @@ impl CaptureTask {
                     CaptureRequest::ReleaseAt(edge, fraction) => {
                         self.release_capture_at(capture, edge, fraction).await?
                     }
+                    CaptureRequest::Enter(handle) => {
+                        let default = self
+                            .captures
+                            .iter()
+                            .any(|(h, _, t)| *h == handle && *t == CaptureType::Default);
+                        if default && self.active_client.is_none() {
+                            // an explicit request goes through even when locked
+                            self.entering = true;
+                            capture.enter(self.get_pos(handle)).await?;
+                        }
+                    }
+                    CaptureRequest::Lock(locked) => {
+                        log::info!("pointer {}", if locked { "kept on this device" } else { "free to move on" });
+                        self.locked = locked;
+                    }
                     CaptureRequest::Create(h, p, t) => {
                         self.add_capture(h, p, t);
                         capture.create(h, p).await?;
@@ -382,7 +423,12 @@ impl CaptureTask {
             return self.release_capture(capture).await;
         }
 
+        if event == CaptureEvent::Begin && self.locked && !std::mem::take(&mut self.entering) {
+            // kept on this device: the edge is a wall
+            return capture.release().await;
+        }
         if event == CaptureEvent::Begin {
+            self.entering = false;
             self.entry_fraction = capture.entry_fraction();
             self.event_tx
                 .send(ICaptureEvent::CaptureBegin(handle, self.entry_fraction))

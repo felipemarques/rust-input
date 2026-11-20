@@ -97,6 +97,16 @@ pub(crate) enum ClipboardMsg {
         peer: Peer,
         content: Option<LocalContent>,
     },
+    /// send the clipboard to every peer right away
+    PushAll,
+    /// send the files copied in the file manager to the connected devices,
+    /// telling `none` if there are no files on the clipboard
+    SendCopiedFiles { none: String },
+    /// the clipboard was read for [`ClipboardMsg::SendCopiedFiles`]
+    CopiedFiles {
+        content: Option<LocalContent>,
+        none: String,
+    },
     /// files arrived (from `peer`, if it is still known) and go to the
     /// clipboard; `key` identifies them (see [`crate::files::files_key`])
     FilesReceived {
@@ -188,6 +198,7 @@ pub(crate) fn spawn(
     rx: Receiver<ClipboardMsg>,
     links: PeerLinks,
     files: Option<FilesHandle>,
+    notices: Sender<String>,
 ) {
     if !handle.enabled {
         log::info!("clipboard synchronization is disabled");
@@ -197,6 +208,7 @@ pub(crate) fn spawn(
         rx,
         tx: handle.tx.clone(),
         send_copied: handle.send_copied.clone(),
+        notices,
         links,
         files,
         local: LocalClipboard::new(),
@@ -228,6 +240,8 @@ struct Manager {
     /// file transfers, if enabled
     files: Option<FilesHandle>,
     send_copied: Rc<Cell<bool>>,
+    /// what the user should know
+    notices: Sender<String>,
     local: LocalClipboard,
     /// peers that take part in clipboard synchronization
     peers: HashMap<Peer, PeerState>,
@@ -308,6 +322,25 @@ impl Manager {
                 Some(LocalContent::Files { paths, key }) => self.send_files(peer, paths, key),
                 Some(LocalContent::Data(content)) => self.start_transfer(peer, Some(content)).await,
                 None => self.start_transfer(peer, None).await,
+            },
+            ClipboardMsg::PushAll => {
+                let peers: Vec<Peer> = self.peers.keys().copied().collect();
+                for peer in peers {
+                    self.read_for(peer);
+                }
+            }
+            ClipboardMsg::SendCopiedFiles { none } => {
+                let (local, tx) = (self.local.clone(), self.tx.clone());
+                spawn_local(async move {
+                    let content = local.read().await;
+                    let _ = tx.send(ClipboardMsg::CopiedFiles { content, none });
+                });
+            }
+            ClipboardMsg::CopiedFiles { content, none } => match (content, &self.files) {
+                (Some(LocalContent::Files { paths, .. }), Some(files)) => files.send_now(paths),
+                _ => {
+                    let _ = self.notices.send(none);
+                }
             },
             ClipboardMsg::FilesReceived { peer, paths, key } => {
                 // the files came from that peer: they do not go back to it

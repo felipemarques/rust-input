@@ -1,7 +1,7 @@
 use crate::{
     capture::{Capture, CaptureType, ICaptureEvent},
     client::ClientManager,
-    clipboard::{self, ClipboardHandle, Peer, PeerLinks},
+    clipboard::{self, ClipboardHandle, ClipboardMsg, Peer, PeerLinks},
     config::{Config, ConfigClient},
     connect::RustInputConnection,
     crypto,
@@ -10,6 +10,7 @@ use crate::{
     files::{self, FilesHandle},
     listen::{ListenerCreationError, RustInputListener},
     pairing::{self, PairError, Paired, Pairing, PairingEvent},
+    radial::{self, Action, Item, Menu, Texts},
 };
 use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
@@ -90,6 +91,14 @@ pub struct Service {
     cert: Certificate,
     /// how this device introduces itself when pairing
     name: String,
+    /// the radial menu and what it picks
+    radial: Menu,
+    radial_actions: tokio::sync::mpsc::UnboundedReceiver<Action>,
+    texts: Texts,
+    /// what the user should know, from the clipboard
+    notices: Receiver<String>,
+    /// the pointer is kept on this device
+    locked: bool,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
 }
@@ -155,7 +164,13 @@ impl Service {
         );
         let files = clipboard.files_enabled().then(|| file_channel.clone());
         let (pair_results_tx, pair_results) = channel();
-        clipboard::spawn(&clipboard, clipboard_rx, links, files.clone());
+        let (notices_tx, notices) = channel();
+        clipboard::spawn(&clipboard, clipboard_rx, links, files.clone(), notices_tx);
+        let radial = Menu::default();
+        let (radial_tx, radial_actions) = tokio::sync::mpsc::unbounded_channel();
+        if config.radial_menu() {
+            radial::spawn(radial.clone(), radial_tx);
+        }
         let file_options = config.file_options();
         clipboard.set_send_copied(file_options.available && file_options.send_copied);
         files::menu::install(file_options.available && file_options.file_manager_menu);
@@ -198,6 +213,11 @@ impl Service {
             pair_results_tx,
             cert,
             name,
+            radial,
+            radial_actions,
+            texts: Texts::new(),
+            notices,
+            locked: false,
         };
         Ok(service)
     }
@@ -214,6 +234,8 @@ impl Service {
         for handle in active {
             self.activate_client(handle);
         }
+        // the radial menu has its slices also without a window connected
+        self.update_radial();
 
         loop {
             tokio::select! {
@@ -227,6 +249,8 @@ impl Service {
                 }
                 _ = self.config.changed() => self.handle_config_change(),
                 Some(event) = self.pairing_events.recv() => self.handle_pairing_event(event),
+                Some(action) = self.radial_actions.recv() => self.radial_action(action),
+                Some(notice) = self.notices.recv() => self.notify_frontend(FrontendEvent::Notice(notice)),
                 Some((handle, result)) = self.pair_results.recv() => self.pairing_done(handle, result),
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
@@ -486,10 +510,13 @@ impl Service {
             }
             ICaptureEvent::ClientEntered(handle) => {
                 log::info!("entering client {handle} ...");
+                // the client shows its own radial menu
+                self.radial.set_away(true);
                 self.spawn_hook_command(handle, HookKind::Enter);
             }
             ICaptureEvent::ClientLeft(handle) => {
                 log::info!("leaving client {handle} ...");
+                self.radial.set_away(false);
                 self.spawn_hook_command(handle, HookKind::Leave);
             }
             ICaptureEvent::ClientAcknowledged(handle) => {
@@ -597,8 +624,83 @@ impl Service {
     }
 
     fn notify_frontend(&mut self, event: FrontendEvent) {
+        let changes_menu = matches!(
+            event,
+            FrontendEvent::Created(..)
+                | FrontendEvent::Deleted(_)
+                | FrontendEvent::State(..)
+                | FrontendEvent::Enumerate(_)
+                | FrontendEvent::FileOptions(_)
+        );
         self.pending_frontend_events.push_back(event);
         self.frontend_event_pending.notify_one();
+        if changes_menu {
+            self.update_radial();
+        }
+    }
+
+    /// the slices of the radial menu: the clients to go to, then the actions
+    fn update_radial(&mut self) {
+        let mut items: Vec<Item> = self
+            .client_manager
+            .get_client_states()
+            .into_iter()
+            .filter(|(_, _, state)| state.active)
+            .map(|(handle, config, state)| {
+                let name = config
+                    .hostname
+                    .clone()
+                    .or_else(|| state.ips.iter().next().map(|ip| ip.to_string()))
+                    .unwrap_or_else(|| format!("{handle}"));
+                Item {
+                    label: self.texts.go_to(&name),
+                    action: Action::GoTo(handle),
+                }
+            })
+            .collect();
+        let files = self.file_options.available;
+        let mut add = |label: String, action: Action| items.push(Item { label, action });
+        if self.clipboard.capabilities() != 0 {
+            add(self.texts.send_clipboard(), Action::SendClipboard);
+        }
+        if files {
+            add(self.texts.send_files(), Action::SendCopiedFiles);
+        }
+        add(self.texts.lock(self.locked), Action::ToggleLock);
+        if files {
+            add(
+                self.texts.send_copied(self.file_options.send_copied),
+                Action::ToggleSendCopied,
+            );
+            add(self.texts.transfers(), Action::ShowTransfers);
+        }
+        add(self.texts.window(), Action::ShowWindow);
+        self.radial.set_items(items);
+    }
+
+    /// does what was picked in the radial menu
+    fn radial_action(&mut self, action: Action) {
+        match action {
+            Action::GoTo(handle) => self.capture.enter(handle),
+            Action::SendClipboard => self.clipboard.notify(ClipboardMsg::PushAll),
+            Action::SendCopiedFiles => self.clipboard.notify(ClipboardMsg::SendCopiedFiles {
+                none: self.texts.no_files(),
+            }),
+            Action::ToggleLock => {
+                self.locked = !self.locked;
+                self.capture.lock(self.locked);
+                self.update_radial();
+            }
+            Action::ToggleSendCopied => {
+                let options = FileOptions {
+                    send_copied: !self.file_options.send_copied,
+                    ..self.file_options
+                };
+                self.set_file_options(options, true);
+            }
+            Action::ShowTransfers => self.notify_frontend(FrontendEvent::ShowTransfers),
+            Action::ShowWindow => self.notify_frontend(FrontendEvent::ShowWindow),
+        }
     }
 
     /// the other device entered the code shown here, or that code is used up

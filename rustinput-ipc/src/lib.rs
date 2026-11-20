@@ -315,6 +315,12 @@ pub enum FrontendEvent {
     Transfers(Vec<TransferInfo>),
     /// what happens to copied files
     FileOptions(FileOptions),
+    /// something to tell the user
+    Notice(String),
+    /// show the main window (picked in the radial menu)
+    ShowWindow,
+    /// show the window of the file transfers (picked in the radial menu)
+    ShowTransfers,
     /// failed connection attempt (approval for fingerprint required)
     ConnectionAttempt {
         fingerprint: String,

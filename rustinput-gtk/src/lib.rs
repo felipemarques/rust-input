@@ -368,6 +368,9 @@ fn build_ui(app: &Application) {
                     FrontendEvent::IncomingDisconnected(addr) => {
                         window.show_toast(format!("{addr} disconnected").as_str());
                     }
+                    FrontendEvent::Notice(notice) => window.show_toast(&notice),
+                    FrontendEvent::ShowWindow => window.present(),
+                    FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {
                         window.set_file_options(options);
                         transfers_window.set_options(options);

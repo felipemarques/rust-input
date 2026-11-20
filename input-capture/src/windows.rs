@@ -39,6 +39,11 @@ impl Capture for WindowsInputCapture {
         Ok(())
     }
 
+    async fn enter(&mut self, pos: Position) -> Result<(), CaptureError> {
+        self.event_thread.enter(pos);
+        Ok(())
+    }
+
     fn entry_fraction(&self) -> Option<f64> {
         event_thread::entry_fraction()
     }
