@@ -33,6 +33,10 @@ pub const CAP_CURSOR_POSITION: u32 = 1 << 1;
 /// the RustInput documentation); implies [`CAP_CLIPBOARD`]
 pub const CAP_FILES: u32 = 1 << 2;
 
+/// capability flag: the peer takes formatted text, [`ClipboardKind::Html`]
+/// (see [`clipboard::encode_html`]); implies [`CAP_CLIPBOARD`]
+pub const CAP_CLIPBOARD_HTML: u32 = 1 << 3;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///

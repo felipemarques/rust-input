@@ -6,7 +6,10 @@
 
 use std::{borrow::Cow, io::Cursor, path::PathBuf, sync::mpsc};
 
-use rustinput_proto::ClipboardKind;
+use rustinput_proto::{
+    ClipboardKind,
+    clipboard::{decode_html, encode_html},
+};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::sync::oneshot;
@@ -33,6 +36,8 @@ enum ClipboardError {
     InvalidText,
     #[error("the content does not match its hash")]
     HashMismatch,
+    #[error("malformed formatted text")]
+    InvalidHtml,
 }
 
 /// what the clipboard of this machine holds
@@ -162,6 +167,22 @@ fn read(clipboard: &mut arboard::Clipboard) -> Option<LocalContent> {
         Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
         Err(e) => log::debug!("could not read files from the clipboard: {e}"),
     }
+    // Formatted text (browsers, word processors, spreadsheets) wins over the
+    // same text without formatting and over the image some of them add. An
+    // HTML without any text is not meant though: browsers offer the image they
+    // copy as an <img> as well.
+    match clipboard.get().html() {
+        Ok(html) if !html_to_text(&html).trim().is_empty() => {
+            let text = clipboard
+                .get_text()
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| html_to_text(&html));
+            return Some(LocalContent::Data(Content::html(&html, &text)));
+        }
+        Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
+        Err(e) => log::debug!("could not read formatted text from the clipboard: {e}"),
+    }
     match clipboard.get_text() {
         Ok(text) if !text.is_empty() => return Some(LocalContent::Data(Content::text(text))),
         Ok(_) | Err(arboard::Error::ContentNotAvailable) => {}
@@ -203,8 +224,53 @@ fn write(clipboard: &mut arboard::Clipboard, content: Content) -> Result<(), Cli
                 bytes: Cow::Owned(rgba),
             })?;
         }
+        ClipboardKind::Html => {
+            let (html, text) = decode_html(&content.data).ok_or(ClipboardError::InvalidHtml)?;
+            if html_hash(html, text) != content.hash {
+                return Err(ClipboardError::HashMismatch);
+            }
+            // both: applications without formatting paste the text
+            clipboard.set_html(html, Some(text))?;
+        }
     }
     Ok(())
+}
+
+/// The text of `html` without tags, for HTML that comes without it, and to
+/// tell whether there is any text at all.
+fn html_to_text(html: &str) -> String {
+    // lowering ASCII letters keeps every byte where it is
+    let lower = html.to_ascii_lowercase();
+    let mut text = String::with_capacity(html.len());
+    let mut at = 0;
+    while let Some(start) = html[at..].find('<').map(|s| at + s) {
+        text.push_str(&html[at..start]);
+        // nothing of scripts, styles and comments is text
+        let close = [
+            ("<script", "</script>"),
+            ("<style", "</style>"),
+            ("<!--", "-->"),
+        ]
+        .iter()
+        .find(|(open, _)| lower[start..].starts_with(open))
+        .map_or(">", |(_, close)| *close);
+        at = match lower[start..].find(close) {
+            Some(end) => start + end + close.len(),
+            None => html.len(),
+        };
+    }
+    text.push_str(&html[at..]);
+    let entities = [
+        ("&nbsp;", " "),
+        ("&lt;", "<"),
+        ("&gt;", ">"),
+        ("&quot;", "\""),
+        ("&#39;", "'"),
+        ("&amp;", "&"),
+    ];
+    entities.iter().fold(text, |text, (entity, character)| {
+        text.replace(entity, character)
+    })
 }
 
 impl Content {
@@ -214,6 +280,25 @@ impl Content {
             kind: ClipboardKind::Text,
             hash: text_hash(&data),
             data,
+        }
+    }
+
+    fn html(html: &str, text: &str) -> Self {
+        Self {
+            kind: ClipboardKind::Html,
+            hash: html_hash(html, text),
+            data: encode_html(html, text),
+        }
+    }
+
+    /// the same without formatting, for peers that do not take HTML
+    pub(crate) fn plain(self) -> Self {
+        match self.kind {
+            ClipboardKind::Html => match decode_html(&self.data) {
+                Some((_, text)) => Self::text(text.to_owned()),
+                None => self,
+            },
+            _ => self,
         }
     }
 
@@ -242,6 +327,10 @@ fn digest(parts: &[&[u8]]) -> u64 {
 
 fn text_hash(text: &[u8]) -> u64 {
     digest(&[b"text", text])
+}
+
+fn html_hash(html: &str, text: &str) -> u64 {
+    digest(&[b"html", html.as_bytes(), &[0], text.as_bytes()])
 }
 
 fn image_hash(width: usize, height: usize, rgba: &[u8]) -> u64 {
@@ -290,6 +379,34 @@ fn decode_png(png: &[u8]) -> Result<(usize, usize, Vec<u8>), ClipboardError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_of_html() {
+        assert_eq!(
+            html_to_text("<p>Olá <b>mundo</b> &amp; você</p><!-- x --><style>p{}</style>"),
+            "Olá mundo & você"
+        );
+        // only an image: no text, the image is what was copied
+        assert_eq!(html_to_text("<img src=\"a.png\">").trim(), "");
+        // accents right after a tag, unclosed tags
+        assert_eq!(html_to_text("<é>á<SCRIPT>x</script>b<i"), "áb");
+        // large documents take linear time
+        let big = "<td>é</td>".repeat(200_000);
+        assert_eq!(html_to_text(&big).chars().count(), 200_000);
+    }
+
+    #[test]
+    fn formatted_text_and_its_plain_version() {
+        let html = Content::html("<b>olá</b>", "olá");
+        assert_eq!(html.kind, ClipboardKind::Html);
+        assert_eq!(html.hash, html_hash("<b>olá</b>", "olá"));
+        assert_eq!(html.plain(), Content::text("olá".into()));
+        assert_ne!(
+            html_hash("<b>olá</b>", "ola"),
+            html_hash("<b>olá</b>", "olá")
+        );
+        assert_ne!(html_hash("a", "b"), text_hash(b"b"));
+    }
 
     fn gradient(width: usize, height: usize) -> Vec<u8> {
         (0..width * height)

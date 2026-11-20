@@ -30,7 +30,9 @@ use std::{
 
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::ClientHandle;
-use rustinput_proto::{CAP_CLIPBOARD, CAP_FILES, ClipboardFrame, ClipboardKind};
+use rustinput_proto::{
+    CAP_CLIPBOARD, CAP_CLIPBOARD_HTML, CAP_FILES, ClipboardFrame, ClipboardKind,
+};
 use tokio::task::spawn_local;
 
 use crate::{
@@ -140,8 +142,8 @@ impl ClipboardHandle {
     /// the capability flags to announce to peers
     pub(crate) fn capabilities(&self) -> u32 {
         match (self.enabled, self.files) {
-            (true, true) => CAP_CLIPBOARD | CAP_FILES,
-            (true, false) => CAP_CLIPBOARD,
+            (true, true) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML | CAP_FILES,
+            (true, false) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML,
             _ => 0,
         }
     }
@@ -215,6 +217,8 @@ struct PeerState {
     reading: bool,
     /// the peer takes copied files
     files: bool,
+    /// the peer takes formatted text
+    html: bool,
 }
 
 struct Manager {
@@ -274,6 +278,7 @@ impl Manager {
                     PeerState::default()
                 });
                 state.files = flags & CAP_FILES != 0 && self.files.is_some();
+                state.html = flags & CAP_CLIPBOARD_HTML != 0;
                 if let Some(files) = &self.files {
                     if state.files {
                         files.add_peer(PeerInfo {
@@ -375,6 +380,7 @@ impl Manager {
         let Some(content) = content else {
             return;
         };
+        let content = if state.html { content } else { content.plain() };
         if content.data.is_empty() || state.synced == Some(content.hash) {
             return;
         }

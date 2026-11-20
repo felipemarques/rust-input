@@ -44,6 +44,32 @@ pub enum ClipboardKind {
     Text,
     /// an image, encoded as PNG (8 bit RGBA)
     Image,
+    /// formatted text, HTML along with the same text without formatting
+    /// (see [`encode_html`]); only for peers with
+    /// [`CAP_CLIPBOARD_HTML`](crate::CAP_CLIPBOARD_HTML)
+    Html,
+}
+
+/// The payload of [`ClipboardKind::Html`]: the length of the HTML (big endian
+/// u32), the HTML, then the text without formatting, both UTF-8.
+pub fn encode_html(html: &str, text: &str) -> Vec<u8> {
+    let mut data = Vec::with_capacity(4 + html.len() + text.len());
+    data.extend_from_slice(&(html.len() as u32).to_be_bytes());
+    data.extend_from_slice(html.as_bytes());
+    data.extend_from_slice(text.as_bytes());
+    data
+}
+
+/// the HTML and the text of a [`ClipboardKind::Html`] payload, `None` if it is
+/// malformed
+pub fn decode_html(data: &[u8]) -> Option<(&str, &str)> {
+    let mut rest = data;
+    let length = take_u32(&mut rest)? as usize;
+    let html = take(&mut rest, length)?;
+    Some((
+        std::str::from_utf8(html).ok()?,
+        std::str::from_utf8(rest).ok()?,
+    ))
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -213,6 +239,23 @@ mod tests {
             received: 4096,
         });
         roundtrip(ClipboardFrame::Cancel { transfer: 7 });
+    }
+
+    #[test]
+    fn html_payloads_roundtrip() {
+        let data = encode_html("<b>olá</b>", "olá");
+        assert_eq!(decode_html(&data), Some(("<b>olá</b>", "olá")));
+        assert_eq!(decode_html(&encode_html("", "")), Some(("", "")));
+        // a length beyond the data, and text that is not UTF-8
+        assert_eq!(decode_html(&[0, 0, 0, 9, b'a']), None);
+        assert_eq!(decode_html(&[0, 0, 0, 0, 0xff]), None);
+        assert_eq!(decode_html(&[0, 0]), None);
+        roundtrip(ClipboardFrame::Offer {
+            transfer: 1,
+            kind: ClipboardKind::Html,
+            size: data.len() as u32,
+            hash: 3,
+        });
     }
 
     #[test]
