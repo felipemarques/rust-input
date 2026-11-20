@@ -17,7 +17,7 @@ use toml;
 use toml_edit::{self, DocumentMut};
 
 use rustinput_cli::CliArgs;
-use rustinput_ipc::{DEFAULT_PORT, Position};
+use rustinput_ipc::{DEFAULT_PORT, FileOptions, Position};
 
 use input_event::scancode::{
     self,
@@ -69,6 +69,9 @@ struct ConfigToml {
     cert_path: Option<PathBuf>,
     clipboard: Option<bool>,
     clipboard_files: Option<bool>,
+    send_copied_files: Option<bool>,
+    show_transfers_window: Option<bool>,
+    file_manager_menu: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
@@ -128,6 +131,13 @@ pub enum Command {
     TestCapture(TestCaptureArgs),
     /// RustInput commandline interface
     Cli(CliArgs),
+    /// send files and folders to the connected devices, where they go to the
+    /// clipboard ready to be pasted (the "Copy to RustInput" menu item)
+    SendFiles {
+        /// files and folders to send
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
     /// run in daemon mode
     Daemon,
 }
@@ -508,6 +518,27 @@ impl Config {
             .as_ref()
             .and_then(|c| c.clipboard_files)
             .unwrap_or(true)
+    }
+
+    /// What happens to copied files. Without `send_copied_files` they only
+    /// go to the other devices with "Copy to RustInput" in the file manager:
+    /// sending everything copied while working with files would be too much.
+    pub fn file_options(&self) -> FileOptions {
+        let c = self.config_toml.as_ref();
+        FileOptions {
+            available: self.clipboard() && self.clipboard_files(),
+            send_copied: c.and_then(|c| c.send_copied_files).unwrap_or(false),
+            show_window: c.and_then(|c| c.show_transfers_window).unwrap_or(true),
+            file_manager_menu: c.and_then(|c| c.file_manager_menu).unwrap_or(true),
+        }
+    }
+
+    /// changes what happens to copied files
+    pub fn set_file_options(&mut self, options: FileOptions) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.send_copied_files = Some(options.send_copied);
+        c.show_transfers_window = Some(options.show_window);
+        c.file_manager_menu = Some(options.file_manager_menu);
     }
 
     /// release bind for returning control to the host

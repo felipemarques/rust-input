@@ -16,6 +16,25 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+mod dirs;
+pub use dirs::{log_dir, received_dir, transfer_log};
+
+/// "512 bytes", "1.5 KB", "120.3 MB", "2.1 GB" (powers of 1024, like file
+/// managers)
+pub fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    if bytes < 1024 {
+        return format!("{bytes} bytes");
+    }
+    let mut size = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{size:.1} {}", UNITS[unit])
+}
+
 mod connect;
 mod connect_async;
 mod listen;
@@ -207,6 +226,22 @@ pub struct TransferInfo {
     /// the file being transferred
     pub current: Option<String>,
     pub state: TransferState,
+    /// when the transfer started, in milliseconds since the Unix epoch
+    #[serde(default)]
+    pub started_ms: u64,
+    /// when it ended
+    #[serde(default)]
+    pub finished_ms: Option<u64>,
+    /// the folder holding the received files
+    #[serde(default)]
+    pub location: Option<String>,
+}
+
+impl TransferInfo {
+    /// still waiting or running
+    pub fn active(&self) -> bool {
+        matches!(self.state, TransferState::Waiting | TransferState::Running)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -214,8 +249,29 @@ pub enum TransferState {
     /// queued behind another transfer to the same device
     Waiting,
     Running,
+    /// sent, or received and on the clipboard, ready to be pasted
     Done,
+    /// the received files were pasted (moved out of the temporary folder)
+    Pasted,
+    /// the received files were removed from the temporary folder unpasted
+    Removed,
     Failed(String),
+}
+
+/// what happens to copied files, see the configuration file
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileOptions {
+    /// file transfers are enabled at all (`clipboard_files`), read only
+    pub available: bool,
+    /// files copied in a file manager are sent when the pointer moves to
+    /// another device (`send_copied_files`)
+    pub send_copied: bool,
+    /// the transfers window opens when a transfer starts
+    /// (`show_transfers_window`)
+    pub show_window: bool,
+    /// "Copy to RustInput" in the menu of the file managers
+    /// (`file_manager_menu`)
+    pub file_manager_menu: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -257,6 +313,8 @@ pub enum FrontendEvent {
     IncomingDisconnected(SocketAddr),
     /// the file transfers, running and recently finished ones
     Transfers(Vec<TransferInfo>),
+    /// what happens to copied files
+    FileOptions(FileOptions),
     /// failed connection attempt (approval for fingerprint required)
     ConnectionAttempt { fingerprint: String },
 }
@@ -301,6 +359,15 @@ pub enum FrontendRequest {
     SaveConfiguration,
     /// cancel the running and waiting file transfers
     CancelTransfers,
+    /// cancel one transfer, by its [`TransferInfo::id`]
+    CancelTransfer(u64),
+    /// send files and folders to the connected devices right away (the
+    /// "Copy to RustInput" menu item of file managers)
+    SendFiles(Vec<std::path::PathBuf>),
+    /// change what happens to copied files (`available` is ignored)
+    SetFileOptions(FileOptions),
+    /// remove the received files that were not pasted
+    RemoveReceivedFiles,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]

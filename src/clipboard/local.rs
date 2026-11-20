@@ -130,9 +130,20 @@ fn write_files(clipboard: Option<&mut arboard::Clipboard>, paths: Vec<PathBuf>) 
         }
         return;
     }
+    // cut rather than copied: Explorer moves them out of the temporary folder
+    #[cfg(windows)]
+    {
+        let _ = clipboard;
+        match super::windows_files::write_cut_files(&paths) {
+            Ok(()) => log::debug!("clipboard set to {count} received item(s)"),
+            Err(e) => log::warn!("could not put the received files on the clipboard: {e}"),
+        }
+    }
+    #[cfg(not(windows))]
     let Some(clipboard) = clipboard else {
         return;
     };
+    #[cfg(not(windows))]
     match clipboard.set().file_list(&paths) {
         Ok(()) => log::debug!("clipboard set to {count} received item(s)"),
         Err(e) => log::warn!("could not put the received files on the clipboard: {e}"),

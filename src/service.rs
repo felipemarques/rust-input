@@ -14,7 +14,7 @@ use futures::StreamExt;
 use local_channel::mpsc::{Receiver, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, FrontendEvent, FrontendRequest, IpcError,
+    AsyncFrontendListener, ClientHandle, FileOptions, FrontendEvent, FrontendRequest, IpcError,
     IpcListenerCreationError, Position, Status, TransferInfo,
 };
 use std::{
@@ -74,6 +74,8 @@ pub struct Service {
     clipboard: ClipboardHandle,
     /// file transfers, if enabled
     files: Option<FilesHandle>,
+    /// what happens to copied files
+    file_options: FileOptions,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
 }
@@ -131,6 +133,9 @@ impl Service {
             )
         });
         clipboard::spawn(&clipboard, clipboard_rx, links, files.clone());
+        let file_options = config.file_options();
+        clipboard.set_send_copied(file_options.available && file_options.send_copied);
+        files::menu::install(file_options.available && file_options.file_manager_menu);
 
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());
@@ -161,6 +166,7 @@ impl Service {
             next_trigger_handle: 0,
             clipboard,
             files,
+            file_options,
             transfer_reports,
         };
         Ok(service)
@@ -260,6 +266,21 @@ impl Service {
                 self.update_leave_hook(handle, leave_hook)
             }
             FrontendRequest::SaveConfiguration => self.save_config(),
+            FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
+            FrontendRequest::SendFiles(paths) => match &self.files {
+                Some(files) => files.send_now(paths),
+                None => log::warn!("file transfers are turned off (clipboard_files = false)"),
+            },
+            FrontendRequest::CancelTransfer(id) => {
+                if let Some(files) = &self.files {
+                    files.cancel(id);
+                }
+            }
+            FrontendRequest::RemoveReceivedFiles => {
+                if let Some(files) = &self.files {
+                    files.remove_received();
+                }
+            }
             FrontendRequest::CancelTransfers => {
                 if let Some(files) = &self.files {
                     files.cancel_all();
@@ -290,6 +311,25 @@ impl Service {
         }
     }
 
+    /// applies (and with `save` stores) what happens to copied files
+    fn set_file_options(&mut self, options: FileOptions, save: bool) {
+        let options = FileOptions {
+            available: self.file_options.available,
+            ..options
+        };
+        if options.file_manager_menu != self.file_options.file_manager_menu {
+            files::menu::install(options.available && options.file_manager_menu);
+        }
+        self.clipboard
+            .set_send_copied(options.available && options.send_copied);
+        self.file_options = options;
+        if save {
+            self.config.set_file_options(options);
+            self.save_config();
+        }
+        self.notify_frontend(FrontendEvent::FileOptions(options));
+    }
+
     fn handle_config_change(&mut self) {
         for h in self.client_manager.registered_clients() {
             self.remove_client(h);
@@ -311,6 +351,10 @@ impl Service {
             .write()
             .unwrap()
             .clone_from(&authorized_keys);
+        let file_options = self.config.file_options();
+        if file_options != self.file_options {
+            self.set_file_options(file_options, false);
+        }
         self.sync_frontend();
     }
 
@@ -459,6 +503,7 @@ impl Service {
         ));
         let keys = self.authorized_keys.read().expect("lock").clone();
         self.notify_frontend(FrontendEvent::AuthorizedUpdated(keys));
+        self.notify_frontend(FrontendEvent::FileOptions(self.file_options));
     }
 
     const ENTER_HANDLE_BEGIN: u64 = u64::MAX / 2 + 1;

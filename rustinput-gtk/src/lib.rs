@@ -9,6 +9,7 @@ mod macos_privacy;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
 #[cfg(not(target_os = "macos"))]
+mod transfers;
 mod tray;
 mod window;
 
@@ -298,15 +299,23 @@ fn build_ui(app: &Application) {
         });
     }
 
+    let transfers = transfers::Transfers::new(&window);
+    window.setup_file_settings(clone!(
+        #[strong]
+        transfers,
+        move || transfers.present()
+    ));
+
     // With a tray icon (the menu bar item on macOS) closing the window
     // only hides it, see `tray`.
     #[cfg(not(target_os = "macos"))]
-    let tray = tray::setup(app, &window);
+    let tray = tray::setup(app, &window, &transfers);
     #[cfg(not(target_os = "macos"))]
     let in_tray = tray.is_some();
     #[cfg(target_os = "macos")]
     let in_tray = true;
 
+    let transfers_window = transfers;
     glib::spawn_future_local(clone!(
         #[weak]
         window,
@@ -351,7 +360,16 @@ fn build_ui(app: &Application) {
                     FrontendEvent::IncomingDisconnected(addr) => {
                         window.show_toast(format!("{addr} disconnected").as_str());
                     }
+                    FrontendEvent::FileOptions(options) => {
+                        window.set_file_options(options);
+                        transfers_window.set_options(options);
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(tray) = &tray {
+                            tray.show_options(options);
+                        }
+                    }
                     FrontendEvent::Transfers(transfers) => {
+                        transfers_window.update(&transfers);
                         #[cfg(not(target_os = "macos"))]
                         if let Some(tray) = &tray {
                             tray.show_transfers(&transfers);

@@ -1,9 +1,9 @@
 //! Where received files are kept until they are pasted.
 //!
-//! Every transfer gets a folder of its own below [`received_dir`]; the
-//! clipboard then points at its top level items, and pasting them in a file
-//! manager copies them to wherever the user pastes. Only the latest transfers
-//! are kept.
+//! Every transfer gets a folder of its own below
+//! [`rustinput_ipc::received_dir`]; the clipboard then points at its top level
+//! items, and pasting them in a file manager moves them to wherever the user
+//! pastes. Folders left over by an earlier run are removed at startup.
 
 use std::{
     fs, io,
@@ -14,23 +14,6 @@ use std::{
 use tokio::{fs::File, io::AsyncWriteExt};
 
 use super::wire::Entry;
-
-/// how many received transfers are kept
-pub(crate) const KEEP_TRANSFERS: usize = 3;
-
-/// folder holding the received transfers
-pub(crate) fn received_dir() -> Option<PathBuf> {
-    #[cfg(windows)]
-    let base = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
-    #[cfg(target_os = "macos")]
-    let base = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Caches"));
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let base = std::env::var_os("XDG_CACHE_HOME")
-        .filter(|d| !d.is_empty())
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".cache")));
-    base.map(|b| b.join("rustinput").join("received"))
-}
 
 /// Removes all but the `keep` newest transfers below `dir`.
 pub(crate) fn cleanup(dir: &Path, keep: usize) {

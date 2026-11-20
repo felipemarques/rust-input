@@ -2859,6 +2859,7 @@ version = "0.16.1"
 dependencies = [
  "arboard",
  "clap",
+ "clipboard-win",
  "embed-resource",
  "env_logger",
  "futures",
@@ -2890,6 +2891,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "webrtc-dtls",
  "webrtc-util",
+ "windows-sys 0.61.2",
  "x11rb 0.14.0",
 ]
 

@@ -47,6 +47,15 @@ pub struct Window {
     pub input_capture_button: TemplateChild<Button>,
     #[template_child]
     pub authorized_list: TemplateChild<ListBox>,
+    #[template_child]
+    pub files_group: TemplateChild<PreferencesGroup>,
+    /// what happens to copied files, as the service has it
+    pub file_options: Cell<Option<rustinput_ipc::FileOptions>>,
+    /// the switches of the file transfer settings: sending copied files, the
+    /// file manager menu, the transfers window
+    pub file_switches: RefCell<Option<[gtk::Switch; 3]>>,
+    /// the switches are being set to what the service has
+    pub updating_files: Cell<bool>,
     pub clients: RefCell<Option<gio::ListStore>>,
     pub authorized: RefCell<Option<gio::ListStore>>,
     pub frontend_request_writer: RefCell<Option<FrontendRequestWriter>>,

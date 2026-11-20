@@ -13,14 +13,18 @@
 
 mod local;
 mod transfer;
+#[cfg(windows)]
+mod windows_files;
 #[cfg(all(unix, not(target_os = "macos")))]
 mod x11_files;
 
 use std::{
+    cell::Cell,
     collections::HashMap,
     fmt::Display,
     net::SocketAddr,
     path::PathBuf,
+    rc::Rc,
     time::{Duration, Instant},
 };
 
@@ -105,15 +109,32 @@ pub(crate) enum ClipboardMsg {
 pub(crate) struct ClipboardHandle {
     tx: Sender<ClipboardMsg>,
     enabled: bool,
-    /// copied files are sent too
+    /// files can be transferred
     files: bool,
+    /// files copied in a file manager are sent when the pointer moves to
+    /// another device (otherwise only with "Copy to RustInput")
+    send_copied: Rc<Cell<bool>>,
 }
 
 impl ClipboardHandle {
     pub(crate) fn new(enabled: bool, files: bool) -> (Self, Receiver<ClipboardMsg>) {
         let (tx, rx) = channel();
         let files = enabled && files;
-        (Self { tx, enabled, files }, rx)
+        let send_copied = Rc::new(Cell::new(false));
+        (
+            Self {
+                tx,
+                enabled,
+                files,
+                send_copied,
+            },
+            rx,
+        )
+    }
+
+    /// whether files copied in a file manager go along with the pointer
+    pub(crate) fn set_send_copied(&self, send: bool) {
+        self.send_copied.set(send);
     }
 
     /// the capability flags to announce to peers
@@ -173,6 +194,7 @@ pub(crate) fn spawn(
     let manager = Manager {
         rx,
         tx: handle.tx.clone(),
+        send_copied: handle.send_copied.clone(),
         links,
         files,
         local: LocalClipboard::new(),
@@ -201,6 +223,7 @@ struct Manager {
     links: PeerLinks,
     /// file transfers, if enabled
     files: Option<FilesHandle>,
+    send_copied: Rc<Cell<bool>>,
     local: LocalClipboard,
     /// peers that take part in clipboard synchronization
     peers: HashMap<Peer, PeerState>,
@@ -326,6 +349,13 @@ impl Manager {
         };
         state.reading = false;
         if state.synced == Some(key) {
+            return;
+        }
+        // Neither the files nor their paths as text: the clipboard of the
+        // other device keeps what it has, files sent with "Copy to RustInput"
+        // for instance.
+        if !self.send_copied.get() {
+            log::debug!("copied files are only sent with \"Copy to RustInput\"");
             return;
         }
         let Some(files) = self.files.as_ref().filter(|_| state.files) else {

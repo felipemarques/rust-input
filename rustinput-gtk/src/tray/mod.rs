@@ -24,25 +24,42 @@ use std::{
 
 use adw::Application;
 use gtk::{glib, glib::clone, prelude::*};
-use rustinput_ipc::{TransferInfo, TransferState};
+use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState};
 
 pub(crate) use action::{Summary, TrayAction};
 
-use crate::window::Window;
+use crate::{transfers::Transfers, window::Window};
 
 /// transfers listed in the menu at most
 const MAX_LINES: usize = 6;
+/// finished transfers stay in the menu this long, received files waiting to
+/// be pasted until they are
+const SHOW_FINISHED_MS: u64 = 30_000;
 
 /// the tray icon, removed when the application shuts down
 pub(crate) struct Tray {
     handle: RefCell<Option<platform::Handle>>,
+    transfers: RefCell<Vec<TransferInfo>>,
+    options: Cell<Option<FileOptions>>,
 }
 
 impl Tray {
     /// shows the state of the file transfers in the menu and the tooltip
     pub(crate) fn show_transfers(&self, transfers: &[TransferInfo]) {
+        self.transfers.replace(transfers.to_vec());
+        self.refresh();
+    }
+
+    /// shows what happens to copied files
+    pub(crate) fn show_options(&self, options: FileOptions) {
+        self.options.set(Some(options));
+        self.refresh();
+    }
+
+    fn refresh(&self) {
         if let Some(handle) = self.handle.borrow().as_ref() {
-            handle.show(summary(transfers));
+            let now = crate::transfers::now_ms();
+            handle.show(summary(&self.transfers.borrow(), self.options.get(), now));
         }
     }
 }
@@ -50,7 +67,11 @@ impl Tray {
 /// Puts RustInput into the system tray and makes closing `window` hide it.
 ///
 /// Returns `None` if there is no system tray, in which case nothing changes.
-pub(crate) fn setup(app: &Application, window: &Window) -> Option<Rc<Tray>> {
+pub(crate) fn setup(
+    app: &Application,
+    window: &Window,
+    transfers: &Rc<Transfers>,
+) -> Option<Rc<Tray>> {
     let (actions_tx, actions) = async_channel::unbounded();
     // shown in the tooltip and at the top of the menu
     let label = format!(
@@ -61,6 +82,8 @@ pub(crate) fn setup(app: &Application, window: &Window) -> Option<Rc<Tray>> {
     log::info!("tray icon shown, closing the window keeps RustInput running");
     let tray = Rc::new(Tray {
         handle: RefCell::new(Some(handle)),
+        transfers: Default::default(),
+        options: Default::default(),
     });
 
     // whether the icon is on screen right now
@@ -102,12 +125,23 @@ pub(crate) fn setup(app: &Application, window: &Window) -> Option<Rc<Tray>> {
         app,
         #[weak]
         window,
+        #[strong]
+        transfers,
         async move {
             while let Ok(action) = actions.recv().await {
                 match action {
                     TrayAction::Show => window.present(),
                     TrayAction::Quit => app.quit(),
                     TrayAction::CancelTransfers => window.request_cancel_transfers(),
+                    TrayAction::ShowTransfers => transfers.present(),
+                    TrayAction::ToggleSendCopied => {
+                        if let Some(options) = window.file_options() {
+                            window.request(FrontendRequest::SetFileOptions(FileOptions {
+                                send_copied: !options.send_copied,
+                                ..options
+                            }));
+                        }
+                    }
                     TrayAction::Available(on_screen) => {
                         available.set(on_screen);
                         if !on_screen && !window.is_visible() {
@@ -173,19 +207,32 @@ fn line(t: &TransferInfo) -> String {
         },
         TransferState::Done if t.sending => format!("✓ {} sent to {}", files(t.files), t.peer),
         TransferState::Done => format!("✓ {} from {}, ready to paste", files(t.files), t.peer),
+        TransferState::Pasted => format!("✓ {} from {}, pasted", files(t.files), t.peer),
+        TransferState::Removed => format!("✗ {} from {}, not pasted", files(t.files), t.peer),
         TransferState::Failed(reason) => format!("✗ {}: {}", t.peer, shorten(reason, 60)),
     }
 }
 
 /// what the tray shows for `transfers`: running ones first, then waiting
-/// ones, then the most recently finished ones
-pub(crate) fn summary(transfers: &[TransferInfo]) -> Summary {
+/// ones, then the most recently finished ones (received files waiting to be
+/// pasted, other ones for a while)
+pub(crate) fn summary(
+    transfers: &[TransferInfo],
+    options: Option<FileOptions>,
+    now_ms: u64,
+) -> Summary {
     let rank = |t: &TransferInfo| match t.state {
         TransferState::Running => 0,
         TransferState::Waiting => 1,
-        TransferState::Done | TransferState::Failed(_) => 2,
+        _ => 2,
     };
-    let mut sorted: Vec<&TransferInfo> = transfers.iter().collect();
+    let shown = |t: &&TransferInfo| {
+        t.active()
+            || (!t.sending && t.state == TransferState::Done)
+            || t.finished_ms
+                .is_some_and(|f| now_ms.saturating_sub(f) < SHOW_FINISHED_MS)
+    };
+    let mut sorted: Vec<&TransferInfo> = transfers.iter().filter(shown).collect();
     sorted.sort_by_key(|t| (rank(t), std::cmp::Reverse(t.id)));
     let running: Vec<String> = sorted
         .iter()
@@ -196,6 +243,7 @@ pub(crate) fn summary(transfers: &[TransferInfo]) -> Summary {
         lines: sorted.iter().take(MAX_LINES).map(|t| line(t)).collect(),
         status: (!running.is_empty()).then(|| running.join("\n")),
         cancellable: sorted.iter().any(|t| rank(t) < 2),
+        send_copied: options.filter(|o| o.available).map(|o| o.send_copied),
     }
 }
 
@@ -214,6 +262,9 @@ mod tests {
             bytes_done: 100,
             current: Some("relatório.pdf".into()),
             state,
+            started_ms: 0,
+            finished_ms: None,
+            location: None,
         }
     }
 
@@ -260,9 +311,12 @@ mod tests {
             transfer(1, false, TransferState::Done),
             transfer(2, true, TransferState::Waiting),
             transfer(3, true, TransferState::Running),
-            transfer(4, false, TransferState::Failed("lost".into())),
+            TransferInfo {
+                finished_ms: Some(0),
+                ..transfer(4, false, TransferState::Failed("lost".into()))
+            },
         ];
-        let summary = summary(&transfers);
+        let summary = summary(&transfers, None, 0);
         assert!(summary.lines[0].starts_with("↑ relatório.pdf"));
         assert!(summary.lines[1].contains("waiting"));
         // the most recently finished one first
@@ -274,10 +328,48 @@ mod tests {
 
     #[test]
     fn finished_transfers_can_not_be_cancelled() {
-        let done = summary(&[transfer(1, false, TransferState::Done)]);
+        let done = summary(&[transfer(1, false, TransferState::Done)], None, 0);
         assert!(!done.cancellable);
         assert_eq!(done.status, None);
-        assert_eq!(summary(&[]), Summary::default());
+        assert_eq!(summary(&[], None, 0), Summary::default());
+    }
+
+    #[test]
+    fn finished_transfers_leave_the_menu() {
+        let sent = TransferInfo {
+            finished_ms: Some(1_000),
+            ..transfer(1, true, TransferState::Done)
+        };
+        let received = TransferInfo {
+            finished_ms: Some(1_000),
+            ..transfer(2, false, TransferState::Done)
+        };
+        let pasted = TransferInfo {
+            finished_ms: Some(1_000),
+            ..transfer(3, false, TransferState::Pasted)
+        };
+        let all = [sent, received, pasted];
+        assert_eq!(summary(&all, None, 2_000).lines.len(), 3);
+        // a minute later only the files waiting to be pasted are left
+        let later = summary(&all, None, 61_000);
+        assert_eq!(later.lines, ["✓ 3 files from windows-pc, ready to paste"]);
+    }
+
+    #[test]
+    fn the_option_shows_with_file_transfers_only() {
+        let options = FileOptions {
+            available: true,
+            send_copied: true,
+            show_window: true,
+            file_manager_menu: true,
+        };
+        assert_eq!(summary(&[], Some(options), 0).send_copied, Some(true));
+        let off = FileOptions {
+            available: false,
+            ..options
+        };
+        assert_eq!(summary(&[], Some(off), 0).send_copied, None);
+        assert_eq!(summary(&[], None, 0).send_copied, None);
     }
 
     #[test]

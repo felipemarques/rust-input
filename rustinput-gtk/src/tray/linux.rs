@@ -2,7 +2,11 @@
 //! Cinnamon, XFCE, MATE and GNOME with the AppIndicator extension.
 
 use async_channel::Sender;
-use ksni::{MenuItem, OfflineReason, ToolTip, blocking::TrayMethods, menu::StandardItem};
+use ksni::{
+    MenuItem, OfflineReason, ToolTip,
+    blocking::TrayMethods,
+    menu::{CheckmarkItem, StandardItem},
+};
 
 use super::{Summary, TrayAction, icon};
 
@@ -87,6 +91,25 @@ impl ksni::Tray for RustInputTray {
                 );
             }
             menu.push(MenuItem::Separator);
+        }
+        if let Some(send_copied) = self.transfers.send_copied {
+            menu.extend([
+                CheckmarkItem {
+                    label: "Send copied files automatically".into(),
+                    checked: send_copied,
+                    activate: Box::new(|tray: &mut Self| tray.send(TrayAction::ToggleSendCopied)),
+                    ..Default::default()
+                }
+                .into(),
+                StandardItem {
+                    label: "File transfers…".into(),
+                    icon_name: "folder-download".into(),
+                    activate: Box::new(|tray: &mut Self| tray.send(TrayAction::ShowTransfers)),
+                    ..Default::default()
+                }
+                .into(),
+                MenuItem::Separator,
+            ]);
         }
         menu.extend([
             StandardItem {

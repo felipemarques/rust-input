@@ -11,8 +11,8 @@ use gtk::{
 };
 
 use rustinput_ipc::{
-    ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FrontendRequest, FrontendRequestWriter,
-    Position,
+    ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FileOptions, FrontendRequest,
+    FrontendRequestWriter, Position,
 };
 
 use crate::{
@@ -449,7 +449,96 @@ impl Window {
         self.request(FrontendRequest::CancelTransfers);
     }
 
-    fn request(&self, request: FrontendRequest) {
+    /// Adds the settings of the file transfers. They show once the service
+    /// said that file transfers are available.
+    pub(super) fn setup_file_settings(&self, open_transfers: impl Fn() + 'static) {
+        let switch_row = |title: &str, subtitle: &str| {
+            let row = adw::ActionRow::builder()
+                .title(title)
+                .subtitle(subtitle)
+                .build();
+            let switch = gtk::Switch::builder().valign(gtk::Align::Center).build();
+            row.add_suffix(&switch);
+            row.set_activatable_widget(Some(&switch));
+            (row, switch)
+        };
+        let (send_row, send) = switch_row(
+            "Send copied files automatically",
+            "Files copied in the file manager go along with the pointer. When this \
+             is off, only files chosen with “Copy to RustInput” are sent",
+        );
+        let (menu_row, menu) = switch_row(
+            "“Copy to RustInput” in the file manager",
+            "In the menu of files and folders: Explorer, Nemo and Nautilus",
+        );
+        let (show_row, show) = switch_row(
+            "Show the transfers window",
+            "With the progress, when files are sent or received",
+        );
+        let open_row = adw::ActionRow::builder()
+            .title("File transfers")
+            .subtitle("Progress, history and log")
+            .build();
+        let open = gtk::Button::builder()
+            .label("Open")
+            .valign(gtk::Align::Center)
+            .build();
+        open.connect_clicked(move |_| open_transfers());
+        open_row.add_suffix(&open);
+        open_row.set_activatable_widget(Some(&open));
+        let group = &self.imp().files_group;
+        for row in [&send_row, &menu_row, &show_row, &open_row] {
+            group.add(row);
+        }
+        for switch in [&send, &menu, &show] {
+            switch.connect_active_notify(clone!(
+                #[weak(rename_to = window)]
+                self,
+                move |_| window.file_switch_changed()
+            ));
+        }
+        self.imp().file_switches.replace(Some([send, menu, show]));
+    }
+
+    /// shows what happens to copied files, as the service has it
+    pub(super) fn set_file_options(&self, options: FileOptions) {
+        let imp = self.imp();
+        imp.file_options.set(Some(options));
+        imp.files_group.set_visible(options.available);
+        if let Some([send, menu, show]) = imp.file_switches.borrow().as_ref() {
+            imp.updating_files.set(true);
+            send.set_active(options.send_copied);
+            menu.set_active(options.file_manager_menu);
+            show.set_active(options.show_window);
+            imp.updating_files.set(false);
+        }
+    }
+
+    /// what happens to copied files, once the service said so
+    pub(crate) fn file_options(&self) -> Option<FileOptions> {
+        self.imp().file_options.get()
+    }
+
+    fn file_switch_changed(&self) {
+        let imp = self.imp();
+        if imp.updating_files.get() {
+            return;
+        }
+        let Some(options) = imp.file_options.get() else {
+            return;
+        };
+        let Some([send, menu, show]) = imp.file_switches.borrow().clone() else {
+            return;
+        };
+        self.request(FrontendRequest::SetFileOptions(FileOptions {
+            send_copied: send.is_active(),
+            file_manager_menu: menu.is_active(),
+            show_window: show.is_active(),
+            ..options
+        }));
+    }
+
+    pub(crate) fn request(&self, request: FrontendRequest) {
         let mut requester = self.imp().frontend_request_writer.borrow_mut();
         let requester = requester.as_mut().unwrap();
         if let Err(e) = requester.request(request) {

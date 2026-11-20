@@ -3,7 +3,8 @@
 //! arboard only offers files as `text/uri-list`, which Nemo, Nautilus, Caja
 //! and Thunar do not paste: they want `x-special/gnome-copied-files`. This
 //! owns the clipboard with all the usual file targets until another
-//! application takes it over.
+//! application takes it over. The files are offered as cut: pasting moves
+//! them out of the temporary folder they were received into.
 
 use std::{
     path::{Path, PathBuf},
@@ -46,6 +47,8 @@ fn uri(path: &Path) -> String {
 
 /// what the clipboard offers for `paths`, for every target
 struct Contents {
+    /// `cut`: pasting moves the files out of the temporary folder, so nothing
+    /// is left behind there
     gnome: Vec<u8>,
     uri_list: Vec<u8>,
     text: Vec<u8>,
@@ -54,7 +57,7 @@ struct Contents {
 impl Contents {
     fn new(paths: &[PathBuf]) -> Self {
         let uris: Vec<String> = paths.iter().map(|p| uri(p)).collect();
-        let mut gnome = String::from("copy");
+        let mut gnome = String::from("cut");
         for uri in &uris {
             gnome.push('\n');
             gnome.push_str(uri);
@@ -77,6 +80,7 @@ struct Atoms {
     targets: Atom,
     timestamp: Atom,
     gnome: Atom,
+    kde_cut: Atom,
     uri_list: Atom,
     utf8: Atom,
     plain_utf8: Atom,
@@ -100,6 +104,7 @@ pub(crate) fn serve(paths: Vec<PathBuf>) -> Result<(), String> {
         targets: atom(&conn, "TARGETS")?,
         timestamp: atom(&conn, "TIMESTAMP")?,
         gnome: atom(&conn, "x-special/gnome-copied-files")?,
+        kde_cut: atom(&conn, "application/x-kde-cutselection")?,
         uri_list: atom(&conn, "text/uri-list")?,
         utf8: atom(&conn, "UTF8_STRING")?,
         plain_utf8: atom(&conn, "text/plain;charset=utf-8")?,
@@ -199,6 +204,7 @@ fn answer(
             atoms.targets,
             atoms.timestamp,
             atoms.gnome,
+            atoms.kde_cut,
             atoms.uri_list,
             atoms.utf8,
             atoms.plain_utf8,
@@ -226,6 +232,9 @@ fn answer(
     }
     let data = if target == atoms.gnome {
         &contents.gnome
+    } else if target == atoms.kde_cut {
+        // Dolphin moves the files too
+        &b"1"[..]
     } else if target == atoms.uri_list {
         &contents.uri_list
     } else if target == atoms.utf8 || target == atoms.plain_utf8 {
@@ -259,7 +268,7 @@ mod tests {
         let contents = Contents::new(&[PathBuf::from("/tmp/a.txt"), PathBuf::from("/tmp/b c")]);
         assert_eq!(
             String::from_utf8(contents.gnome).unwrap(),
-            "copy\nfile:///tmp/a.txt\nfile:///tmp/b%20c"
+            "cut\nfile:///tmp/a.txt\nfile:///tmp/b%20c"
         );
         assert_eq!(
             String::from_utf8(contents.uri_list).unwrap(),

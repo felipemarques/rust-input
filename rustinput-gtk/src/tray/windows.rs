@@ -13,7 +13,7 @@ use std::{
 use async_channel::Sender;
 use tray_icon::{
     Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent,
-    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, Menu, MenuEvent, MenuItem, PredefinedMenuItem},
 };
 use windows_sys::Win32::{
     System::Threading::GetCurrentThreadId,
@@ -37,6 +37,8 @@ const MAX_TOOLTIP: usize = 127;
 const SHOW: &str = "show";
 const QUIT: &str = "quit";
 const CANCEL: &str = "cancel";
+const SEND_COPIED: &str = "send-copied";
+const TRANSFERS: &str = "transfers";
 
 /// state handed from GTK to the tray thread
 #[derive(Default)]
@@ -128,6 +130,17 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
         }
         add(&PredefinedMenuItem::separator())?;
     }
+    if let Some(send_copied) = transfers.send_copied {
+        add(&CheckMenuItem::with_id(
+            SEND_COPIED,
+            "Send copied files automatically",
+            true,
+            send_copied,
+            None,
+        ))?;
+        add(&MenuItem::with_id(TRANSFERS, "File transfers…", true, None))?;
+        add(&PredefinedMenuItem::separator())?;
+    }
     add(&MenuItem::with_id(SHOW, "Show RustInput", true, None))?;
     add(&PredefinedMenuItem::separator())?;
     add(&MenuItem::with_id(QUIT, "Quit RustInput", true, None))?;
@@ -154,6 +167,8 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
             SHOW => TrayAction::Show,
             QUIT => TrayAction::Quit,
             CANCEL => TrayAction::CancelTransfers,
+            SEND_COPIED => TrayAction::ToggleSendCopied,
+            TRANSFERS => TrayAction::ShowTransfers,
             _ => return,
         };
         let _ = menu_actions.try_send(action);

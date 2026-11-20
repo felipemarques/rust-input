@@ -77,6 +77,27 @@ enum CliSubcommand {
     SaveConfig,
 }
 
+/// Sends files and folders to the connected devices through the running
+/// service. File managers start one process per selected item, so the service
+/// gathers what arrives in quick succession into one transfer.
+pub async fn send_files(paths: Vec<std::path::PathBuf>) -> Result<(), CliError> {
+    let paths: Vec<_> = paths
+        .into_iter()
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
+        .collect();
+    let (mut rx, mut tx) = connect_async(Some(Duration::from_millis(500))).await?;
+    tx.request(FrontendRequest::SendFiles(paths)).await?;
+    // Leave the connection open until the service surely read the request,
+    // reading what it sends meanwhile: closing a TCP connection (the service
+    // socket on Windows) with unread data resets it, which can lose the
+    // request on the other side.
+    let _ = tokio::time::timeout(Duration::from_millis(300), async {
+        while rx.next().await.is_some() {}
+    })
+    .await;
+    Ok(())
+}
+
 pub async fn run(args: CliArgs) -> Result<(), CliError> {
     execute(args.command).await?;
     Ok(())

@@ -7,6 +7,10 @@ pub(crate) enum TrayAction {
     Quit,
     /// cancel the running and waiting file transfers
     CancelTransfers,
+    /// open the window with the file transfers
+    ShowTransfers,
+    /// turn sending copied files along with the pointer on or off
+    ToggleSendCopied,
     /// The tray icon disappeared or came back, for example because the
     /// panel showing it restarted. While it is gone, closing the window
     /// quits RustInput as there would be no way to get the window back.
@@ -23,4 +27,7 @@ pub(crate) struct Summary {
     pub(crate) status: Option<String>,
     /// some transfer can still be cancelled
     pub(crate) cancellable: bool,
+    /// whether copied files go along with the pointer, `None` without file
+    /// transfers
+    pub(crate) send_copied: Option<bool>,
 }

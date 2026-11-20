@@ -1,3 +1,7 @@
+// A window program on Windows: it opens no console window of its own, which
+// "Copy to RustInput" in Explorer would otherwise do for every selected item.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use env_logger::Env;
 use input_capture::InputCaptureError;
 use input_emulation::InputEmulationError;
@@ -43,7 +47,10 @@ enum RustInputError {
 fn main() {
     // init logging
     let env = Env::default().filter_or("RUSTINPUT_LOG_LEVEL", "info");
-    env_logger::init_from_env(env);
+    let mut logger = env_logger::Builder::from_env(env);
+    #[cfg(windows)]
+    windows_log::setup(&mut logger);
+    logger.init();
 
     if let Err(e) = run() {
         log::error!("{e}");
@@ -58,6 +65,7 @@ fn run() -> Result<(), RustInputError> {
             Command::TestEmulation(args) => run_async(emulation_test::run(config, args))?,
             Command::TestCapture(args) => run_async(capture_test::run(config, args))?,
             Command::Cli(cli_args) => run_async(rustinput_cli::run(cli_args))?,
+            Command::SendFiles { paths } => run_async(rustinput_cli::send_files(paths))?,
             Command::Daemon => {
                 // if daemon is specified we run the service
                 match run_async(run_service(config)) {
@@ -144,3 +152,6 @@ async fn run_service(config: Config) -> Result<(), ServiceError> {
     log::info!("service exited!");
     Ok(())
 }
+
+#[cfg(windows)]
+mod windows_log;

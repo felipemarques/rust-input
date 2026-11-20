@@ -208,6 +208,12 @@
                       </object>
                     </child>
                     <child>
+                      <object class="AdwPreferencesGroup" id="files_group">
+                        <property name="title" translatable="yes">File Transfers</property>
+                        <property name="visible">false</property>
+                      </object>
+                    </child>
+                    <child>
                       <object class="AdwPreferencesGroup">
                         <property name="title" translatable="yes">Connections</property>
                         <property name="header-suffix">
