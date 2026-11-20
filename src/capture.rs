@@ -418,6 +418,16 @@ impl CaptureTask {
         let (handle, event) = event;
         log::trace!("({handle}): {event:?}");
 
+        // the backend lost hold of the input (see `CaptureEvent::Released`):
+        // the other device lets go of its keys and the pointer
+        if event == CaptureEvent::Released {
+            if self.active_client.is_some() {
+                log::info!("releasing capture: the input reaches this device again");
+                self.release_capture(capture).await?;
+            }
+            return Ok(());
+        }
+
         if capture.keys_pressed(&self.release_bind.borrow()) {
             log::info!("releasing capture: release-bind pressed");
             return self.release_capture(capture).await;
@@ -472,6 +482,8 @@ impl CaptureTask {
                 State::WaitingForAck => enter,
                 State::Sending => ProtoEvent::Input(e),
             },
+            // handled above
+            CaptureEvent::Released => return Ok(()),
         };
 
         if let Err(e) = self.conn.send(event, handle).await {

@@ -41,6 +41,11 @@ pub enum CaptureEvent {
     Begin,
     /// input event coming from capture handle
     Input(Event),
+    /// The capture ended without being asked to: the input reaches this
+    /// device again. The Windows backend does this when Windows stops
+    /// handing the mouse to its hooks while capturing, for instance over a
+    /// window run as administrator.
+    Released,
 }
 
 impl Display for CaptureEvent {
@@ -48,6 +53,7 @@ impl Display for CaptureEvent {
         match self {
             CaptureEvent::Begin => write!(f, "begin capture"),
             CaptureEvent::Input(e) => write!(f, "{e}"),
+            CaptureEvent::Released => write!(f, "capture released"),
         }
     }
 }

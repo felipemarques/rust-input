@@ -11,6 +11,7 @@ use super::{Capture, CaptureError, CaptureEvent, Position};
 
 mod display_util;
 mod event_thread;
+mod process;
 
 pub struct WindowsInputCapture {
     event_rx: Receiver<(Position, CaptureEvent)>,
@@ -55,7 +56,9 @@ impl Capture for WindowsInputCapture {
 
 impl WindowsInputCapture {
     pub(crate) fn new() -> Self {
-        let (event_tx, event_rx) = channel(10);
+        // room for a moment of a fast mouse while the service is busy: the
+        // hooks never wait for it, what does not fit is dropped
+        let (event_tx, event_rx) = channel(128);
         let event_thread = EventThread::new(event_tx);
         Self {
             event_thread,
