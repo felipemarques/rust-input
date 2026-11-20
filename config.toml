@@ -23,6 +23,9 @@ show_transfers_window = true
 # "Copy to RustInput" in the menu of Explorer, Nemo and Nautilus (on by default)
 file_manager_menu = true
 
+# hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
+radial_menu = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]

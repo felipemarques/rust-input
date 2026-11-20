@@ -26,6 +26,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
+| 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ ⁷ | ✅ | — | — |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
@@ -41,6 +42,7 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are new in 0.17.0, not tested on Windows yet.
 ⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁶ New in 0.19.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
+⁷ New in 0.20.0: tested in automated runs on Linux (X11), not yet on Windows.
 
 <p align="center">
   <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
@@ -140,6 +142,32 @@ their place on the clipboard, when RustInput starts, or with **Remove unpasted f
 </p>
 
 To turn file transfers off altogether, set `clipboard_files = false` in the [configuration](#configuration) file.
+
+## Radial menu
+
+Hold **Ctrl and the left Alt**, and nothing else, for a moment: a wheel of actions shows around the pointer, like the
+weapon wheel of GTA V. Point at an action and let go of the keys to pick it; letting go in the middle or pressing Esc
+picks nothing.
+
+<p align="center">
+  <img src="screenshots/radial-menu.png" width="380" alt="The radial menu">
+</p>
+
+- **Go to** another computer: the pointer moves there without crossing the edge, at the same height.
+- **Send the clipboard** to the other computers right away, without moving there.
+- **Send copied files**: what was copied with Ctrl+C in the file manager, like "Copy to RustInput".
+- **Keep the pointer here**: crossing an edge does nothing until you pick **Free the pointer**, handy for games and
+  drawing.
+- **Turn auto-send on / off**: "Send copied files automatically".
+- **File transfers** and **Open RustInput** open those windows.
+
+The wheel shows on the screen of the computer the pointer is on: the keys go there, and that computer shows it.
+The keys are only watched, never taken from the applications, so every shortcut with Ctrl+Alt keeps working: pressing
+another key with them keeps the wheel from showing, or closes it. The right Alt (AltGr on many keyboards) does not
+count. While the wheel shows the pointer stays inside it, and afterwards it goes back to where it was. The labels are
+in Portuguese when the system is, in English otherwise.
+
+The wheel needs X11 or Windows. To turn it off, set `radial_menu = false` in the [configuration](#configuration) file.
 
 ## Pointer position
 
@@ -570,6 +598,9 @@ show_transfers_window = true
 # "Copy to RustInput" in the menu of Explorer, Nemo and Nautilus (on by default)
 file_manager_menu = true
 
+# hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
+radial_menu = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
@@ -620,6 +651,9 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [ ] Paste files on demand, while they are transferred (like RustDesk)
 - [x] Authorize both computers on each other from the controlling one, with a code
+- [x] Formatted text (HTML) on the clipboard
+- [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
+- [ ] Screenshot tool like Flameshot, from the radial menu
 
 
 ## Detailed OS Support

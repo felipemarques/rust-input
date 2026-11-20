@@ -277,3 +277,26 @@ challenge goes out, and lasts ten minutes; a used up code is replaced and the
 new one shown. On success both devices add each other to
 `authorized_fingerprints`, named with the name the other one sent (its host
 name, without control characters, at most 64 characters).
+
+## Radial menu
+
+Holding Ctrl and the left Alt alone for 250 ms shows a wheel of actions (see
+`src/radial`). It is local to each device, nothing of it goes over the
+network: the device the pointer is on shows it, because the keys go there.
+
+- The keys are watched without taking them from applications: raw XInput 2
+  events on X11, a low level keyboard hook that passes everything on on
+  Windows. Another key pressed with Ctrl+Alt (a shortcut) keeps the wheel from
+  opening, or closes it. Windows reports AltGr as Ctrl plus the right Alt,
+  which does not count.
+- A device whose capture is active (the pointer is on another device) does
+  not show it: that device gets the keys and shows its own.
+- The wheel is an override-redirect window with an alpha channel on X11 (cut
+  round with the shape extension when no compositor runs) and a layered
+  window on Windows, drawn with tiny-skia and fontdue in a font of the system.
+  The pointer is confined to it (a pointer grab, `ClipCursor`) and goes back
+  to where it was when it closes.
+- "Go to" asks the capture to start for that client as if the pointer crossed
+  its edge at its current height (`Capture::enter`, X11 and Windows).
+  "Keep the pointer here" makes the capture release every capture right away,
+  except one asked for with "Go to".
