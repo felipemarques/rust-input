@@ -29,6 +29,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
+| 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
@@ -44,6 +45,7 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁶ New in 0.19.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁷ New in 0.21.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
+⁸ New in 0.22.0: tested in automated runs on Linux (X11), not yet by hand.
 
 <p align="center">
   <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
@@ -641,6 +643,10 @@ file_manager_menu = true
 
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
+
+# light or dark windows: "system" (as the system, the default), "light" or "dark";
+# also chosen in the window, under "appearance"
+theme = "system"
 
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic

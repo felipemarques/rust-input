@@ -26,6 +26,10 @@ file_manager_menu = true
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
+# light or dark windows: "system" (as the system, the default), "light" or "dark";
+# also chosen in the window, under "appearance"
+theme = "system"
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
