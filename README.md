@@ -263,6 +263,14 @@ Most current desktop environments and operating systems are fully supported, thi
 >
 > - **Windows**: The mouse cursor will be invisible when sending input to a Windows system if
 > there is no real mouse connected to the machine.
+>
+> - **Windows, programs run as administrator**: Windows keeps the input going to a program run as administrator
+> (Task Manager is one, so is a terminal whose title starts with "Administrator:") from programs that are not.
+> While such a program is in front, RustInput does not see the keyboard; while the pointer is over one of its windows,
+> it does not see the mouse, so the pointer does not cross to another computer from there. When that happens while the
+> pointer is on another computer, RustInput brings the keyboard and the mouse back, so no key stays pressed anywhere.
+> `daemon.log` (see [Installation](#installation)) names the program each time. RustInput run as administrator
+> reaches those windows too.
 
 For more detailed information about os support see [Detailed OS Support](#detailed-os-support)
 

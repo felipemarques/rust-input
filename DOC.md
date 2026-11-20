@@ -329,3 +329,35 @@ channel is not counted: its transfers have their own progress.
 Events to the frontends are queued per frontend and written by a task of its
 own (`rustinput-ipc/src/listen.rs`), so a frontend that stops reading never
 holds up the service; one with 1024 events waiting is disconnected.
+
+## Capture on Windows
+
+The Windows backend watches the input with low level hooks on a thread of
+its own (`input-capture/src/windows/event_thread.rs`). Windows waits for every
+hook with every key press and mouse movement, skips a hook that answers late
+and, after a while, removes it without telling. So the hooks never wait for
+the service: an event that does not fit into the channel to it is dropped
+(and counted in the log), and when even the start of a capture does not fit,
+the pointer stays and the next movement tries again. The thread runs at a
+high priority, and the process asks Windows not to slow it down to save
+energy (`SetProcessInformation` with `ProcessPowerThrottling`).
+
+Windows does not hand the hooks the input that goes to a program run as
+administrator, unless RustInput runs as administrator too: the keyboard while
+such a program is in front, the mouse while the pointer is over one of its
+windows. A watchdog looks at the pointer four times a second:
+
+- not capturing, the pointer moved but the mouse hook was not called: over a
+  program run as administrator this is logged with its name; otherwise the
+  hooks were removed and are installed again;
+- capturing, the pointer moved although the mouse hook keeps it in place:
+  Windows passes the mouse by the hook, so the capture ends with
+  `CaptureEvent::Released`. The service then releases it as if the other
+  device had left: the keys still held there are let go and `Leave` is sent.
+
+The same happens when a program run as administrator comes to the front
+while capturing, because what is typed would go to it.
+
+Keys and mouse buttons held down on Windows when the pointer leaves are
+released on Windows, not on the other device, which never saw them pressed.
+
