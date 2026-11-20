@@ -236,3 +236,36 @@ Files go out in two ways:
 Every transfer is written to a log (`transfers.log` in
 `$XDG_STATE_HOME/rustinput`, `%LOCALAPPDATA%\rustinput` or
 `~/Library/Logs/rustinput`) with its files and sizes.
+
+## Pairing
+
+Two devices can authorize each other from the controlling one (see
+`src/pairing.rs`). When a device refuses an input connection from an unknown
+certificate, it makes a six digit code for that fingerprint and shows it with
+the authorization request. The user enters it on the device that tried to
+connect, which then opens a TLS connection to the TCP port of the other one
+(the port of the file channel) and starts with the magic `RIP1` instead of
+`RIF1`. The accepting side takes any client certificate in TLS and decides
+afterwards: file channels only for authorized fingerprints, pairing for
+anyone, which needs the code.
+
+Messages are length prefixed (big endian u32) JSON:
+
+```mermaid
+sequenceDiagram
+    Connecting->>Accepting: Request(name, SPAKE2 message A)
+    Accepting-->>Connecting: Challenge(name, SPAKE2 message B, proof B) or Refused(reason)
+    Connecting->>Accepting: Confirm(proof A)
+    Accepting-->>Connecting: Accepted or Refused("wrong code")
+```
+
+Both sides run SPAKE2 (Ed25519 group) with the code as password, the
+fingerprint of the connecting side as identity A and that of the accepting
+side as identity B, each taken from the certificate seen in TLS. The proofs
+are SHA-256 over a label for the side and the derived key. A device in between
+sees other certificates on each side, so the identities and thus the keys
+differ and the proofs fail. A code allows three tries, counted when the
+challenge goes out, and lasts ten minutes; a used up code is replaced and the
+new one shown. On success both devices add each other to
+`authorized_fingerprints`, named with the name the other one sent (its host
+name, without control characters, at most 64 characters).

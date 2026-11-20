@@ -27,6 +27,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
+| 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
 
 Used every day between **Windows 11** and **Linux Mint 22 (Cinnamon, X11)**: the ✅ in those two columns are tested by hand.
@@ -37,6 +38,7 @@ The Wayland and macOS builds come from the same code and pass CI, but have not b
 ³ Needs a desktop with a system tray: Windows, Cinnamon, KDE, XFCE, MATE, GNOME with the AppIndicator extension.
 ⁴ Tested in automated runs between two Linux (X11) computers, including pasting in Nemo, and by hand from Linux to
 Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are new in 0.17.0, not tested on Windows yet.
+⁵ New in 0.18.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="420" alt="The RustInput window">
@@ -136,13 +138,24 @@ the pointer keeps the previous behavior.
 ## Authorizing computers
 
 Every computer has a certificate fingerprint, shown in its window. Connections are encrypted and only accepted from
-authorized fingerprints:
+authorized fingerprints: to control a computer, that computer has to authorize the one controlling it, and to share
+the clipboard and files both have to authorize each other.
 
-- **to control a computer**, that computer has to authorize the one controlling it. When an unknown computer tries
-  to connect, the window asks whether to authorize it;
-- **to share the clipboard**, both computers have to authorize each other, so the controlling computer also has to
-  authorize the controlled one with the "Authorize" button and its fingerprint. Without it the clipboard could be sent
-  to whoever answers at the configured address.
+**With a code, from the controlling computer** (both need RustInput 0.18.0 or newer):
+
+1. Add the other computer in RustInput and move the pointer to it. It refuses, and its window asks whether to
+   authorize this computer, showing a six digit code.
+2. Back on the controlling computer, open the settings of the other computer in the list of connections, click
+   **Enter code…** and type the code.
+
+Both computers are then authorized on each other, for control, clipboard and files. The code never goes over the
+network: both sides prove they know it with SPAKE2, a password authenticated key exchange, bound to the certificates
+they see. Someone in between the two computers can not take part, and a code works for three tries and ten minutes.
+The implementation uses the [spake2](https://crates.io/crates/spake2) crate, which has not had an independent audit.
+
+**On each computer**: the window of the computer being controlled asks whether to authorize the one trying to
+connect; for the clipboard, the controlling computer also has to authorize the controlled one with the "Authorize"
+button and its fingerprint.
 
 ## Compatibility with Lan Mouse
 
@@ -578,9 +591,9 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
 - [x] Pointer keeps its relative position across computers (Windows, X11)
-- [x] Copy and paste files and folders, with progress in the tray
+- [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [ ] Paste files on demand, while they are transferred (like RustDesk)
-- [ ] Authorize the controlled computer from the controlling one with one click
+- [x] Authorize both computers on each other from the controlling one, with a code
 
 
 ## Detailed OS Support
