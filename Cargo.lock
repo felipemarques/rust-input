@@ -2895,7 +2895,7 @@ dependencies = [
 
 [[package]]
 name = "rustinput"
-version = "0.25.0"
+version = "0.25.1"
 dependencies = [
  "arboard",
  "async-trait",
