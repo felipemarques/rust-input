@@ -940,7 +940,7 @@ fn update_display_regions(displays: &mut Vec<RECT>, generation: &mut i32) {
     }
 }
 
-fn enumerate_displays(display_rects: &mut Vec<RECT>) {
+pub(crate) fn enumerate_displays(display_rects: &mut Vec<RECT>) {
     display_rects.clear();
     unsafe {
         let mut devices = vec![];

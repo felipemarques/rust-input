@@ -18,6 +18,9 @@ pub use error::{CaptureCreationError, CaptureError, InputCaptureError};
 
 pub mod error;
 
+/// the monitors of this computer, for the arrangement
+pub mod desktop;
+
 #[cfg(libei)]
 mod libei;
 

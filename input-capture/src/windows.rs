@@ -13,6 +13,13 @@ use super::{Capture, CaptureError, CaptureEvent, Position};
 
 mod display_util;
 mod event_thread;
+
+/// the monitors of the desktop, in physical pixels
+pub(crate) fn displays() -> Vec<windows::Win32::Foundation::RECT> {
+    let mut displays = Vec::new();
+    event_thread::enumerate_displays(&mut displays);
+    displays
+}
 mod process;
 
 pub struct WindowsInputCapture {

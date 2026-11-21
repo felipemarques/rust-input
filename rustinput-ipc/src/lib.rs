@@ -20,6 +20,9 @@ mod dirs;
 pub use dirs::{log_dir, received_dir, transfer_log};
 pub use input_event::edge::{EdgeLink, Span};
 
+/// the arrangement of the computers
+pub mod layout;
+
 /// "512 bytes", "1.5 KB", "120.3 MB", "2.1 GB" (powers of 1024, like file
 /// managers)
 pub fn human_size(bytes: u64) -> String {
