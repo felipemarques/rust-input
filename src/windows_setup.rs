@@ -271,6 +271,8 @@ mod firewall {
     /// removing one rule after another: more of ours is a mistake
     const MOST_RULES: usize = 64;
 
+    /// COM for this thread while it lives: every interface must be released
+    /// before it ends
     struct Com;
 
     impl Com {
@@ -427,6 +429,10 @@ mod firewall {
     /// Removes the rules of the group; returns how many there were.
     pub(super) fn remove() -> Result<usize> {
         let _com = Com::init()?;
-        remove_ours(&rules()?)
+        // a local, released before COM ends: a temporary of the last
+        // expression would outlive `_com`, and releasing it then crashes
+        let rules = rules()?;
+        let removed = remove_ours(&rules)?;
+        Ok(removed)
     }
 }

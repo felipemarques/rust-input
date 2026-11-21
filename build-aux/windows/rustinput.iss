@@ -113,6 +113,11 @@ Type: files; Name: "{userprograms}\Atualizar o RustInput.lnk"
 Type: filesandordirs; Name: "{app}.new"
 Type: filesandordirs; Name: "{app}.swap"
 
+[UninstallDelete]
+; also when the folder was there before the installer (update-rustinput.ps1
+; made it): the uninstaller only removes the folders it made itself
+Type: dirifempty; Name: "{app}"
+
 [Files]
 Source: "{#PackageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

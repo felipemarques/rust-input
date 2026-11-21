@@ -195,10 +195,10 @@ $settings = @(Get-Daemon | ForEach-Object { (Invoke-CimMethod -InputObject $_ -M
 $uninstaller = ([string](Get-ItemProperty -LiteralPath $key).UninstallString).Trim('"')
 $uninstallLog = Join-Path $env:RUNNER_TEMP 'uninstall.log'
 Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="{0}"' -f $uninstallLog) -Wait
-# it goes on in a copy of itself in %TEMP% (_iu*.tmp)
+# it goes on in a copy of itself in %TEMP% (_unins.tmp, or _iu*.tmp with an older Inno Setup)
 $deadline = (Get-Date).AddSeconds(120)
 while (((Test-Path -LiteralPath $key) -or (Test-Path -LiteralPath $uninstaller) -or
-        @(Get-Process | Where-Object { $_.Name -like '_iu*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
+        @(Get-Process | Where-Object { $_.Name -like '_iu*' -or $_.Name -like '_unins*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 500
 }
 Write-Host "== $uninstallLog"

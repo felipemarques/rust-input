@@ -777,11 +777,12 @@ function Remove-SetupInstall {
     }
     Write-Info ((T 'removing the installation of the installer ({0}), the settings stay...' 'removendo a instalação do instalador ({0}), as configurações ficam...') -f $install.Version)
     [void](Start-Process -FilePath $install.Uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru)
-    # it goes on in a copy of itself in %TEMP% (_iu*.tmp): done once Windows
-    # no longer lists it, its file is gone and that copy ended
+    # it goes on in a copy of itself in %TEMP% (_unins.tmp, or _iu*.tmp with
+    # an older Inno Setup): done once Windows no longer lists it, its file is
+    # gone and that copy ended
     $deadline = (Get-Date).AddSeconds(120)
     while (((Get-SetupInstall) -or (Test-Path -LiteralPath $install.Uninstaller) -or
-            @(Get-Process | Where-Object { $_.Name -like '_iu*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
+            @(Get-Process | Where-Object { $_.Name -like '_iu*' -or $_.Name -like '_unins*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 500
     }
     if (Get-SetupInstall) {
