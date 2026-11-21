@@ -229,13 +229,19 @@ impl Supervisor {
             } else {
                 self.back_off();
             }
+            // before looking at the port: connecting to a closed one takes
+            // Windows a few seconds
+            let wait = self
+                .next_start
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64()
+                .ceil();
             if ran < Duration::from_secs(10) && rustinput_ipc::is_service_running() {
                 // "service already running!": the port of the window is taken
                 self.note(format!(
                     "the daemon ended at once: another RustInput runs without the service, \
                      without administrator rights (close it from the tray icon); trying again \
-                     every {} s",
-                    self.delay.as_secs()
+                     every {wait} s"
                 ));
             } else {
                 log::warn!(
@@ -243,10 +249,7 @@ impl Supervisor {
                      again in {} s",
                     daemon.pid,
                     ran.as_secs(),
-                    self.next_start
-                        .saturating_duration_since(Instant::now())
-                        .as_secs_f64()
-                        .ceil()
+                    wait
                 );
             }
         }
