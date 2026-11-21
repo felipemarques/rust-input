@@ -211,11 +211,15 @@ begin
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Code: Integer;
 begin
   if CurUninstallStep = usUninstall then
   begin
     // the service and the rules of the firewall, while rustinput.exe is there
-    UninstallDone := RunHidden(ExpandConstant('{app}\rustinput.exe'), 'windows-setup uninstall') = 0;
+    Code := RunHidden(ExpandConstant('{app}\rustinput.exe'), 'windows-setup uninstall');
+    Log(Format('rustinput.exe windows-setup uninstall: %d', [Code]));
+    UninstallDone := Code = 0;
     if not UninstallDone then
     begin
       RunHidden(ExpandConstant('{sys}\net.exe'), 'stop RustInput');

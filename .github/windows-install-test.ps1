@@ -193,9 +193,26 @@ Test-Installed '7' $version $true
 $settings = @(Get-Daemon | ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User } |
     ForEach-Object { "C:\Users\$_\AppData\Local\rustinput" } | Where-Object { Test-Path -LiteralPath $_ })
 $uninstaller = ([string](Get-ItemProperty -LiteralPath $key).UninstallString).Trim('"')
-Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
+$uninstallLog = Join-Path $env:RUNNER_TEMP 'uninstall.log'
+Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="{0}"' -f $uninstallLog) -Wait
+# it goes on in a copy of itself in %TEMP% (_iu*.tmp)
 $deadline = (Get-Date).AddSeconds(120)
-while (((Test-Path -LiteralPath $key) -or (Test-Path -LiteralPath $uninstaller)) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+while (((Test-Path -LiteralPath $key) -or (Test-Path -LiteralPath $uninstaller) -or
+        @(Get-Process | Where-Object { $_.Name -like '_iu*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+}
+Write-Host "== $uninstallLog"
+Get-Content -LiteralPath $uninstallLog -ErrorAction SilentlyContinue | Out-Host
+foreach ($path in (Join-Path $logs 'setup.log'), (Join-Path $logs 'service.log')) {
+    if (Test-Path -LiteralPath $path) {
+        Write-Host "== $path"
+        Get-Content -LiteralPath $path | Out-Host
+    }
+}
+if (Test-Path -LiteralPath $folder) {
+    Write-Host "== left in $folder"
+    Get-ChildItem -LiteralPath $folder -Recurse -Force | Select-Object FullName, Length | Out-Host
+}
 Test-Exists '7' $key $false
 if (Get-Service -Name RustInput -ErrorAction SilentlyContinue) { Fail '7: the service is still installed' }
 if (Get-Process -Name rustinput -ErrorAction SilentlyContinue) { Fail '7: RustInput still runs' }

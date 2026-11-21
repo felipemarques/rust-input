@@ -777,10 +777,11 @@ function Remove-SetupInstall {
     }
     Write-Info ((T 'removing the installation of the installer ({0}), the settings stay...' 'removendo a instalação do instalador ({0}), as configurações ficam...') -f $install.Version)
     [void](Start-Process -FilePath $install.Uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru)
-    # it goes on in a copy of itself: done once Windows no longer lists it
-    # and its file is gone
+    # it goes on in a copy of itself in %TEMP% (_iu*.tmp): done once Windows
+    # no longer lists it, its file is gone and that copy ended
     $deadline = (Get-Date).AddSeconds(120)
-    while (((Get-SetupInstall) -or (Test-Path -LiteralPath $install.Uninstaller)) -and (Get-Date) -lt $deadline) {
+    while (((Get-SetupInstall) -or (Test-Path -LiteralPath $install.Uninstaller) -or
+            @(Get-Process | Where-Object { $_.Name -like '_iu*' }).Count -gt 0) -and (Get-Date) -lt $deadline) {
         Start-Sleep -Milliseconds 500
     }
     if (Get-SetupInstall) {
@@ -1140,7 +1141,7 @@ function Invoke-SetupFileInstall {
     $installed = Get-ExeVersion $Exe
     if ($moving) { $installed = Get-ExeVersion (Join-Path $OldDefaultDir 'rustinput.exe') }
     $setupPath = (Resolve-Path -LiteralPath $Setup).Path
-    $target = [string](Get-Item -LiteralPath $setupPath).VersionInfo.ProductVersion
+    $target = ([string](Get-Item -LiteralPath $setupPath).VersionInfo.ProductVersion).Trim()
     Write-Info ((T 'installed:  {0}' 'instalada:  {0}') -f (Get-VersionText $installed))
     Write-Info ((T 'installer:  {0} ({1})' 'instalador: {0} ({1})') -f $setupPath, $target)
     Write-Detail ('SHA-256: {0}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $setupPath).Hash.ToLowerInvariant())
