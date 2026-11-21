@@ -43,6 +43,31 @@
                 <property name="policy">wide</property>
               </object>
             </property>
+            <child type="start">
+              <object class="GtkBox">
+                <property name="spacing">8</property>
+                <property name="margin-start">4</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">io.github.felipemarques.RustInput</property>
+                    <property name="pixel-size">22</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">RustInput</property>
+                    <style><class name="heading"/></style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel" id="version_label">
+                    <property name="valign">center</property>
+                    <property name="tooltip-text" translatable="yes">Version and commit</property>
+                    <style><class name="version-badge"/></style>
+                  </object>
+                </child>
+              </object>
+            </child>
             <child type="end">
               <object class="GtkMenuButton">
                 <property name="icon-name">open-menu-symbolic</property>
@@ -73,72 +98,51 @@
                             <property name="tightening-threshold">1100</property>
                             <property name="child">
                               <object class="GtkBox">
-                                <property name="orientation">horizontal</property>
+                                <property name="orientation">vertical</property>
                                 <property name="spacing">28</property>
-                                <property name="margin-top">24</property>
+                                <property name="margin-top">20</property>
                                 <property name="margin-bottom">24</property>
                                 <property name="margin-start">24</property>
                                 <property name="margin-end">24</property>
 
-                                <!-- left: this computer, at most 360 wide whatever
-                                     the length of its texts -->
+                                <!-- the arrangement, the heart of it, full width -->
                                 <child>
-                                  <object class="AdwClamp">
-                                    <property name="maximum-size">360</property>
-                                    <property name="tightening-threshold">360</property>
-                                    <property name="hexpand">false</property>
-                                    <property name="valign">start</property>
-                                    <property name="child">
-                                  <object class="GtkBox">
-                                    <property name="orientation">vertical</property>
-                                    <property name="spacing">24</property>
-                                    <property name="width-request">320</property>
-                                    <child>
-                                      <object class="GtkBox">
-                                        <property name="spacing">14</property>
-                                        <property name="margin-start">4</property>
-                                        <child>
-                                          <object class="GtkImage">
-                                            <property name="icon-name">io.github.felipemarques.RustInput</property>
-                                            <property name="pixel-size">56</property>
+                                  <object class="AdwPreferencesGroup" id="arrangement_group">
+                                    <property name="title" translatable="yes">Arrangement</property>
+                                    <property name="description" translatable="yes">Drag a computer next to another one, like monitors: the mouse crosses where they touch. Click one for its details. Applying it sets up the other computers too.</property>
+                                    <property name="header-suffix">
+                                      <object class="GtkButton">
+                                        <signal name="clicked" handler="handle_add_client_pressed" swapped="true"/>
+                                        <property name="valign">start</property>
+                                        <property name="tooltip-text" translatable="yes">Add a computer by its name or address</property>
+                                        <property name="child">
+                                          <object class="AdwButtonContent">
+                                            <property name="icon-name">list-add-symbolic</property>
+                                            <property name="label" translatable="yes">Add computer</property>
                                           </object>
-                                        </child>
-                                        <child>
+                                        </property>
+                                        <style><class name="suggested-action"/></style>
+                                      </object>
+                                    </property>
+                                  </object>
+                                </child>
+
+                                <!-- below: this computer on the left, the others on the right -->
+                                <child>
+                                  <object class="GtkBox">
+                                    <property name="orientation">horizontal</property>
+                                    <property name="spacing">28</property>
+                                    <child>
+                                      <object class="AdwClamp">
+                                        <property name="maximum-size">360</property>
+                                        <property name="tightening-threshold">360</property>
+                                        <property name="hexpand">false</property>
+                                        <property name="valign">start</property>
+                                        <property name="child">
                                           <object class="GtkBox">
                                             <property name="orientation">vertical</property>
-                                            <property name="valign">center</property>
-                                            <property name="spacing">2</property>
-                                            <child>
-                                              <object class="GtkBox">
-                                                <property name="spacing">8</property>
-                                                <child>
-                                                  <object class="GtkLabel">
-                                                    <property name="label">RustInput</property>
-                                                    <property name="xalign">0</property>
-                                                    <style><class name="title-2"/></style>
-                                                  </object>
-                                                </child>
-                                                <child>
-                                                  <object class="GtkLabel" id="version_label">
-                                                    <property name="valign">center</property>
-                                                    <property name="tooltip-text" translatable="yes">Version and commit</property>
-                                                    <style><class name="version-badge"/></style>
-                                                  </object>
-                                                </child>
-                                              </object>
-                                            </child>
-                                            <child>
-                                              <object class="GtkLabel">
-                                                <property name="label" translatable="yes">One mouse and keyboard for all your computers</property>
-                                                <property name="xalign">0</property>
-                                                <property name="wrap">true</property>
-                                                <style><class name="dim-label"/></style>
-                                              </object>
-                                            </child>
-                                          </object>
-                                        </child>
-                                      </object>
-                                    </child>
+                                            <property name="spacing">24</property>
+                                            <property name="width-request">320</property>
                                     <child>
                                       <object class="AdwPreferencesGroup">
                                         <property name="title" translatable="yes">This computer</property>
@@ -307,40 +311,19 @@
                                         </child>
                                       </object>
                                     </child>
-                                  </object>
-                                    </property>
-                                  </object>
-                                </child>
-
-                                <!-- right: the other computers -->
-                                <child>
-                                  <object class="GtkBox">
-                                    <property name="orientation">vertical</property>
-                                    <property name="spacing">24</property>
-                                    <property name="hexpand">true</property>
-                                    <child>
-                                      <object class="AdwPreferencesGroup" id="arrangement_group">
-                                        <property name="title" translatable="yes">Arrangement</property>
-                                        <property name="description" translatable="yes">Drag a computer next to another one, like monitors: the mouse crosses where they touch. Applying it sets up the other computers too.</property>
+                                          </object>
+                                        </property>
                                       </object>
                                     </child>
                                     <child>
+                                      <object class="GtkBox">
+                                        <property name="orientation">vertical</property>
+                                        <property name="spacing">24</property>
+                                        <property name="hexpand">true</property>
+                                    <child>
                                       <object class="AdwPreferencesGroup">
                                         <property name="title" translatable="yes">Connections</property>
-                                        <property name="description" translatable="yes">The computers this one shares its mouse, keyboard and clipboard with. Switch one on to use it, open it for its address and side.</property>
-                                        <property name="header-suffix">
-                                          <object class="GtkButton">
-                                            <signal name="clicked" handler="handle_add_client_pressed" swapped="true"/>
-                                            <property name="valign">start</property>
-                                            <property name="child">
-                                              <object class="AdwButtonContent">
-                                                <property name="icon-name">list-add-symbolic</property>
-                                                <property name="label" translatable="yes">Add</property>
-                                              </object>
-                                            </property>
-                                            <style><class name="suggested-action"/></style>
-                                          </object>
-                                        </property>
+                                        <property name="description" translatable="yes">Switch one on to use it; open it, or click it in the arrangement, for its address and the code to authorize it.</property>
                                         <child>
                                           <object class="GtkListBox" id="client_list">
                                             <property name="selection-mode">none</property>
@@ -355,35 +338,6 @@
                                         </child>
                                       </object>
                                     </child>
-                                    <child>
-                                      <object class="AdwPreferencesGroup">
-                                        <property name="title" translatable="yes">Allowed to connect</property>
-                                        <property name="description" translatable="yes">The computers whose certificate this one accepts. A computer that is not here asks first, with a code.</property>
-                                        <property name="header-suffix">
-                                          <object class="GtkButton">
-                                            <signal name="clicked" handler="handle_add_cert_fingerprint" swapped="true"/>
-                                            <property name="valign">start</property>
-                                            <property name="child">
-                                              <object class="AdwButtonContent">
-                                                <property name="icon-name">auth-fingerprint-symbolic</property>
-                                                <property name="label" translatable="yes">Authorize</property>
-                                              </object>
-                                            </property>
-                                            <style><class name="flat"/></style>
-                                          </object>
-                                        </property>
-                                        <child>
-                                          <object class="GtkListBox" id="authorized_list">
-                                            <property name="selection-mode">none</property>
-                                            <child type="placeholder">
-                                              <object class="AdwActionRow" id="authorized_placeholder">
-                                                <property name="title" translatable="yes">No computers allowed yet</property>
-                                                <property name="subtitle" translatable="yes">Authorize one with “Authorize”, or accept its request</property>
-                                              </object>
-                                            </child>
-                                            <style><class name="boxed-list"/></style>
-                                          </object>
-                                        </child>
                                       </object>
                                     </child>
                                   </object>
@@ -430,6 +384,37 @@
                             <property name="title" translatable="yes">File Transfers</property>
                             <property name="description" translatable="yes">Copy files on one computer and paste them on another</property>
                             <property name="visible">false</property>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Allowed to connect</property>
+                            <property name="description" translatable="yes">The computers whose certificate this one accepts. A computer that is not here asks first, with a code.</property>
+                            <property name="header-suffix">
+                              <object class="GtkButton">
+                                <signal name="clicked" handler="handle_add_cert_fingerprint" swapped="true"/>
+                                <property name="valign">start</property>
+                                <property name="child">
+                                  <object class="AdwButtonContent">
+                                    <property name="icon-name">auth-fingerprint-symbolic</property>
+                                    <property name="label" translatable="yes">Authorize</property>
+                                  </object>
+                                </property>
+                                <style><class name="flat"/></style>
+                              </object>
+                            </property>
+                            <child>
+                              <object class="GtkListBox" id="authorized_list">
+                                <property name="selection-mode">none</property>
+                                <child type="placeholder">
+                                  <object class="AdwActionRow" id="authorized_placeholder">
+                                    <property name="title" translatable="yes">No computers allowed yet</property>
+                                    <property name="subtitle" translatable="yes">Authorize one with “Authorize”, or accept its request</property>
+                                  </object>
+                                </child>
+                                <style><class name="boxed-list"/></style>
+                              </object>
+                            </child>
                           </object>
                         </child>
                       </object>

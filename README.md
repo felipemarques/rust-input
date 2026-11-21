@@ -22,6 +22,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🖥️ Be controlled by another computer | ✅ | ✅ | ✅ ¹ | ✅ |
 | ↔️ Move between computers through the screen edge, both ways | ✅ | ✅ | ✅ ¹ | ✅ |
 | 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
+| 🧩 Arrange the computers like monitors, by dragging them; set up on all of them at once | ✅ ⁹ | ✅ ⁹ | ✅ ² | ✅ ² |
 | 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
@@ -46,13 +47,14 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁶ New in 0.19.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁷ New in 0.21.0: tested in automated runs between two Linux (X11) computers, not yet on Windows.
 ⁸ New in 0.22.0: tested in automated runs on Linux (X11), not yet by hand.
+⁹ New in 0.26.0: tested in automated runs between two Linux (X11) computers, not yet by hand. On other systems than
+Windows and Linux (X11), the parts of an edge that lead nowhere are not a wall yet (see [Arrangement](#arrangement)).
 
 <p align="center">
-  <img src="screenshots/main-window.png" width="820" alt="The window of RustInput: this computer on the left, the other computers on the right">
+  <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput, with the arrangement of two computers">
   <br>
-  <em>The Computers page: on the left, what the other computers need to reach this one and whether it sends and
-  receives; on the right, the computers it connects to (one opened, with its address and position) and those allowed
-  to connect. Preferences and About are the other pages.</em>
+  <em>The Computers page: the arrangement on top (see <a href="#arrangement">Arrangement</a>), this computer and the
+  connections below. Preferences and About are the other pages.</em>
 </p>
 
 <p align="center">
@@ -202,6 +204,32 @@ Releasing with the release bind returns the pointer to where it left.
 
 This needs RustInput 0.15.0 or newer on both computers and works on Windows and Linux (X11); with the other backends
 the pointer keeps the previous behavior.
+
+## Arrangement
+
+The Computers page shows the computers like the monitors in the display settings of a desktop: each one at the size of
+its desktop, with its monitors, its system, whether it is connected and which one the mouse is on. Drag a computer next
+to another one and it sticks to the nearest free edge, aligned with the ends, the middle and the monitors it comes
+close to (the arrow keys move the selected one, Space selects the next). The parts of the edges where two computers
+touch are drawn in the accent color: the mouse crosses there, keeps its place along the way, and the rest of the edge
+is a wall. Two computers can share an edge, each on its part of it (two laptops right of a tall monitor). A pair whose
+edges are not shared can also meet over the whole of both edges, the place along them in proportion, as RustInput did
+before arrangements: the switch next to that neighbor, under the arrangement. Clicking a computer opens its connection
+below, with its address and the code to authorize it.
+
+**Apply** sets up this computer and sends the arrangement to the others, over the encrypted TCP connection, to the
+computers that authorized this one only. Each finds itself in it and sets up its connections: the edge and the part of
+it for each neighbor, a new connection for a computer it did not know yet (as when the other computer is added there by
+hand), none for one that touches nothing. Arranged on one computer, all of them follow: there is no need to set up
+the other side any more. The arrangement is kept in `config.toml` (`[layout]`), and the newest one wins.
+
+Without an arrangement the page proposes one made from the connections as they are: whole edges, as before. The
+computers describe themselves to each other (name, system, monitors) when the window opens; one that does not answer
+(older than 0.26.0, or not authorizing this one) gets the size of a full HD screen and a note.
+
+The part of an edge that leads nowhere is a wall on Windows and Linux (X11). With the other capture backends the pointer
+is let go there at once, which works but may flicker when pushed against it. Both computers need RustInput 0.26.0 or newer
+for the parts of the edges and for sending the arrangement; with an older one, the edges are whole on its side.
 
 ## Authorizing computers
 

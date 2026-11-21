@@ -412,6 +412,9 @@ pub enum FrontendEvent {
     ArrangementSent { name: String, error: Option<String> },
     /// another computer, `by`, changed the arrangement
     ArrangementChanged { by: String },
+    /// the keyboard and the mouse of this computer control the client, or
+    /// this computer itself (`None`)
+    PointerAt(Option<ClientHandle>),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

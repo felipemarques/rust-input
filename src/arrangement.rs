@@ -50,6 +50,9 @@ pub(crate) struct Description {
     pub(crate) name: String,
     /// its monitors, from the top left corner of its desktop
     pub(crate) monitors: Vec<Monitor>,
+    /// its system (`std::env::consts::OS`)
+    #[serde(default)]
+    pub(crate) os: String,
     /// the revision of the arrangement it has
     pub(crate) revision: u64,
 }
@@ -113,6 +116,7 @@ impl Arrangement {
         Description {
             name: self.name.clone(),
             monitors: own_monitors().map(|(m, ..)| m).unwrap_or_default(),
+            os: std::env::consts::OS.to_owned(),
             revision: *self.revision.borrow(),
         }
     }
@@ -300,6 +304,7 @@ mod tests {
                 width: 1920,
                 height: 1080,
                 monitors: Vec::new(),
+                os: "linux".into(),
                 hostname: Some("a".into()),
                 ips: Vec::new(),
                 port: 4242,

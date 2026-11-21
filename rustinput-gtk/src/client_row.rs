@@ -155,6 +155,18 @@ impl ClientRow {
         self.imp().set_pos(pos);
     }
 
+    /// With an arrangement, the arrangement sets the position: the row only
+    /// shows it.
+    pub fn set_arranged(&self, arranged: bool) {
+        let position = &self.imp().position;
+        position.set_sensitive(!arranged);
+        position.set_subtitle(if arranged {
+            "Set by the arrangement above"
+        } else {
+            "The edge of this screen that leads to it"
+        });
+    }
+
     pub fn set_dns_state(&self, resolved: bool) {
         self.imp().set_dns_state(resolved);
     }

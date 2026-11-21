@@ -396,6 +396,7 @@ fn build_ui(app: &Application) {
                         window.arrangement_sent(&name, error.as_deref())
                     }
                     FrontendEvent::ArrangementChanged { by } => window.arrangement_received(&by),
+                    FrontendEvent::PointerAt(handle) => window.set_pointer_at(handle),
                     FrontendEvent::State(handle, config, state) => {
                         window.update_client_config(handle, config);
                         window.update_client_state(handle, state);

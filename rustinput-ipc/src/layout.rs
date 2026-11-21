@@ -42,6 +42,10 @@ pub struct Machine {
     /// its monitors, from the top left corner of its desktop
     #[serde(default)]
     pub monitors: Vec<Monitor>,
+    /// its system: "linux", "windows", "macos" (`std::env::consts::OS`),
+    /// empty when not known
+    #[serde(default)]
+    pub os: String,
     /// how the other computers reach it, for those that do not know it yet
     #[serde(default)]
     pub hostname: Option<String>,
@@ -101,9 +105,12 @@ pub struct Peer {
     pub described: bool,
     /// why it did not answer, when it did not
     pub error: Option<String>,
-    /// the edge of this computer it is at now, and whether it is reached
+    /// the edge of this computer it is at now, whether the connection is
+    /// switched on and whether it answers
     pub pos: Position,
     pub active: bool,
+    #[serde(default)]
+    pub alive: bool,
 }
 
 /// a computer next to another one, as seen from that one
@@ -247,6 +254,7 @@ mod tests {
             width,
             height,
             monitors: Vec::new(),
+            os: String::new(),
             hostname: None,
             ips: Vec::new(),
             port: DEFAULT_PORT,

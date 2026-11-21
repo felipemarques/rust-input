@@ -11,7 +11,7 @@ use std::cell::{Cell, RefCell};
 use adw::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk, pango, prelude::*};
 use rustinput_ipc::{
-    Position,
+    ClientHandle, Position,
     layout::{ArrangementView, Layout, Machine},
 };
 
@@ -30,8 +30,13 @@ pub(crate) struct Item {
     pub(crate) machine: Machine,
     /// this computer
     pub(crate) own: bool,
+    /// the connection to it, for the others
+    pub(crate) handle: Option<ClientHandle>,
     /// it described itself: its size is its own, not a guess
     pub(crate) described: bool,
+    /// the connection is switched on, and it answers
+    pub(crate) active: bool,
+    pub(crate) alive: bool,
 }
 
 /// what the editor shows about the selected computer: one row per computer
@@ -95,6 +100,9 @@ struct Model {
     applied: Snapshot,
     /// made from the connections, not applied yet
     proposed: bool,
+    /// the computer the keyboard and the mouse of this one control, this
+    /// one itself when none
+    pointer_at: Option<ClientHandle>,
 }
 
 impl Model {
@@ -237,6 +245,18 @@ fn place_at(items: &[Item], index: usize, pos: Position) -> (i32, i32) {
     snap(items, index, x, y, 0.0)
 }
 
+/// the name of a system as people know it, none when unknown
+fn system(os: &str) -> Option<&str> {
+    match os {
+        "" => None,
+        "linux" => Some("Linux"),
+        "windows" => Some("Windows"),
+        "macos" => Some("macOS"),
+        "freebsd" => Some("FreeBSD"),
+        other => Some(other),
+    }
+}
+
 fn pair(a: &str, b: &str) -> [String; 2] {
     if a <= b {
         [a.to_owned(), b.to_owned()]
@@ -244,6 +264,9 @@ fn pair(a: &str, b: &str) -> [String; 2] {
         [b.to_owned(), a.to_owned()]
     }
 }
+
+/// what is called when the user selects a computer
+type OnSelected = dyn Fn(Option<ClientHandle>);
 
 mod imp {
     use super::*;
@@ -253,6 +276,8 @@ mod imp {
         pub(super) model: RefCell<Model>,
         /// called whenever the arrangement or the selection changes
         pub(super) changed: RefCell<Option<Box<dyn Fn()>>>,
+        /// called when the user selects a computer
+        pub(super) selected: RefCell<Option<Box<OnSelected>>>,
         pub(super) last_size: Cell<(f64, f64)>,
     }
 
@@ -303,6 +328,54 @@ impl ArrangementArea {
         self.imp().changed.replace(Some(Box::new(f)));
     }
 
+    /// called with the connection of a computer the user selects in the
+    /// arrangement (none for this computer)
+    pub(crate) fn connect_selected(&self, f: impl Fn(Option<ClientHandle>) + 'static) {
+        self.imp().selected.replace(Some(Box::new(f)));
+    }
+
+    fn selected_now(&self) {
+        let handle = {
+            let model = self.model();
+            model
+                .selected
+                .and_then(|s| model.items.get(s))
+                .and_then(|i| i.handle)
+        };
+        if let Some(f) = self.imp().selected.borrow().as_ref() {
+            f(handle);
+        }
+    }
+
+    /// selects the computer of the connection `handle`, from its row
+    pub(crate) fn select(&self, handle: ClientHandle) {
+        let mut model = self.model_mut();
+        let index = model.items.iter().position(|i| i.handle == Some(handle));
+        if index.is_none() || model.selected == index {
+            return;
+        }
+        model.selected = index;
+        drop(model);
+        self.changed();
+    }
+
+    /// whether the connection is switched on and answers
+    pub(crate) fn set_state(&self, handle: ClientHandle, active: bool, alive: bool) {
+        let mut model = self.model_mut();
+        if let Some(item) = model.items.iter_mut().find(|i| i.handle == Some(handle)) {
+            item.active = active;
+            item.alive = alive;
+        }
+        drop(model);
+        self.queue_draw();
+    }
+
+    /// the computer the mouse of this one is on, this one when none
+    pub(crate) fn set_pointer_at(&self, handle: Option<ClientHandle>) {
+        self.model_mut().pointer_at = handle;
+        self.queue_draw();
+    }
+
     fn changed(&self) {
         self.queue_draw();
         if let Some(f) = self.imp().changed.borrow().as_ref() {
@@ -340,7 +413,10 @@ impl ArrangementArea {
         let mut items = vec![Item {
             machine: own,
             own: true,
+            handle: None,
             described: true,
+            active: true,
+            alive: true,
         }];
         let in_layout = |id: &str| view.layout.machine(id).is_some();
         let mut unplaced = Vec::new();
@@ -352,10 +428,14 @@ impl ArrangementArea {
             if !in_layout(&machine.id) {
                 unplaced.push((items.len(), peer.pos, peer.active));
             }
+            let alive = peer.alive;
             items.push(Item {
                 machine,
                 own: false,
+                handle: Some(peer.handle),
                 described: peer.described,
+                active: peer.active,
+                alive,
             });
         }
         if dirty {
@@ -600,6 +680,7 @@ impl ArrangementArea {
             drop(model);
         }
         self.changed();
+        self.selected_now();
     }
 
     fn drag_update(&self, dx: f64, dy: f64) {
@@ -653,6 +734,7 @@ impl ArrangementArea {
                 }
                 drop(model);
                 self.changed();
+                self.selected_now();
                 return glib::Propagation::Stop;
             }
             _ => return glib::Propagation::Proceed,
@@ -691,9 +773,10 @@ impl ArrangementArea {
         let card = self.color("card_bg_color", gdk::RGBA::new(1.0, 1.0, 1.0, 0.08));
         let with_alpha = |c: gdk::RGBA, a: f32| gdk::RGBA::new(c.red(), c.green(), c.blue(), a);
         let border = with_alpha(fg, 0.25);
-        let monitor = with_alpha(fg, 0.07);
+        let monitor = with_alpha(fg, 0.10);
         let dim = with_alpha(fg, 0.6);
         let warning = self.color("warning_color", gdk::RGBA::new(0.8, 0.5, 0.0, 1.0));
+        let success = self.color("success_color", gdk::RGBA::new(0.15, 0.64, 0.41, 1.0));
 
         let layout = model.layout();
         let own_id = model.items[0].machine.id.clone();
@@ -730,18 +813,31 @@ impl ArrangementArea {
             };
             snapshot.append_border(&rounded, &[width; 4], &[color; 4]);
 
-            // the name, the size and whether it is this computer
+            // the name, the system and the size, and how it is
             let mut lines = vec![format!("<b>{}</b>", glib::markup_escape_text(&m.name))];
-            lines.push(if item.described {
+            let size = if item.described {
                 format!("{} × {}", m.width, m.height)
             } else {
                 "size unknown".to_owned()
+            };
+            lines.push(match system(&m.os) {
+                Some(os) => format!("{os} · {size}"),
+                None => size,
             });
-            if item.own {
-                lines.push("this computer".into());
-            } else if unreachable.contains(&m.id) {
-                lines.push("not reached".into());
-            }
+            lines.push(
+                if item.own {
+                    "this computer"
+                } else if unreachable.contains(&m.id) {
+                    "not reached"
+                } else if !item.active {
+                    "switched off"
+                } else if item.alive {
+                    "connected"
+                } else {
+                    "not connected"
+                }
+                .into(),
+            );
             let text = self.create_pango_layout(None);
             text.set_markup(&lines.join("\n"));
             text.set_width(((mw - 16.0).max(10.0) * pango::SCALE as f64) as i32);
@@ -752,6 +848,39 @@ impl ArrangementArea {
             snapshot.append_layout(&text, &if item.own { fg } else { dim });
             snapshot.pop();
             snapshot.restore();
+
+            // the computer the mouse is on
+            let here = if item.own {
+                model.pointer_at.is_none()
+            } else {
+                item.handle.is_some() && model.pointer_at == item.handle
+            };
+            if here && mh > 60.0 {
+                let pill = self.create_pango_layout(Some("mouse here"));
+                let (pw, ph) = pill.pixel_size();
+                let r = graphene::Rect::new(
+                    (x + 8.0) as f32,
+                    (y + mh - ph as f64 - 14.0) as f32,
+                    (pw + 16) as f32,
+                    (ph + 6) as f32,
+                );
+                snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(r, (ph + 6) as f32 / 2.0));
+                snapshot.append_color(&accent, &r);
+                snapshot.pop();
+                snapshot.save();
+                snapshot.translate(&graphene::Point::new(r.x() + 8.0, r.y() + 3.0));
+                snapshot.append_layout(&pill, &gdk::RGBA::WHITE);
+                snapshot.restore();
+            }
+
+            // whether its connection answers: a dot at the top right
+            if !item.own && item.active {
+                let dot = graphene::Rect::new((x + mw - 16.0) as f32, (y + 10.0) as f32, 8.0, 8.0);
+                let color = if item.alive { success } else { dim };
+                snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(dot, 4.0));
+                snapshot.append_color(&color, &dot);
+                snapshot.pop();
+            }
         }
 
         // where the computers meet
@@ -838,12 +967,16 @@ mod tests {
                 width: w,
                 height: h,
                 monitors: Vec::new(),
+                os: String::new(),
                 hostname: None,
                 ips: Vec::new(),
                 port: 4242,
             },
             own: false,
+            handle: None,
             described: true,
+            active: true,
+            alive: true,
         }
     }
 

@@ -330,6 +330,80 @@ Events to the frontends are queued per frontend and written by a task of its
 own (`rustinput-ipc/src/listen.rs`), so a frontend that stops reading never
 holds up the service; one with 1024 events waiting is disconnected.
 
+## The arrangement of the computers
+
+An arrangement (`rustinput_ipc::layout::Layout`) places every computer like a
+monitor in the display settings of a desktop: the top left corner of its
+desktop and its size in pixels, with its monitors, its system and how to reach
+it (name, addresses, port). A computer is known by the fingerprint of its
+certificate (or, until it described itself, by a stand-in on the computer that
+arranged it). `Layout::neighbors` derives what each computer needs from it:
+for every computer touching it (edges within 2 pixels and sharing more than a
+point), the edge it is at and an `EdgeLink` (`input_event::edge`): the part of
+the edge of this computer that leads there (`own`, a `Span` of fractions of
+the edge) and the part of the edge of the other one it arrives on (`peer`). A
+pair listed in `whole_edges` meets over both whole edges, the place along them
+in proportion, as without an arrangement, unless one of the two edges is
+shared with a third computer.
+
+### At the edges
+
+Each client has its `EdgeLink` (`config.toml`: `edge` and `peer_edge`, the
+whole edges when missing). The capture keeps to the spans: X11 and Windows do
+not begin a capture outside of them (the edge is a wall there); other backends
+begin and the capture is released at once (`CaptureEvent::Outside`). Where
+several clients share an edge, `InputCapture` gives the capture to the one
+whose span the pointer crossed, to all of them where spans overlap (the old
+behavior with whole edges), or to the one asked for (`enter_client`). Clients
+on the same edge stay active together when their spans do not overlap.
+
+Fractions on the wire are along the edge of the computer they arrive at, as
+before: the controlling computer maps where the pointer left it onto the part
+of the edge of the other one (`EnterAt`, `EdgeLink::to_peer`) and maps back
+what it gets (`LeaveAt`, `EdgeLink::to_own`). The controlled computer must
+also know which part of its edge leads back, or the pointer would go back
+anywhere along it: `EnterSpan` (0x87, after the capability `CAP_EDGE_SPAN`)
+is `EnterAt` with that part (`lo`, `hi` as `f32`, 18 bytes, within
+`MAX_EVENT_SIZE`). The controlled computer gives its incoming capture that
+span. A peer without the capability gets `EnterAt` and keeps whole edges on
+its side.
+
+### Keeping it the same everywhere
+
+`src/arrangement.rs` runs on the TCP port of the file channel, in TLS, like
+pairing, starting with the magic `RIA1`, one question per connection, and
+answers authorized computers only:
+
+- `Describe`: the name, the system and the monitors of the computer
+  (`input_capture::desktop::monitors`, RandR on X11, the display settings on
+  Windows, CoreGraphics on macOS) and the revision of its arrangement. The
+  window asks every client when it opens, to draw each at its size.
+- `Arrange { layout, you }`: take this arrangement, in which you are `you`.
+
+Applying an arrangement in the window (`FrontendRequest::Arrange`) gives it
+the next revision, applies it here and sends it to every other computer of
+it, pinning the certificate when its id is a fingerprint. Applying it
+(`Service::apply_layout`) finds each other computer among the clients (by the
+fingerprint it described itself with, the stand-in, its name, its addresses,
+or the address the arrangement came from), creates a client for one it did
+not know (with the addresses it came with, or where the arrangement came
+from), puts each neighbor at its edge with its link and switches it on, and
+switches off a client of the arrangement that touches nothing. An arrangement
+older than the one kept is ignored. It is kept in `config.toml` (`[layout]`).
+
+The window shows the arrangement as the service sends it
+(`FrontendEvent::Arrangement`, again as the clients describe themselves),
+proposes one from the connections as they are when there is none (whole edges,
+nothing changes until it is applied), and keeps what the user moved and did not
+apply when the view comes again. `FrontendEvent::PointerAt` tells which
+computer the keyboard and mouse of this one are on.
+
+`e2e-tests/arrangement.sh` (outside the repository, see its `LEIA-ME.md`)
+checks it with two instances: the arrangement goes from A to B, B creates its
+client for A, the upper half of the edge of A is a wall, the lower half leads
+to B at the same height in the arrangement, and back from B only through its
+part of the edge.
+
 ## Capture on Windows
 
 The Windows backend watches the input with low level hooks on a thread of

@@ -614,12 +614,14 @@ impl Service {
             }
             ICaptureEvent::ClientEntered(handle) => {
                 log::info!("entering client {handle} ...");
+                self.notify_frontend(FrontendEvent::PointerAt(Some(handle)));
                 // the client shows its own radial menu
                 self.radial.set_away(true);
                 self.spawn_hook_command(handle, HookKind::Enter);
             }
             ICaptureEvent::ClientLeft(handle) => {
                 log::info!("leaving client {handle} ...");
+                self.notify_frontend(FrontendEvent::PointerAt(None));
                 self.radial.set_away(false);
                 self.spawn_hook_command(handle, HookKind::Leave);
             }
@@ -1110,6 +1112,7 @@ impl Service {
             width,
             height,
             monitors,
+            os: std::env::consts::OS.to_owned(),
             hostname: Some(self.name.clone()),
             ips: Vec::new(),
             port: self.port,
@@ -1159,10 +1162,21 @@ impl Service {
             };
             let id = self.client_id(handle);
             let placed = self.layout.machine(&id);
-            let (described, error, name, monitors) = match self.descriptions.get(&handle) {
-                Some(Ok((_, d))) => (true, None, d.name.clone(), d.monitors.clone()),
-                Some(Err(e)) => (false, Some(e.clone()), String::new(), Vec::new()),
-                None => (false, None, String::new(), Vec::new()),
+            let (described, error, name, monitors, os) = match self.descriptions.get(&handle) {
+                Some(Ok((_, d))) => (true, None, d.name.clone(), d.monitors.clone(), d.os.clone()),
+                Some(Err(e)) => (
+                    false,
+                    Some(e.clone()),
+                    String::new(),
+                    Vec::new(),
+                    String::new(),
+                ),
+                None => (false, None, String::new(), Vec::new(), String::new()),
+            };
+            let os = if os.is_empty() {
+                placed.map(|m| m.os.clone()).unwrap_or_default()
+            } else {
+                os
             };
             let name = Some(name)
                 .filter(|n| !n.is_empty())
@@ -1187,6 +1201,7 @@ impl Service {
                     width,
                     height,
                     monitors,
+                    os,
                     hostname: config.hostname.clone(),
                     ips: config.fix_ips.clone(),
                     port: config.port,
@@ -1195,6 +1210,7 @@ impl Service {
                 error,
                 pos: config.pos,
                 active: state.active,
+                alive: state.alive,
             });
         }
         self.notify_frontend(FrontendEvent::Arrangement(ArrangementView {

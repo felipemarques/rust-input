@@ -117,6 +117,11 @@ impl Window {
             self,
             move || window.arrangement_changed_here()
         ));
+        area.connect_selected(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |handle| window.open_connection(handle)
+        ));
         undo.connect_clicked(clone!(
             #[weak]
             area,
@@ -142,6 +147,40 @@ impl Window {
     pub(super) fn show_arrangement(&self, view: &rustinput_ipc::layout::ArrangementView) {
         if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
             parts.area.set_view(view);
+        }
+        let arranged = !view.layout.machines.is_empty();
+        for idx in 0..self.clients().n_items() {
+            if let Some(row) = self.row_by_idx(idx as i32) {
+                row.set_arranged(arranged);
+            }
+        }
+    }
+
+    /// the connection of the computer selected in the arrangement opens,
+    /// the others close
+    fn open_connection(&self, handle: Option<ClientHandle>) {
+        for idx in 0..self.clients().n_items() {
+            let (Some(client), Some(row)) = (self.client_by_idx(idx), self.row_by_idx(idx as i32))
+            else {
+                continue;
+            };
+            let open = Some(client.handle()) == handle;
+            if row.is_expanded() != open {
+                row.set_expanded(open);
+            }
+        }
+    }
+
+    fn select_in_arrangement(&self, handle: ClientHandle) {
+        if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
+            parts.area.select(handle);
+        }
+    }
+
+    /// the computer the mouse of this one is on, none for this one
+    pub(super) fn set_pointer_at(&self, handle: Option<ClientHandle>) {
+        if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
+            parts.area.set_pointer_at(handle);
         }
     }
 
@@ -233,16 +272,15 @@ impl Window {
                 Position::Top => "Top",
                 Position::Bottom => "Bottom",
             };
-            let subtitle = if link.can_be_whole {
+            let subtitle = if link.whole && link.can_be_whole {
+                "The whole edge of both, the place along it in proportion".to_owned()
+            } else if link.can_be_whole {
                 format!(
-                    "{}; the whole edge, in proportion, when switched on",
+                    "{}, where they touch; switch on for the whole edge of both, in proportion",
                     link.part
                 )
             } else {
-                format!(
-                    "{}; this edge is shared, so only where they touch",
-                    link.part
-                )
+                format!("{}, where they touch: the edge is shared", link.part)
             };
             let row = adw::ActionRow::builder()
                 .title(format!("{side}: {}", link.other_name))
@@ -352,6 +390,18 @@ impl Window {
                         .downcast_ref()
                         .expect("Expected object of type `ClientObject`.");
                     let row = window.create_client_row(client_object);
+                    // opening a connection selects its computer in the
+                    // arrangement
+                    let handle = client_object.handle();
+                    row.connect_expanded_notify(clone!(
+                        #[weak]
+                        window,
+                        move |row| {
+                            if row.is_expanded() {
+                                window.select_in_arrangement(handle);
+                            }
+                        }
+                    ));
                     row.connect_closure(
                         "request-hostname-change",
                         false,
@@ -588,6 +638,9 @@ impl Window {
 
         /* activation state */
         row.set_active(state.active);
+        if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
+            parts.area.set_state(handle, state.active, state.alive);
+        }
 
         /* dns state */
         client_object.set_resolving(state.resolving);
