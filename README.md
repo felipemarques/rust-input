@@ -266,11 +266,16 @@ Most current desktop environments and operating systems are fully supported, thi
 >
 > - **Windows, programs run as administrator**: Windows keeps the input going to a program run as administrator
 > (Task Manager is one, so is a terminal whose title starts with "Administrator:") from programs that are not.
-> While such a program is in front, RustInput does not see the keyboard; while the pointer is over one of its windows,
-> it does not see the mouse, so the pointer does not cross to another computer from there. When that happens while the
-> pointer is on another computer, RustInput brings the keyboard and the mouse back, so no key stays pressed anywhere.
-> `daemon.log` (see [Installation](#installation)) names the program each time. RustInput run as administrator
-> reaches those windows too.
+> Installed with the script below, RustInput runs as a Windows service with administrator rights and reaches those
+> programs too, whether it captures the keyboard and the mouse while one is in front or types into one from another
+> computer. Installed by hand, or with `-NoService`, it does not: while such a program is in front, RustInput does not
+> see the keyboard; while the pointer is over one of its windows, it does not see the mouse, so the pointer does not
+> cross to another computer from there. When that happens while the pointer is on another computer, RustInput brings
+> the keyboard and the mouse back, so no key stays pressed anywhere, and `daemon.log` (see [Installation](#installation))
+> names the program.
+>
+> - **Windows, lock screen and administrator prompts**: these appear on a desktop of Windows of its own, which RustInput
+> does not reach yet: use the keyboard and the mouse of the Windows computer there.
 
 For more detailed information about os support see [Detailed OS Support](#detailed-os-support)
 
@@ -306,30 +311,48 @@ Use the precompiled binaries from the [releases section](https://github.com/feli
 <details>
     <summary>Windows</summary>
 
-To install or update, paste this into PowerShell (no administrator rights needed):
+To install or update, paste this into PowerShell:
 
 ```powershell
 iwr -UseBasicParsing https://github.com/felipemarques/rust-input/releases/latest/download/update-rustinput.ps1 -OutFile $env:TEMP\update-rustinput.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\update-rustinput.ps1
 ```
 
-The script ([scripts/update-rustinput.ps1](scripts/update-rustinput.ps1)) goes step by step:
+The script ([scripts/update-rustinput.ps1](scripts/update-rustinput.ps1)) asks Windows for administrator rights
+(confirm in the window Windows shows; the script goes on in a window of its own) and goes step by step:
 1. It shows the installed version, the newest one and what changed between them.
 2. It downloads the newest version with a progress bar and checks its SHA-256 against GitHub.
-3. It closes RustInput and installs it into `%LOCALAPPDATA%\Programs\RustInput`, keeping the previous copy in
-   `RustInput.previous`.
-4. It starts RustInput again and shows whether it came up: the ports it listens on and the end of its logs.
-5. It adds **RustInput** and **Update RustInput** to the Start menu, so the next update is one click.
+3. It closes RustInput and installs it into `C:\Program Files\RustInput`, keeping the previous copy in
+   `RustInput.previous`. An install of a version before 0.23.0, in `%LOCALAPPDATA%\Programs\RustInput`, moves there
+   and becomes the previous copy.
+4. It installs the Windows service **RustInput**, which starts with Windows and keeps RustInput running in the session
+   of the user at the screen, with the administrator rights of that user, without asking: RustInput then reaches
+   programs run as administrator too (see [Caveats](#caveats--known-issues)). Windows starts the service again if it
+   fails, and the service starts RustInput again if it ends. Closing the window, or quitting it from the tray, leaves
+   the keyboard and the mouse shared; the window only shows and changes the settings.
+5. It lets the other computers reach RustInput through the Windows firewall, on the networks Windows allowed RustInput
+   on before (private and domain networks otherwise).
+6. It starts RustInput again and shows whether it came up: the service, whether RustInput runs with administrator
+   rights, the ports it listens on and the end of its logs.
+7. It adds **RustInput** and **Update RustInput** to the Start menu, so the next update is one click.
 
-Everything it shows also goes to `%LOCALAPPDATA%\rustinput\logs\update.log`. `-Version 0.18.0` installs an older
-version, `-Restore` goes back to the previous copy, `-Force` reinstalls the same version and `-NoStart` leaves
-RustInput closed. Run `Get-Help` on the script for the others.
+Everything it shows also goes to `%LOCALAPPDATA%\rustinput\logs\update.log`; the service logs to
+`C:\Windows\Logs\RustInput\service.log`. `-Version 0.18.0` installs an older version, `-Restore` goes back to the
+previous copy, `-Force` reinstalls the same version, `-NoStart` leaves the window closed, `-NoService` installs without
+the service (as before 0.23.0) and `-Uninstall` removes RustInput, keeping its settings. Run `Get-Help` on the script
+for the others.
+
+> [!Note]
+> A program run as administrator can do anything on the computer, and RustInput run by the service receives keyboard
+> and mouse from the computers you authorized. Only those can send it input, but a malicious program running as you
+> could also drive RustInput to reach programs run as administrator: Microsoft does not treat the step from a user to
+> the same user as administrator as a security boundary. Synergy and Deskflow run their Windows service the same way.
 
 Or by hand:
 - Download `rustinput-windows-x86_64.zip` from the releases page
 - Unzip it (the required GTK libraries are included)
 - Run `rustinput.exe`
 - Logs: started from a terminal (PowerShell, cmd), RustInput logs there; started otherwise, to
-  `%LOCALAPPDATA%\rustinput\logs` (`rustinput.log` for the window, `daemon.log` for the service). Set
+  `%LOCALAPPDATA%\rustinput\logs` (`rustinput.log` for the window, `daemon.log` for the daemon). Set
   `RUSTINPUT_LOG_LEVEL=debug` for more detail.
 
 </details>

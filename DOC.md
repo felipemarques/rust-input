@@ -361,3 +361,48 @@ while capturing, because what is typed would go to it.
 Keys and mouse buttons held down on Windows when the pointer leaves are
 released on Windows, not on the other device, which never saw them pressed.
 
+## The Windows service
+
+Installed by `scripts/update-rustinput.ps1`, the service "RustInput"
+(`rustinput windows-service`, `src/windows_supervisor.rs`) starts with Windows
+as LocalSystem and keeps `rustinput daemon` running with administrator rights,
+so that programs run as administrator are in reach (see above), for the
+hooks and for the input the daemon emulates (`SendInput` is held to the same
+rule).
+
+A service runs in session 0, which has no keyboard, mouse or screen, so the
+service captures and emulates nothing itself. Once a second, and whenever
+Windows reports a session change, it looks at the session at the screen
+(`WTSGetActiveConsoleSessionId`) and, with a user logged on there, starts the
+daemon in it (`CreateProcessAsUserW` on `winsta0\default`) with the token of
+that user (`WTSQueryUserToken`). User Account Control gives the programs of an
+administrator a limited token linked to a full one: the daemon gets the full
+one (`TokenLinkedToken`), what "Run as administrator" would give, without
+asking. The environment is that of the user (`CreateEnvironmentBlock`), so the
+daemon reads the configuration and writes the logs of the user, as before.
+
+The daemon runs in a job of the service that ends its processes when the
+service ends (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`), so no daemon is left
+behind holding the port of the window; programs it starts stay out of the
+job. When the daemon ends, the service starts it again, at once after a long
+run, waiting longer each time otherwise (up to a minute). When another user
+comes to the screen, the daemon of the previous one ends and one starts for
+the new one. The window, finding the service running, waits for its daemon
+instead of starting one of its own, which would have no administrator rights
+and take the port first (`rustinput_ipc::windows_service_runs`).
+
+The service logs to `%SystemRoot%\Logs\RustInput\service.log`, a folder
+every user may read and only administrators may write: a service writing
+where a user may write could be made to overwrite other files through a link.
+For the same reason RustInput is installed in `C:\Program Files\RustInput`:
+a program started with administrator rights from a folder its user may write
+would let any program of that user swap it and get those rights.
+
+The lock screen and the prompts of User Account Control appear on another
+desktop of Windows (`Winlogon`), which only a process of the system may open;
+the daemon, running as the user, does not reach it.
+
+`.github/workflows/windows-service.yml` installs the service from a zip of the
+build on a Windows runner, checks that it starts the daemon with
+administrator rights and starts it again after it is ended, and removes it.
+
