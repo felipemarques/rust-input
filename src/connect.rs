@@ -6,7 +6,8 @@ use crate::netstats::NetStats;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
 use rustinput_proto::{
-    CAP_CURSOR_POSITION, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent,
+    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
+    MAX_EVENT_SIZE, ProtoEvent,
 };
 use std::{
     cell::RefCell,
@@ -390,7 +391,9 @@ async fn receive_loop(
         ping_response,
     } = shared;
     let peer = Peer::Outgoing(handle);
-    let flags = CAP_CURSOR_POSITION | clipboard.as_ref().map_or(0, |(c, _)| c.capabilities());
+    let flags = CAP_CURSOR_POSITION
+        | CAP_EDGE_SPAN
+        | clipboard.as_ref().map_or(0, |(c, _)| c.capabilities());
     // whether the peer was told our build and features
     let mut introduced = false;
     let mut buf = [0u8; MAX_DATAGRAM_SIZE];

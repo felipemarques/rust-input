@@ -17,7 +17,7 @@ use toml;
 use toml_edit::{self, DocumentMut};
 
 use rustinput_cli::CliArgs;
-use rustinput_ipc::{DEFAULT_PORT, FileOptions, Position, Theme};
+use rustinput_ipc::{DEFAULT_PORT, EdgeLink, FileOptions, Position, Span, Theme};
 
 use input_event::scancode::{
     self,
@@ -80,13 +80,19 @@ struct ConfigToml {
     authorized_fingerprints: Option<HashMap<String, String>>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
 struct TomlClient {
     hostname: Option<String>,
     host_name: Option<String>,
     ips: Option<Vec<IpAddr>>,
     port: Option<u16>,
     position: Option<Position>,
+    /// the part of the edge at `position` that leads to the client, from 0.0
+    /// (top or left end) to 1.0, the whole edge when missing
+    edge: Option<[f64; 2]>,
+    /// the part of the edge of the client it leads to, the whole edge when
+    /// missing
+    peer_edge: Option<[f64; 2]>,
     activate_on_startup: Option<bool>,
     enter_hook: Option<String>,
     leave_hook: Option<String>,
@@ -296,6 +302,7 @@ pub struct ConfigClient {
     pub hostname: Option<String>,
     pub port: u16,
     pub pos: Position,
+    pub link: EdgeLink,
     pub active: bool,
     pub enter_hook: Option<String>,
     pub leave_hook: Option<String>,
@@ -310,11 +317,17 @@ impl From<TomlClient> for ConfigClient {
         let ips = HashSet::from_iter(toml.ips.into_iter().flatten());
         let port = toml.port.unwrap_or(DEFAULT_PORT);
         let pos = toml.position.unwrap_or_default();
+        let span = |part: Option<[f64; 2]>| part.map_or(Span::FULL, |[lo, hi]| Span::new(lo, hi));
+        let link = EdgeLink {
+            own: span(toml.edge),
+            peer: span(toml.peer_edge),
+        };
         Self {
             ips,
             hostname,
             port,
             pos,
+            link,
             active,
             enter_hook,
             leave_hook,
@@ -335,6 +348,10 @@ impl From<ConfigClient> for TomlClient {
             Some(client.port)
         };
         let position = Some(client.pos);
+        // only when not the whole edge
+        let part = |span: Span| (!span.is_full()).then_some([span.lo, span.hi]);
+        let edge = part(client.link.own);
+        let peer_edge = part(client.link.peer);
         let activate_on_startup = if client.active { Some(true) } else { None };
         let enter_hook = client.enter_hook;
         let leave_hook = client.leave_hook;
@@ -344,6 +361,8 @@ impl From<ConfigClient> for TomlClient {
             ips,
             port,
             position,
+            edge,
+            peer_edge,
             activate_on_startup,
             enter_hook,
             leave_hook,

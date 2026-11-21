@@ -37,6 +37,12 @@ pub const CAP_FILES: u32 = 1 << 2;
 /// (see [`clipboard::encode_html`]); implies [`CAP_CLIPBOARD`]
 pub const CAP_CLIPBOARD_HTML: u32 = 1 << 3;
 
+/// capability flag: the peer understands [`ProtoEvent::EnterSpan`], so the
+/// pointer leaves it only through the part of its edge that leads back to
+/// the controlling device (computers arranged like monitors); implies
+/// [`CAP_CURSOR_POSITION`]
+pub const CAP_EDGE_SPAN: u32 = 1 << 4;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///
@@ -132,6 +138,17 @@ pub enum ProtoEvent {
     /// [`ProtoEvent::EnterAt`]), so the controlling device can put its
     /// pointer there. Only sent to peers with [`CAP_CURSOR_POSITION`].
     LeaveAt(f64),
+    /// [`ProtoEvent::EnterAt`] with the part of the edge of the receiver,
+    /// from `lo` to `hi`, that leads back to the sender: elsewhere that edge
+    /// is a wall while the sender controls it. The fraction is along the
+    /// edge of the receiver already. Only sent to peers with
+    /// [`CAP_EDGE_SPAN`].
+    EnterSpan {
+        pos: Position,
+        at: f64,
+        lo: f32,
+        hi: f32,
+    },
 }
 
 impl Display for ProtoEvent {
@@ -156,6 +173,9 @@ impl Display for ProtoEvent {
             ProtoEvent::Capabilities(flags) => write!(f, "Capabilities({flags:#x})"),
             ProtoEvent::EnterAt(pos, at) => write!(f, "EnterAt({pos}, {at:.3})"),
             ProtoEvent::LeaveAt(at) => write!(f, "LeaveAt({at:.3})"),
+            ProtoEvent::EnterSpan { pos, at, lo, hi } => {
+                write!(f, "EnterSpan({pos}, {at:.3}, {lo:.3}..{hi:.3})")
+            }
         }
     }
 }
@@ -180,6 +200,7 @@ pub enum EventType {
     Capabilities = 0x80,
     EnterAt = 0x85,
     LeaveAt = 0x86,
+    EnterSpan = 0x87,
 }
 
 impl ProtoEvent {
@@ -206,6 +227,7 @@ impl ProtoEvent {
             ProtoEvent::Capabilities(_) => EventType::Capabilities,
             ProtoEvent::EnterAt(..) => EventType::EnterAt,
             ProtoEvent::LeaveAt(_) => EventType::LeaveAt,
+            ProtoEvent::EnterSpan { .. } => EventType::EnterSpan,
         }
     }
 }
@@ -273,6 +295,12 @@ impl TryFrom<[u8; MAX_EVENT_SIZE]> for ProtoEvent {
                 decode_f64(&mut buf)?,
             )),
             EventType::LeaveAt => Ok(Self::LeaveAt(decode_f64(&mut buf)?)),
+            EventType::EnterSpan => Ok(Self::EnterSpan {
+                pos: decode_u8(&mut buf)?.try_into()?,
+                at: decode_f64(&mut buf)?,
+                lo: decode_f32(&mut buf)?,
+                hi: decode_f32(&mut buf)?,
+            }),
         }
     }
 }
@@ -348,6 +376,12 @@ impl From<ProtoEvent> for ([u8; MAX_EVENT_SIZE], usize) {
                     encode_f64(buf, len, at);
                 }
                 ProtoEvent::LeaveAt(at) => encode_f64(buf, len, at),
+                ProtoEvent::EnterSpan { pos, at, lo, hi } => {
+                    encode_u8(buf, len, pos as u8);
+                    encode_f64(buf, len, at);
+                    encode_f32(buf, len, lo);
+                    encode_f32(buf, len, hi);
+                }
             }
         }
         (buf, len)
@@ -396,6 +430,7 @@ decode_impl!(u8);
 decode_impl!(u32);
 decode_impl!(i32);
 decode_impl!(f64);
+decode_impl!(f32);
 
 macro_rules! encode_impl {
     ($t:ty) => {
@@ -416,6 +451,7 @@ encode_impl!(u8);
 encode_impl!(u32);
 encode_impl!(i32);
 encode_impl!(f64);
+encode_impl!(f32);
 
 #[cfg(test)]
 mod tests {
@@ -433,6 +469,27 @@ mod tests {
     fn capabilities_roundtrip() {
         match roundtrip(ProtoEvent::Capabilities(CAP_CLIPBOARD | 0x8000_0000)) {
             ProtoEvent::Capabilities(flags) => assert_eq!(flags, CAP_CLIPBOARD | 0x8000_0000),
+            event => panic!("unexpected event {event}"),
+        }
+    }
+
+    #[test]
+    fn enter_span_roundtrip() {
+        let event = ProtoEvent::EnterSpan {
+            pos: Position::Left,
+            at: 0.75,
+            lo: 0.5,
+            hi: 1.0,
+        };
+        let (_, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
+        assert!(len <= MAX_EVENT_SIZE);
+        match roundtrip(event) {
+            ProtoEvent::EnterSpan {
+                pos: Position::Left,
+                at,
+                lo,
+                hi,
+            } => assert_eq!((at, lo, hi), (0.75, 0.5, 1.0)),
             event => panic!("unexpected event {event}"),
         }
     }

@@ -4,6 +4,13 @@
 //! Every device treats all of its monitors as one rectangle, like Synergy and
 //! Deskflow: leaving the top of the left edge of one device enters the top of
 //! the right edge of the next one, whatever the size of their screens.
+//!
+//! Arranged like monitors, two devices meet on a part of their edges only (a
+//! [`Span`] of each): the pointer crosses there and nowhere else, and keeps
+//! its place along the way ([`EdgeLink`]). By default a link joins the whole
+//! edges, as above.
+
+use serde::{Deserialize, Serialize};
 
 /// a side of the screen
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,6 +96,127 @@ impl Area {
             ),
             Edge::Bottom => (along(self.x, self.width), inside(self.y, self.height, true)),
         }
+    }
+}
+
+/// how close a fraction may be to a [`Span`] and still count as on it
+const SPAN_TOLERANCE: f64 = 1e-6;
+
+/// A part of an edge, from `lo` to `hi` along it, as fractions of the edge
+/// (see [`Area::fraction`]).
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Span {
+    pub lo: f64,
+    pub hi: f64,
+}
+
+// never NaN: `Span::new` and the parts of a link are finite numbers
+impl Eq for Span {}
+
+impl Default for Span {
+    fn default() -> Self {
+        Self::FULL
+    }
+}
+
+impl Span {
+    /// the whole edge
+    pub const FULL: Span = Span { lo: 0.0, hi: 1.0 };
+
+    /// `lo..hi` within `0.0..=1.0`, in order; the whole edge when they do not
+    /// make a part of it
+    pub fn new(lo: f64, hi: f64) -> Self {
+        if !lo.is_finite() || !hi.is_finite() {
+            return Self::FULL;
+        }
+        let (lo, hi) = (lo.min(hi).clamp(0.0, 1.0), lo.max(hi).clamp(0.0, 1.0));
+        if hi - lo < SPAN_TOLERANCE {
+            return Self::FULL;
+        }
+        Span { lo, hi }
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.lo <= SPAN_TOLERANCE && self.hi >= 1.0 - SPAN_TOLERANCE
+    }
+
+    /// whether `fraction` lies on this part of the edge
+    pub fn contains(&self, fraction: f64) -> bool {
+        fraction >= self.lo - SPAN_TOLERANCE && fraction <= self.hi + SPAN_TOLERANCE
+    }
+
+    /// whether this part and `other` share more than an end
+    pub fn overlaps(&self, other: &Span) -> bool {
+        self.lo < other.hi - SPAN_TOLERANCE && other.lo < self.hi - SPAN_TOLERANCE
+    }
+
+    /// how far `fraction` is from this part of the edge, 0.0 on it
+    pub fn distance(&self, fraction: f64) -> f64 {
+        if fraction < self.lo {
+            self.lo - fraction
+        } else if fraction > self.hi {
+            fraction - self.hi
+        } else {
+            0.0
+        }
+    }
+
+    fn length(&self) -> f64 {
+        self.hi - self.lo
+    }
+
+    /// where `fraction` of the edge lies along this part, 0.0 to 1.0
+    fn position_of(&self, fraction: f64) -> f64 {
+        ((fraction - self.lo) / self.length()).clamp(0.0, 1.0)
+    }
+
+    /// the fraction of the edge `position` along this part
+    fn at(&self, position: f64) -> f64 {
+        self.lo + position.clamp(0.0, 1.0) * self.length()
+    }
+}
+
+/// Where two devices meet: the part of the edge of this device (`own`) that
+/// leads to the other device, onto the part of the edge of the other one
+/// (`peer`). A place along one maps to the same relative place along the
+/// other.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct EdgeLink {
+    pub own: Span,
+    pub peer: Span,
+}
+
+impl Eq for EdgeLink {}
+
+impl EdgeLink {
+    /// whole edge to whole edge, as before arrangements
+    pub const FULL: EdgeLink = EdgeLink {
+        own: Span::FULL,
+        peer: Span::FULL,
+    };
+
+    /// where the pointer arrives on the other device when it leaves this one
+    /// at `fraction` along its edge
+    pub fn to_peer(&self, fraction: f64) -> f64 {
+        self.peer.at(self.own.position_of(fraction))
+    }
+
+    /// where the pointer arrives on this device when it leaves the other one
+    /// at `fraction` along its edge
+    pub fn to_own(&self, fraction: f64) -> f64 {
+        self.own.at(self.peer.position_of(fraction))
+    }
+
+    /// the same link seen from the other device
+    pub fn reversed(&self) -> EdgeLink {
+        EdgeLink {
+            own: self.peer,
+            peer: self.own,
+        }
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.own.is_full() && self.peer.is_full()
     }
 }
 
@@ -188,5 +316,45 @@ mod tests {
         };
         assert_eq!(tiny.fraction(Edge::Left, (5, 5)), 0.5);
         assert_eq!(tiny.point(Edge::Right, 0.7), (5, 5));
+    }
+
+    #[test]
+    fn spans_are_in_order_and_within_the_edge() {
+        assert_eq!(Span::new(0.75, 0.25), Span { lo: 0.25, hi: 0.75 });
+        assert_eq!(Span::new(-1.0, 0.5), Span { lo: 0.0, hi: 0.5 });
+        assert_eq!(Span::new(0.4, 0.4), Span::FULL);
+        assert_eq!(Span::new(f64::NAN, 0.5), Span::FULL);
+        assert!(Span::new(0.0, 1.0).is_full());
+        let half = Span::new(0.5, 1.0);
+        assert!(half.contains(0.5) && half.contains(1.0) && !half.contains(0.49));
+        assert_eq!(half.distance(0.25), 0.25);
+        assert_eq!(half.distance(0.75), 0.0);
+    }
+
+    #[test]
+    fn a_full_link_keeps_the_fraction() {
+        for f in [0.0, 0.3, 1.0] {
+            assert_eq!(EdgeLink::FULL.to_peer(f), f);
+            assert_eq!(EdgeLink::FULL.to_own(f), f);
+        }
+    }
+
+    #[test]
+    fn a_partial_link_keeps_the_place_along_the_way() {
+        // two monitors stacked (2160 px) beside one of 1080 px next to the
+        // lower one: the lower half of this edge is the whole edge of the other
+        let link = EdgeLink {
+            own: Span::new(0.5, 1.0),
+            peer: Span::FULL,
+        };
+        assert_eq!(link.to_peer(0.5), 0.0);
+        assert_eq!(link.to_peer(0.75), 0.5);
+        assert_eq!(link.to_peer(1.0), 1.0);
+        assert_eq!(link.to_own(0.5), 0.75);
+        // outside of the link stays at its end
+        assert_eq!(link.to_peer(0.1), 0.0);
+        let back = link.reversed();
+        assert_eq!(back.to_peer(0.5), 0.75);
+        assert_eq!(back.to_own(0.75), 0.5);
     }
 }

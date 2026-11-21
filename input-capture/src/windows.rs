@@ -7,6 +7,8 @@ use std::pin::Pin;
 use std::task::ready;
 use tokio::sync::mpsc::{Receiver, channel};
 
+use input_event::edge::Span;
+
 use super::{Capture, CaptureError, CaptureEvent, Position};
 
 mod display_util;
@@ -28,6 +30,10 @@ impl Capture for WindowsInputCapture {
     async fn destroy(&mut self, pos: Position) -> Result<(), CaptureError> {
         self.event_thread.destroy(pos);
         Ok(())
+    }
+
+    fn set_spans(&mut self, pos: Position, spans: Vec<Span>) {
+        self.event_thread.set_spans(pos, spans);
     }
 
     async fn release(&mut self) -> Result<(), CaptureError> {

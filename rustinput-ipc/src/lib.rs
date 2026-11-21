@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 mod dirs;
 pub use dirs::{log_dir, received_dir, transfer_log};
+pub use input_event::edge::{EdgeLink, Span};
 
 /// "512 bytes", "1.5 KB", "120.3 MB", "2.1 GB" (powers of 1024, like file
 /// managers)
@@ -157,6 +158,10 @@ pub struct ClientConfig {
     pub port: u16,
     /// position of a client on screen
     pub pos: Position,
+    /// the part of the edge at `pos` that leads to the client, and the part
+    /// of its edge it leads to: the whole edges unless arranged otherwise
+    #[serde(default)]
+    pub link: EdgeLink,
     /// enter hook
     pub cmd: Option<String>,
     /// leave hook
@@ -170,6 +175,7 @@ impl Default for ClientConfig {
             hostname: Default::default(),
             fix_ips: Default::default(),
             pos: Default::default(),
+            link: EdgeLink::FULL,
             cmd: None,
             leave_cmd: None,
         }
@@ -417,6 +423,8 @@ pub enum FrontendRequest {
     UpdatePort(ClientHandle, u16),
     /// update position
     UpdatePosition(ClientHandle, Position),
+    /// change where the client meets this device on the edge at its position
+    UpdateLink(ClientHandle, EdgeLink),
     /// update fix-ips
     UpdateFixIps(ClientHandle, Vec<IpAddr>),
     /// request reenabling input capture

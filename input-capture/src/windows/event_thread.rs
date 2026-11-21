@@ -40,7 +40,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use input_event::{
     BTN_BACK, BTN_FORWARD, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, Event, KeyboardEvent, PointerEvent,
-    edge::{Area, Edge},
+    edge::{Area, Edge, Span},
     scancode::{self, Linux},
 };
 
@@ -93,6 +93,11 @@ impl EventThread {
 
     pub(crate) fn destroy(&self, pos: Position) {
         self.client_update(ClientUpdate::Destroy(pos));
+    }
+
+    /// the parts of the edge at `pos` that lead to a client, all of it if none
+    pub(crate) fn set_spans(&self, pos: Position, spans: Vec<Span>) {
+        self.client_update(ClientUpdate::Spans(pos, spans));
     }
 
     fn exit(&self) {
@@ -268,6 +273,7 @@ fn release_to(fraction: f64) {
 enum ClientUpdate {
     Create(Position),
     Destroy(Position),
+    Spans(Position, Vec<Span>),
 }
 
 fn try_send_event(
@@ -280,6 +286,8 @@ fn try_send_event(
 thread_local! {
     /// all configured clients
     static CLIENTS: RefCell<HashSet<Position>> = RefCell::new(HashSet::new());
+    /// the parts of each edge that lead to a client, all of it if none
+    static SPANS: RefCell<HashMap<Position, Vec<Span>>> = RefCell::new(HashMap::new());
     /// currently active client
     static ACTIVE_CLIENT: Cell<Option<Position>> = const { Cell::new(None) };
     /// input event channel
@@ -562,6 +570,16 @@ fn check_client_activation(wparam: WPARAM, lparam: LPARAM) -> bool {
     let fraction = DISPLAYS.with_borrow(|(displays, _)| {
         desktop(displays).map(|d| d.fraction(Edge::from(pos), entry_point))
     });
+    /* a part of the edge that leads nowhere: a wall */
+    let on_span = SPANS.with_borrow(|spans| {
+        spans
+            .get(&pos)
+            .filter(|spans| !spans.is_empty())
+            .is_none_or(|spans| fraction.is_none_or(|f| spans.iter().any(|s| s.contains(f))))
+    });
+    if !on_span {
+        return ret;
+    }
     if begin(pos, entry_point, fraction) {
         log::debug!("ENTERED @ {prev_pos:?} -> {curr_pos:?}");
     }
@@ -978,6 +996,10 @@ fn update_clients(request: ClientUpdate) {
                 }
             }
             CLIENTS.with_borrow_mut(|clients| clients.remove(&pos));
+            SPANS.with_borrow_mut(|spans| spans.remove(&pos));
+        }
+        ClientUpdate::Spans(pos, new) => {
+            SPANS.with_borrow_mut(|spans| spans.insert(pos, new));
         }
     }
 }

@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
-    mem::swap,
     task::{Poll, ready},
 };
 
@@ -9,7 +8,11 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use futures_core::Stream;
 
-use input_event::{Event, KeyboardEvent, edge::Edge, scancode};
+use input_event::{
+    Event, KeyboardEvent,
+    edge::{Edge, Span},
+    scancode,
+};
 
 pub use error::{CaptureCreationError, CaptureError, InputCaptureError};
 
@@ -46,6 +49,11 @@ pub enum CaptureEvent {
     /// handing the mouse to its hooks while capturing, for instance over a
     /// window run as administrator.
     Released,
+    /// The pointer crossed an edge where no client is: a part of the edge
+    /// outside the [`Span`] of every client there. The capture must be
+    /// released. Only from backends that can not keep to the spans
+    /// themselves (see [`InputCapture::create`]).
+    Outside,
 }
 
 impl Display for CaptureEvent {
@@ -54,6 +62,7 @@ impl Display for CaptureEvent {
             CaptureEvent::Begin => write!(f, "begin capture"),
             CaptureEvent::Input(e) => write!(f, "{e}"),
             CaptureEvent::Released => write!(f, "capture released"),
+            CaptureEvent::Outside => write!(f, "crossed outside of every client"),
         }
     }
 }
@@ -142,24 +151,68 @@ pub struct InputCapture {
     position_map: HashMap<Position, Vec<CaptureHandle>>,
     /// map from id to position
     id_map: HashMap<CaptureHandle, Position>,
+    /// the part of its edge that leads to each client
+    spans: HashMap<CaptureHandle, Span>,
+    /// the clients the current capture goes to
+    active: Vec<CaptureHandle>,
+    /// the client [`InputCapture::enter_client`] asked for
+    entering: Option<CaptureHandle>,
     /// pending events
     pending: VecDeque<(CaptureHandle, CaptureEvent)>,
 }
 
 impl InputCapture {
-    /// create a new client with the given id
-    pub async fn create(&mut self, id: CaptureHandle, pos: Position) -> Result<(), CaptureError> {
+    /// Creates a client at `pos`, reached through `span` of that edge.
+    /// Several clients may share an edge: the capture goes to the one whose
+    /// span the pointer crossed (to all of them where spans overlap, as when
+    /// they all have the whole edge).
+    pub async fn create(
+        &mut self,
+        id: CaptureHandle,
+        pos: Position,
+        span: Span,
+    ) -> Result<(), CaptureError> {
         assert!(!self.id_map.contains_key(&id));
 
         self.id_map.insert(id, pos);
+        self.spans.insert(id, span);
 
         if let Some(v) = self.position_map.get_mut(&pos) {
             v.push(id);
-            Ok(())
         } else {
             self.position_map.insert(pos, vec![id]);
-            self.capture.create(pos).await
+            self.capture.create(pos).await?;
         }
+        self.update_spans(pos);
+        Ok(())
+    }
+
+    /// changes the part of its edge that leads to the client `id`
+    pub fn set_span(&mut self, id: CaptureHandle, span: Span) {
+        if let Some(&pos) = self.id_map.get(&id) {
+            self.spans.insert(id, span);
+            self.update_spans(pos);
+        }
+    }
+
+    /// tells the backend the parts of the edge at `pos` that lead somewhere:
+    /// none for the whole edge
+    fn update_spans(&mut self, pos: Position) {
+        let spans: Vec<Span> = self
+            .position_map
+            .get(&pos)
+            .map(|ids| ids.iter().map(|id| self.span(*id)).collect())
+            .unwrap_or_default();
+        let spans = if spans.iter().any(Span::is_full) {
+            Vec::new()
+        } else {
+            spans
+        };
+        self.capture.set_spans(pos, spans);
+    }
+
+    fn span(&self, id: CaptureHandle) -> Span {
+        self.spans.get(&id).copied().unwrap_or_default()
     }
 
     /// destroy the client with the given id, if it exists
@@ -170,6 +223,8 @@ impl InputCapture {
             .expect("no position for this handle");
 
         log::debug!("destroying capture {id} @ {pos}");
+        self.spans.remove(&id);
+        self.active.retain(|&i| i != id);
         let remaining = self.position_map.get_mut(&pos).expect("id vector");
         remaining.retain(|&i| i != id);
 
@@ -178,6 +233,8 @@ impl InputCapture {
             log::debug!("destroying capture @ {pos} - no remaining ids");
             self.position_map.remove(&pos);
             self.capture.destroy(pos).await?;
+        } else {
+            self.update_spans(pos);
         }
         Ok(())
     }
@@ -197,9 +254,13 @@ impl InputCapture {
         self.capture.release_to(fraction).await
     }
 
-    /// Starts capturing for the client at `pos` as if the pointer crossed
-    /// that edge where it is now (see [`Capture::enter`]).
-    pub async fn enter(&mut self, pos: Position) -> Result<(), CaptureError> {
+    /// Starts capturing for the client `id` as if the pointer crossed its
+    /// edge where it is now (see [`Capture::enter`]), wherever its span is.
+    pub async fn enter_client(&mut self, id: CaptureHandle) -> Result<(), CaptureError> {
+        let Some(&pos) = self.id_map.get(&id) else {
+            return Ok(());
+        };
+        self.entering = Some(id);
         self.capture.enter(pos).await
     }
 
@@ -234,6 +295,9 @@ impl InputCapture {
         Ok(Self {
             capture,
             id_map: Default::default(),
+            spans: Default::default(),
+            active: Vec::new(),
+            entering: None,
             pending: Default::default(),
             position_map: Default::default(),
             pressed_keys: HashSet::new(),
@@ -252,6 +316,29 @@ impl InputCapture {
                 1 => self.pressed_keys.insert(scancode),
                 _ => self.pressed_keys.remove(&scancode),
             };
+        }
+    }
+
+    /// The clients a capture beginning at `pos` goes to: the one asked for by
+    /// [`InputCapture::enter_client`], else those whose span the pointer
+    /// crossed, all of them when the backend does not say where.
+    fn route(&mut self, pos: Position, ids: &[CaptureHandle]) -> Vec<CaptureHandle> {
+        if let Some(id) = self.entering.take().filter(|id| ids.contains(id)) {
+            return vec![id];
+        }
+        match self.capture.entry_fraction() {
+            Some(fraction) => {
+                let chosen: Vec<CaptureHandle> = ids
+                    .iter()
+                    .copied()
+                    .filter(|&id| self.span(id).contains(fraction))
+                    .collect();
+                if chosen.is_empty() {
+                    log::debug!("capture at {pos}, {fraction:.3} along the edge: no client there");
+                }
+                chosen
+            }
+            None => ids.to_vec(),
         }
     }
 }
@@ -287,31 +374,36 @@ impl Stream for InputCapture {
             self.update_pressed_keys(key, state);
         }
 
-        let len = self
-            .position_map
-            .get(&pos)
-            .map(|ids| ids.len())
-            .unwrap_or(0);
+        let ids = self.position_map.get(&pos).cloned().unwrap_or_default();
+        let Some(&first) = ids.first() else {
+            // no client at that edge (any more): look at the next event
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        };
 
-        match len {
-            0 => Poll::Pending,
-            1 => Poll::Ready(Some(Ok((
-                self.position_map.get(&pos).expect("no id")[0],
-                event,
-            )))),
-            _ => {
-                let mut position_map = HashMap::new();
-                swap(&mut self.position_map, &mut position_map);
-                {
-                    for &id in position_map.get(&pos).expect("position") {
-                        self.pending.push_back((id, event));
-                    }
+        let targets = match event {
+            CaptureEvent::Begin => {
+                let chosen = self.route(pos, &ids);
+                self.active.clone_from(&chosen);
+                if chosen.is_empty() {
+                    return Poll::Ready(Some(Ok((first, CaptureEvent::Outside))));
                 }
-                swap(&mut self.position_map, &mut position_map);
-
-                Poll::Ready(Some(Ok(self.pending.pop_front().expect("event"))))
+                chosen
             }
+            _ => {
+                let active: Vec<CaptureHandle> = self
+                    .active
+                    .iter()
+                    .copied()
+                    .filter(|id| ids.contains(id))
+                    .collect();
+                if active.is_empty() { ids } else { active }
+            }
+        };
+        for &id in &targets[1..] {
+            self.pending.push_back((id, event));
         }
+        Poll::Ready(Some(Ok((targets[0], event))))
     }
 }
 
@@ -322,6 +414,12 @@ trait Capture: Stream<Item = Result<(Position, CaptureEvent), CaptureError>> + U
 
     /// destroy the client with the given id, if it exists
     async fn destroy(&mut self, pos: Position) -> Result<(), CaptureError>;
+
+    /// The parts of the edge at `pos` that lead to a client, all of it when
+    /// `spans` is empty: crossing elsewhere must not begin a capture.
+    /// Backends that can not keep to them begin anyway, and
+    /// [`InputCapture`] then reports [`CaptureEvent::Outside`].
+    fn set_spans(&mut self, _pos: Position, _spans: Vec<Span>) {}
 
     /// release mouse
     async fn release(&mut self) -> Result<(), CaptureError>;
@@ -401,4 +499,188 @@ async fn create(
         }
     }
     Err(CaptureCreationError::NoAvailableBackend)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::VecDeque,
+        pin::Pin,
+        sync::{Arc, Mutex},
+        task::{Context, Poll},
+    };
+
+    use futures::StreamExt;
+
+    use super::*;
+
+    /// a backend that reports the events of `script`, each capture beginning
+    /// at the fraction given with it
+    #[derive(Default)]
+    struct Script {
+        events: VecDeque<(Position, CaptureEvent, Option<f64>)>,
+        fraction: Option<f64>,
+        spans: Arc<Mutex<HashMap<Position, Vec<Span>>>>,
+    }
+
+    impl Stream for Script {
+        type Item = Result<(Position, CaptureEvent), CaptureError>;
+
+        fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            Poll::Ready(self.events.pop_front().map(|(pos, event, fraction)| {
+                if fraction.is_some() {
+                    self.fraction = fraction;
+                }
+                Ok((pos, event))
+            }))
+        }
+    }
+
+    #[async_trait]
+    impl Capture for Script {
+        async fn create(&mut self, _pos: Position) -> Result<(), CaptureError> {
+            Ok(())
+        }
+        async fn destroy(&mut self, _pos: Position) -> Result<(), CaptureError> {
+            Ok(())
+        }
+        fn set_spans(&mut self, pos: Position, spans: Vec<Span>) {
+            self.spans.lock().unwrap().insert(pos, spans);
+        }
+        async fn release(&mut self) -> Result<(), CaptureError> {
+            Ok(())
+        }
+        async fn release_to(&mut self, _fraction: f64) -> Result<(), CaptureError> {
+            Ok(())
+        }
+        async fn enter(&mut self, _pos: Position) -> Result<(), CaptureError> {
+            Ok(())
+        }
+        fn entry_fraction(&self) -> Option<f64> {
+            self.fraction
+        }
+        async fn terminate(&mut self) -> Result<(), CaptureError> {
+            Ok(())
+        }
+    }
+
+    fn capture(
+        events: Vec<(Position, CaptureEvent, Option<f64>)>,
+    ) -> (InputCapture, Arc<Mutex<HashMap<Position, Vec<Span>>>>) {
+        let spans = Arc::default();
+        let script = Script {
+            events: events.into(),
+            fraction: None,
+            spans: Arc::clone(&spans),
+        };
+        let capture = InputCapture {
+            capture: Box::new(script),
+            pressed_keys: HashSet::new(),
+            position_map: Default::default(),
+            id_map: Default::default(),
+            spans: Default::default(),
+            active: Vec::new(),
+            entering: None,
+            pending: Default::default(),
+        };
+        (capture, spans)
+    }
+
+    const MOTION: CaptureEvent =
+        CaptureEvent::Input(Event::Pointer(input_event::PointerEvent::Motion {
+            time: 0,
+            dx: 1.0,
+            dy: 0.0,
+        }));
+
+    async fn collect(capture: &mut InputCapture) -> Vec<(CaptureHandle, CaptureEvent)> {
+        let mut seen = Vec::new();
+        while let Some(event) = capture.next().await {
+            seen.push(event.expect("event"));
+        }
+        seen
+    }
+
+    #[tokio::test]
+    async fn the_part_of_the_edge_picks_the_client() {
+        let (mut capture, spans) = capture(vec![
+            (Position::Right, CaptureEvent::Begin, Some(0.75)),
+            (Position::Right, MOTION, None),
+            (Position::Right, CaptureEvent::Begin, Some(0.25)),
+            (Position::Right, MOTION, None),
+        ]);
+        capture
+            .create(1, Position::Right, Span::new(0.0, 0.5))
+            .await
+            .unwrap();
+        capture
+            .create(2, Position::Right, Span::new(0.5, 1.0))
+            .await
+            .unwrap();
+        // the backend knows where the edge leads somewhere
+        assert_eq!(
+            spans.lock().unwrap()[&Position::Right],
+            vec![Span::new(0.0, 0.5), Span::new(0.5, 1.0)]
+        );
+        assert_eq!(
+            collect(&mut capture).await,
+            vec![
+                (2, CaptureEvent::Begin),
+                (2, MOTION),
+                (1, CaptureEvent::Begin),
+                (1, MOTION)
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn crossing_between_the_parts_is_outside() {
+        let (mut capture, _) = capture(vec![(Position::Left, CaptureEvent::Begin, Some(0.5))]);
+        capture
+            .create(1, Position::Left, Span::new(0.0, 0.4))
+            .await
+            .unwrap();
+        capture
+            .create(2, Position::Left, Span::new(0.6, 1.0))
+            .await
+            .unwrap();
+        assert_eq!(
+            collect(&mut capture).await,
+            vec![(1, CaptureEvent::Outside)]
+        );
+    }
+
+    #[tokio::test]
+    async fn whole_edges_reach_every_client_there() {
+        let (mut capture, spans) = capture(vec![
+            (Position::Top, CaptureEvent::Begin, Some(0.5)),
+            (Position::Top, MOTION, None),
+        ]);
+        capture.create(1, Position::Top, Span::FULL).await.unwrap();
+        capture
+            .create(2, Position::Top, Span::new(0.0, 0.2))
+            .await
+            .unwrap();
+        // one client has the whole edge: the backend keeps to nothing
+        assert!(spans.lock().unwrap()[&Position::Top].is_empty());
+        assert_eq!(
+            collect(&mut capture).await,
+            vec![(1, CaptureEvent::Begin), (1, MOTION)]
+        );
+    }
+
+    #[tokio::test]
+    async fn entering_a_client_goes_to_it_wherever_the_pointer_is() {
+        let (mut capture, _) = capture(vec![(Position::Right, CaptureEvent::Begin, Some(0.1))]);
+        capture
+            .create(1, Position::Right, Span::new(0.0, 0.5))
+            .await
+            .unwrap();
+        capture
+            .create(2, Position::Right, Span::new(0.5, 1.0))
+            .await
+            .unwrap();
+        capture.enter_client(2).await.unwrap();
+        assert_eq!(collect(&mut capture).await, vec![(2, CaptureEvent::Begin)]);
+    }
 }

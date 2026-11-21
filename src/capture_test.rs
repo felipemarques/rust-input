@@ -2,7 +2,7 @@ use crate::config::Config;
 use clap::Args;
 use futures::StreamExt;
 use input_capture::{self, CaptureError, CaptureEvent, InputCapture, InputCaptureError, Position};
-use input_event::{Event, KeyboardEvent};
+use input_event::{Event, KeyboardEvent, edge::Span};
 
 #[derive(Args, Clone, Debug, Eq, PartialEq)]
 pub struct TestCaptureArgs {}
@@ -14,11 +14,13 @@ pub async fn run(config: Config, _args: TestCaptureArgs) -> Result<(), InputCapt
     loop {
         let mut input_capture = InputCapture::new(backend).await?;
         log::info!("creating clients");
-        input_capture.create(0, Position::Left).await?;
-        input_capture.create(4, Position::Left).await?;
-        input_capture.create(1, Position::Right).await?;
-        input_capture.create(2, Position::Top).await?;
-        input_capture.create(3, Position::Bottom).await?;
+        input_capture.create(0, Position::Left, Span::FULL).await?;
+        input_capture.create(4, Position::Left, Span::FULL).await?;
+        input_capture.create(1, Position::Right, Span::FULL).await?;
+        input_capture.create(2, Position::Top, Span::FULL).await?;
+        input_capture
+            .create(3, Position::Bottom, Span::FULL)
+            .await?;
         if let Err(e) = do_capture(&mut input_capture).await {
             log::warn!("{e} - recreating capture");
         }

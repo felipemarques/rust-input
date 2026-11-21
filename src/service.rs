@@ -17,8 +17,9 @@ use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, DEFAULT_PORT, FileOptions, FrontendEvent, FrontendRequest,
-    IpcError, IpcListenerCreationError, LinkStats, Position, Status, Theme, TransferInfo,
+    AsyncFrontendListener, ClientHandle, DEFAULT_PORT, EdgeLink, FileOptions, FrontendEvent,
+    FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span, Status, Theme,
+    TransferInfo,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -113,6 +114,8 @@ struct Incoming {
     fingerprint: String,
     addr: SocketAddr,
     pos: Position,
+    /// the part of the edge at `pos` that leads back to it
+    span: Span,
 }
 
 impl Service {
@@ -329,6 +332,10 @@ impl Service {
                 self.update_pos(handle, pos);
                 self.save_config();
             }
+            FrontendRequest::UpdateLink(handle, link) => {
+                self.update_link(handle, link);
+                self.save_config();
+            }
             FrontendRequest::ResolveDns(handle) => self.resolve(handle),
             FrontendRequest::Sync => self.sync_frontend(),
             FrontendRequest::RemoveAuthorizedKey(key) => {
@@ -381,6 +388,7 @@ impl Service {
                 hostname: c.hostname,
                 port: c.port,
                 pos: c.pos,
+                link: c.link,
                 active: s.active,
                 enter_hook: c.cmd,
                 leave_hook: c.leave_cmd,
@@ -490,17 +498,18 @@ impl Service {
                 addr,
                 pos,
                 fingerprint,
+                span,
             } => {
                 // check if already registered
                 if !self.incoming_conns.contains(&addr) {
-                    self.add_incoming(addr, pos, fingerprint.clone());
+                    self.add_incoming(addr, pos, fingerprint.clone(), span);
                     self.notify_frontend(FrontendEvent::DeviceEntered {
                         fingerprint,
                         addr,
                         pos,
                     });
                 } else {
-                    self.update_incoming(addr, pos, fingerprint);
+                    self.update_incoming(addr, pos, fingerprint, span);
                 }
             }
             EmulationEvent::Disconnected { addr } => {
@@ -627,10 +636,15 @@ impl Service {
 
     const ENTER_HANDLE_BEGIN: u64 = u64::MAX / 2 + 1;
 
-    fn add_incoming(&mut self, addr: SocketAddr, pos: Position, fingerprint: String) {
+    fn add_incoming(&mut self, addr: SocketAddr, pos: Position, fingerprint: String, span: Span) {
         let handle = Self::ENTER_HANDLE_BEGIN + self.next_trigger_handle;
         self.next_trigger_handle += 1;
-        self.capture.create(handle, pos, CaptureType::EnterOnly);
+        let link = EdgeLink {
+            own: span,
+            peer: Span::FULL,
+        };
+        self.capture
+            .create(handle, pos, CaptureType::EnterOnly, link);
         self.incoming_conns.insert(addr);
         self.incoming_conn_info.insert(
             handle,
@@ -638,11 +652,18 @@ impl Service {
                 fingerprint,
                 addr,
                 pos,
+                span,
             },
         );
     }
 
-    fn update_incoming(&mut self, addr: SocketAddr, pos: Position, fingerprint: String) {
+    fn update_incoming(
+        &mut self,
+        addr: SocketAddr,
+        pos: Position,
+        fingerprint: String,
+        span: Span,
+    ) {
         let incoming = self
             .incoming_conn_info
             .iter_mut()
@@ -658,9 +679,13 @@ impl Service {
             incoming.pos = pos;
             changed = true;
         }
+        if incoming.span != span {
+            incoming.span = span;
+            changed = true;
+        }
         if changed {
             self.remove_incoming(addr);
-            self.add_incoming(addr, pos, fingerprint.clone());
+            self.add_incoming(addr, pos, fingerprint.clone(), span);
             self.notify_frontend(FrontendEvent::IncomingDisconnected(addr));
             self.notify_frontend(FrontendEvent::DeviceEntered {
                 fingerprint,
@@ -870,13 +895,14 @@ impl Service {
         /* resolve dns on activate */
         self.resolve(handle);
 
-        /* deactivate potential other client at this position */
+        /* deactivate other clients on the same part of this edge: clients
+         * share an edge only on parts of it of their own */
         let Some(pos) = self.client_manager.get_pos(handle) else {
             return;
         };
-
-        if let Some(other) = self.client_manager.client_at(pos) {
-            if other != handle {
+        let link = self.client_manager.get_link(handle).unwrap_or_default();
+        for (other, other_link) in self.client_manager.clients_at(pos) {
+            if other != handle && other_link.own.overlaps(&link.own) {
                 self.deactivate_client(other);
             }
         }
@@ -884,7 +910,7 @@ impl Service {
         /* activate the client */
         if self.client_manager.activate_client(handle) {
             /* notify capture and frontends */
-            self.capture.create(handle, pos, CaptureType::Default);
+            self.capture.create(handle, pos, CaptureType::Default, link);
             self.broadcast_client(handle);
             log::info!("activated client {handle} ({pos})");
         }
@@ -933,6 +959,14 @@ impl Service {
         if self.client_manager.set_pos(handle, pos) {
             self.deactivate_client(handle);
             self.activate_client(handle);
+        }
+        self.broadcast_client(handle);
+    }
+
+    /// where the client meets this device on the edge at its position
+    fn update_link(&mut self, handle: ClientHandle, link: EdgeLink) {
+        if self.client_manager.set_link(handle, link) {
+            self.capture.update_link(handle, link);
         }
         self.broadcast_client(handle);
     }

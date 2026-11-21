@@ -8,9 +8,13 @@ use futures::StreamExt;
 use input_capture::{
     CaptureError, CaptureEvent, CaptureHandle, InputCapture, InputCaptureError, Position,
 };
-use input_event::{Event, KeyboardEvent, edge::Edge, scancode};
+use input_event::{
+    Event, KeyboardEvent,
+    edge::{Edge, EdgeLink},
+    scancode,
+};
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{CAP_CURSOR_POSITION, ProtoEvent};
+use rustinput_proto::{CAP_CURSOR_POSITION, CAP_EDGE_SPAN, ProtoEvent};
 use tokio::task::{JoinHandle, spawn_local};
 use tokio_util::sync::CancellationToken;
 
@@ -74,8 +78,10 @@ enum CaptureRequest {
     Enter(CaptureHandle),
     /// keep the pointer on this device: crossing an edge does nothing
     Lock(bool),
-    /// add a capture client
-    Create(CaptureHandle, Position, CaptureType),
+    /// add a capture client, reached through the part of the edge in the link
+    Create(CaptureHandle, Position, CaptureType, EdgeLink),
+    /// where a capture client meets this device changed
+    UpdateLink(CaptureHandle, EdgeLink),
     /// destory a capture client
     Destroy(CaptureHandle),
     /// reenable input capture
@@ -130,15 +136,25 @@ impl Capture {
         }
     }
 
+    /// a capture client at `pos`, reached through `link.own` of that edge
+    /// (see [`EdgeLink`])
     pub(crate) fn create(
         &self,
         handle: CaptureHandle,
         pos: rustinput_ipc::Position,
         capture_type: CaptureType,
+        link: EdgeLink,
     ) {
         let pos = to_capture_pos(pos);
         self.request_tx
-            .send(CaptureRequest::Create(handle, pos, capture_type))
+            .send(CaptureRequest::Create(handle, pos, capture_type, link))
+            .expect("channel closed");
+    }
+
+    /// where the capture client `handle` meets this device changed
+    pub(crate) fn update_link(&self, handle: CaptureHandle, link: EdgeLink) {
+        self.request_tx
+            .send(CaptureRequest::UpdateLink(handle, link))
             .expect("channel closed");
     }
 
@@ -206,7 +222,7 @@ struct CaptureTask {
     active_client: Option<CaptureHandle>,
     backend: Option<input_capture::Backend>,
     cancellation_token: CancellationToken,
-    captures: Vec<(CaptureHandle, Position, CaptureType)>,
+    captures: Vec<(CaptureHandle, Position, CaptureType, EdgeLink)>,
     conn: RustInputConnection,
     event_tx: Sender<ICaptureEvent>,
     release_bind: Rc<RefCell<Vec<scancode::Linux>>>,
@@ -221,8 +237,28 @@ struct CaptureTask {
 }
 
 impl CaptureTask {
-    fn add_capture(&mut self, handle: CaptureHandle, pos: Position, capture_type: CaptureType) {
-        self.captures.push((handle, pos, capture_type));
+    fn add_capture(
+        &mut self,
+        handle: CaptureHandle,
+        pos: Position,
+        capture_type: CaptureType,
+        link: EdgeLink,
+    ) {
+        self.captures.push((handle, pos, capture_type, link));
+    }
+
+    fn set_link(&mut self, handle: CaptureHandle, link: EdgeLink) {
+        if let Some(capture) = self.captures.iter_mut().find(|(h, ..)| *h == handle) {
+            capture.3 = link;
+        }
+    }
+
+    fn get_link(&self, handle: CaptureHandle) -> EdgeLink {
+        self.captures
+            .iter()
+            .find(|(h, ..)| *h == handle)
+            .map(|c| c.3)
+            .unwrap_or_default()
     }
 
     fn remove_capture(&mut self, handle: CaptureHandle) {
@@ -232,7 +268,7 @@ impl CaptureTask {
     fn is_default_capture_at(&self, pos: Position) -> bool {
         self.captures
             .iter()
-            .any(|&(_, p, t)| p == pos && t == CaptureType::Default)
+            .any(|&(_, p, t, _)| p == pos && t == CaptureType::Default)
     }
 
     fn get_pos(&self, handle: CaptureHandle) -> Position {
@@ -260,7 +296,8 @@ impl CaptureTask {
                 tokio::select! {
                     r = self.request_rx.recv() => match r.expect("channel closed") {
                         CaptureRequest::Reenable => break,
-                        CaptureRequest::Create(h, p, t) => self.add_capture(h, p, t),
+                        CaptureRequest::Create(h, p, t, l) => self.add_capture(h, p, t, l),
+                        CaptureRequest::UpdateLink(h, l) => self.set_link(h, l),
                         CaptureRequest::Destroy(h) => self.remove_capture(h),
                         CaptureRequest::Release => { /* nothing to do */ }
                         CaptureRequest::ReleaseAt(edge, fraction) => {
@@ -309,9 +346,9 @@ impl CaptureTask {
 
     async fn create_captures(&mut self, capture: &mut InputCapture) -> Result<(), CaptureError> {
         let captures = self.captures.clone();
-        for (handle, pos, _type) in captures {
+        for (handle, pos, _type, link) in captures {
             tokio::select! {
-                r = capture.create(handle, pos) => r?,
+                r = capture.create(handle, pos, link.own) => r?,
                 _ = self.cancellation_token.cancelled() => return Ok(()),
             }
         }
@@ -353,10 +390,12 @@ impl CaptureTask {
                             log::info!("releasing capture: left remote client device region");
                             self.release_capture(capture).await?;
                         },
-                        // the same, telling where the pointer left the client
+                        // the same, telling where the pointer left the client,
+                        // along its edge: the same place along this one
                         ProtoEvent::LeaveAt(fraction) => {
-                            log::info!("releasing capture: left remote client device region at {fraction:.3}");
-                            self.release_capture_to(capture, Some(fraction)).await?;
+                            let here = self.get_link(handle).to_own(fraction);
+                            log::info!("releasing capture: left remote client device region at {fraction:.3} ({here:.3} here)");
+                            self.release_capture_to(capture, Some(here)).await?;
                         },
                         _ => {}
                     }
@@ -371,20 +410,24 @@ impl CaptureTask {
                         let default = self
                             .captures
                             .iter()
-                            .any(|(h, _, t)| *h == handle && *t == CaptureType::Default);
+                            .any(|(h, _, t, _)| *h == handle && *t == CaptureType::Default);
                         if default && self.active_client.is_none() {
                             // an explicit request goes through even when locked
                             self.entering = true;
-                            capture.enter(self.get_pos(handle)).await?;
+                            capture.enter_client(handle).await?;
                         }
                     }
                     CaptureRequest::Lock(locked) => {
                         log::info!("pointer {}", if locked { "kept on this device" } else { "free to move on" });
                         self.locked = locked;
                     }
-                    CaptureRequest::Create(h, p, t) => {
-                        self.add_capture(h, p, t);
-                        capture.create(h, p).await?;
+                    CaptureRequest::Create(h, p, t, l) => {
+                        self.add_capture(h, p, t, l);
+                        capture.create(h, p, l.own).await?;
+                    }
+                    CaptureRequest::UpdateLink(h, l) => {
+                        self.set_link(h, l);
+                        capture.set_span(h, l.own);
                     }
                     CaptureRequest::Destroy(h) => {
                         // If the capture we're tearing down is the
@@ -428,6 +471,18 @@ impl CaptureTask {
             return Ok(());
         }
 
+        // crossed where no client is: the edge is a wall there
+        if event == CaptureEvent::Outside {
+            const DUR: Duration = Duration::from_secs(5);
+            debounce!(
+                PREV_OUTSIDE_LOG,
+                DUR,
+                log::debug!("no client on this part of the edge, releasing")
+            );
+            self.entering = false;
+            return capture.release().await;
+        }
+
         if capture.keys_pressed(&self.release_bind.borrow()) {
             log::info!("releasing capture: release-bind pressed");
             return self.release_capture(capture).await;
@@ -467,10 +522,20 @@ impl CaptureTask {
         }
 
         let opposite_pos = to_proto_pos(self.get_pos(handle).opposite());
-        // tell clients that can place their pointer where it left this device
-        let enter = match self.entry_fraction {
-            Some(fraction) if self.conn.peer_capabilities(handle) & CAP_CURSOR_POSITION != 0 => {
-                ProtoEvent::EnterAt(opposite_pos, fraction)
+        // tell clients that can place their pointer where it left this
+        // device, the same place along their part of the edge, and which
+        // part of their edge leads back here
+        let link = self.get_link(handle);
+        let capabilities = self.conn.peer_capabilities(handle);
+        let enter = match self.entry_fraction.map(|f| link.to_peer(f)) {
+            Some(at) if capabilities & CAP_EDGE_SPAN != 0 => ProtoEvent::EnterSpan {
+                pos: opposite_pos,
+                at,
+                lo: link.peer.lo as f32,
+                hi: link.peer.hi as f32,
+            },
+            Some(at) if capabilities & CAP_CURSOR_POSITION != 0 => {
+                ProtoEvent::EnterAt(opposite_pos, at)
             }
             _ => ProtoEvent::Enter(opposite_pos),
         };
@@ -483,7 +548,7 @@ impl CaptureTask {
                 State::Sending => ProtoEvent::Input(e),
             },
             // handled above
-            CaptureEvent::Released => return Ok(()),
+            CaptureEvent::Released | CaptureEvent::Outside => return Ok(()),
         };
 
         if let Err(e) = self.conn.send(event, handle).await {
@@ -599,6 +664,7 @@ impl CaptureTask {
 
 thread_local! {
     static PREV_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
+    static PREV_OUTSIDE_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

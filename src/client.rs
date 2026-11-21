@@ -7,7 +7,7 @@ use std::{
 
 use slab::Slab;
 
-use rustinput_ipc::{ClientConfig, ClientHandle, ClientState, Position};
+use rustinput_ipc::{ClientConfig, ClientHandle, ClientState, EdgeLink, Position};
 
 use crate::config::ConfigClient;
 
@@ -32,6 +32,7 @@ impl ClientManager {
             fix_ips: config_client.ips.into_iter().collect(),
             port: config_client.port,
             pos: config_client.pos,
+            link: config_client.link,
             cmd: config_client.enter_hook,
             leave_cmd: config_client.leave_hook,
         };
@@ -109,18 +110,34 @@ impl ClientManager {
     }
 
     /// get the client at the given position
-    pub fn client_at(&self, pos: Position) -> Option<ClientHandle> {
+    /// the active clients at `pos`, with the part of the edge leading to each
+    pub fn clients_at(&self, pos: Position) -> Vec<(ClientHandle, EdgeLink)> {
         self.clients
             .borrow()
             .iter()
-            .find_map(|(k, (c, s))| {
-                if s.active && c.pos == pos {
-                    Some(k)
-                } else {
-                    None
-                }
-            })
-            .map(|p| p as ClientHandle)
+            .filter(|(_, (c, s))| s.active && c.pos == pos)
+            .map(|(k, (c, _))| (k as ClientHandle, c.link))
+            .collect()
+    }
+
+    pub(crate) fn get_link(&self, handle: ClientHandle) -> Option<EdgeLink> {
+        self.clients
+            .borrow()
+            .get(handle as usize)
+            .map(|(c, _)| c.link)
+    }
+
+    /// Changes where the client meets this device; returns whether it is
+    /// active, so the capture has to know.
+    pub(crate) fn set_link(&self, handle: ClientHandle, link: EdgeLink) -> bool {
+        match self.clients.borrow_mut().get_mut(handle as usize) {
+            Some((c, s)) if c.link != link => {
+                log::info!("update link {handle}: {:?} -> {:?}", c.link, link);
+                c.link = link;
+                s.active
+            }
+            _ => false,
+        }
     }
 
     pub(crate) fn get_hostname(&self, handle: ClientHandle) -> Option<String> {

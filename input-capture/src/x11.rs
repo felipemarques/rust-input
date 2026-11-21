@@ -13,7 +13,7 @@
 //! the grabs on its own.
 
 use std::{
-    collections::{HashSet, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     os::fd::{AsRawFd, RawFd},
     pin::Pin,
     task::{Context, Poll, Waker},
@@ -39,7 +39,7 @@ use x11rb::{
 
 use input_event::{
     BTN_BACK, BTN_FORWARD, BTN_LEFT, BTN_MIDDLE, BTN_RIGHT, Event, KeyboardEvent, PointerEvent,
-    edge::{Area, Edge},
+    edge::{Area, Edge, Span},
 };
 
 use super::{Capture, CaptureError, CaptureEvent, Position, error::X11InputCaptureCreationError};
@@ -262,6 +262,8 @@ pub struct X11InputCapture {
     monitors: Vec<Rect>,
     /// edges with at least one client
     zones: HashSet<Position>,
+    /// the parts of each edge that lead to a client, all of it if none
+    spans: HashMap<Position, Vec<Span>>,
     grab: Option<Grab>,
     /// relative motion gathered since the edges were last checked
     motion: Option<(f64, f64)>,
@@ -354,6 +356,7 @@ impl X11InputCapture {
             has_randr,
             monitors: vec![],
             zones: HashSet::new(),
+            spans: HashMap::new(),
             grab: None,
             motion: None,
             touching: [false; 4],
@@ -537,7 +540,9 @@ impl X11InputCapture {
         let mut hit = None;
         let mut touching = [false; 4];
         for pos in POSITIONS {
-            let touches = self.zones.contains(&pos) && at_outer_edge(&self.monitors, x, y, pos);
+            let touches = self.zones.contains(&pos)
+                && at_outer_edge(&self.monitors, x, y, pos)
+                && self.on_span(pos, (x, y));
             touching[index(pos)] = touches;
             // either the pointer just arrived at the edge or it is being
             // pushed against it; sliding along the edge does not count
@@ -559,6 +564,17 @@ impl X11InputCapture {
             return Ok(());
         }
         self.begin(pos, (pointer.root_x, pointer.root_y))
+    }
+
+    /// whether `point` of the edge at `pos` leads to a client: elsewhere the
+    /// edge is a wall
+    fn on_span(&self, pos: Position, point: (i32, i32)) -> bool {
+        let Some(spans) = self.spans.get(&pos).filter(|s| !s.is_empty()) else {
+            return true;
+        };
+        desktop(&self.monitors)
+            .map(|d| d.fraction(pos.into(), point))
+            .is_none_or(|f| spans.iter().any(|s| s.contains(f)))
     }
 
     fn begin(&mut self, pos: Position, entry: (i16, i16)) -> Result<(), CaptureError> {
@@ -706,8 +722,13 @@ impl Capture for X11InputCapture {
         Ok(())
     }
 
+    fn set_spans(&mut self, pos: Position, spans: Vec<Span>) {
+        self.spans.insert(pos, spans);
+    }
+
     async fn destroy(&mut self, pos: Position) -> Result<(), CaptureError> {
         self.zones.remove(&pos);
+        self.spans.remove(&pos);
         self.touching[index(pos)] = false;
         if self.grab.as_ref().is_some_and(|g| g.pos == pos) {
             self.end(None)?;

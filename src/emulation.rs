@@ -2,7 +2,10 @@ use crate::config::local_commit;
 use crate::listen::{ListenEvent, ListenerCreationError, RustInputListener};
 use futures::StreamExt;
 use input_emulation::{EmulationHandle, InputEmulation, InputEmulationError};
-use input_event::{Event, edge::Edge};
+use input_event::{
+    Event,
+    edge::{Edge, Span},
+};
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_proto::{CAP_CURSOR_POSITION, Position, ProtoEvent};
 use std::{
@@ -40,6 +43,8 @@ pub(crate) enum EmulationEvent {
         pos: rustinput_ipc::Position,
         /// certificate fingerprint of the connection
         fingerprint: String,
+        /// the part of the edge at `pos` that leads back to it
+        span: Span,
     },
     /// connection closed
     Disconnected {
@@ -168,22 +173,27 @@ impl ListenTask {
                         log::trace!("{event} <-<-<-<-<- {addr}");
                         last_response.insert(addr, Instant::now());
                         match event {
-                            ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) => {
+                            ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) | ProtoEvent::EnterSpan { pos, .. } => {
                                 // the pointer is only placed on the first of
                                 // the (repeated) Enter events
                                 let first = entered.insert(addr);
                                 let at = match event {
-                                    ProtoEvent::EnterAt(_, fraction) if first => {
+                                    ProtoEvent::EnterAt(_, fraction) | ProtoEvent::EnterSpan { at: fraction, .. } if first => {
                                         log::debug!("{addr} entered at {fraction:.3} along the {pos} edge");
                                         Some((to_edge(pos), fraction))
                                     }
                                     _ => None,
                                 };
+                                // the way back: a part of that edge, or all of it
+                                let span = match event {
+                                    ProtoEvent::EnterSpan { lo, hi, .. } => Span::new(lo.into(), hi.into()),
+                                    _ => Span::FULL,
+                                };
                                 if let Some(fingerprint) = self.listener.get_certificate_fingerprint(addr).await {
                                     log::info!("releasing capture: {addr} entered this device");
                                     self.event_tx.send(EmulationEvent::ReleaseNotify { at }).expect("channel closed");
                                     self.listener.reply(addr, ProtoEvent::Ack(0)).await;
-                                    self.event_tx.send(EmulationEvent::Entered{addr, pos: to_ipc_pos(pos), fingerprint}).expect("channel closed");
+                                    self.event_tx.send(EmulationEvent::Entered{addr, pos: to_ipc_pos(pos), fingerprint, span}).expect("channel closed");
                                 }
                             }
                             ProtoEvent::Leave(_) => {
