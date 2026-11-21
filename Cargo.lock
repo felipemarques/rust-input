@@ -2937,6 +2937,7 @@ dependencies = [
  "toml_edit 0.22.27",
  "webrtc-dtls",
  "webrtc-util",
+ "windows",
  "windows-service",
  "windows-sys 0.61.2",
  "x11rb 0.14.0",

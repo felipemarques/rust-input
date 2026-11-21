@@ -1,0 +1,62 @@
+name: Windows install
+
+# Installs RustInput on a Windows runner the ways a user would, as
+# .github/windows-install-test.ps1 says: 0.23.1 with update-rustinput.ps1,
+# this build's installer over it, back to 0.23.1, forward again, -Restore,
+# and the uninstaller. Checks the service starts the daemon with
+# administrator rights, the firewall rules and what stays behind.
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'rustinput-ipc/**'
+      - 'scripts/update-rustinput.ps1'
+      - 'build-aux/windows/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - '.github/windows-install-test.ps1'
+      - '.github/workflows/windows-install.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  install:
+    name: install, update, go back and uninstall
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-service
+      # the service starts only the daemon, which needs no GTK
+      - name: cargo build
+        run: cargo build --release --no-default-features
+      - name: build the installer
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item target\release\rustinput.exe, scripts\update-rustinput.ps1 package\
+          .\build-aux\windows\build-setup.ps1 -PackageDir package -OutputDir setup
+      - name: install, update, go back and uninstall
+        shell: powershell
+        env:
+          # the API of GitHub, for update-rustinput.ps1 -Version 0.23.1
+          RUSTINPUT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .\.github\windows-install-test.ps1 -Setup setup\rustinput-windows-x86_64-setup.exe
+      - name: logs
+        if: always()
+        shell: powershell
+        run: |
+          foreach ($log in @(Get-ChildItem -Path "$env:SystemRoot\Logs\RustInput", "$env:LOCALAPPDATA\rustinput\logs" -Filter *.log -ErrorAction SilentlyContinue)) {
+            Write-Host "== $($log.FullName)"
+            Get-Content -LiteralPath $log.FullName -Tail 60 | Out-Host
+          }

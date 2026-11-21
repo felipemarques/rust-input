@@ -1,6 +1,7 @@
 //! Without a console of its own, RustInput logs to the terminal it was started
 //! from, or else into a file in [`rustinput_ipc::log_dir`]. The Windows
-//! service logs into `%SystemRoot%\Logs\RustInput`, which every user may read
+//! service and the installer (`windows-setup`) log into
+//! `%SystemRoot%\Logs\RustInput`, which every user may read
 //! and only administrators may write: a service writing where a user may
 //! write could be tricked into overwriting other files.
 
@@ -19,7 +20,9 @@ pub(super) fn setup(logger: &mut env_logger::Builder) {
         return;
     }
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let service = args.first().is_some_and(|a| a == "windows-service");
+    // the service and the installer, as administrator
+    let setup = args.first().is_some_and(|a| a == "windows-setup");
+    let service = setup || args.first().is_some_and(|a| a == "windows-service");
     let dir = if service {
         std::env::var_os("SystemRoot").map(|r| PathBuf::from(r).join("Logs").join("RustInput"))
     } else {
@@ -28,7 +31,10 @@ pub(super) fn setup(logger: &mut env_logger::Builder) {
     let Some(dir) = dir else {
         return;
     };
-    let (name, append) = if service {
+    let (name, append) = if setup {
+        // install, uninstall: the log of every run counts
+        ("setup.log", true)
+    } else if service {
         ("service.log", false)
     } else if args.iter().any(|a| a == "daemon") {
         ("daemon.log", false)

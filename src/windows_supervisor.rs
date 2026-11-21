@@ -61,7 +61,8 @@ use windows_sys::Win32::{
     },
 };
 
-/// the argument Windows starts the service with (update-rustinput.ps1)
+/// the argument Windows starts the service with (windows_setup.rs, and
+/// update-rustinput.ps1 for versions without the installer)
 const ARGUMENT: &str = "windows-service";
 /// how often the session at the screen is looked at
 const TICK: Duration = Duration::from_secs(1);

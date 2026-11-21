@@ -146,7 +146,8 @@ pub enum Command {
     Daemon,
     /// run as the Windows service "RustInput", which Windows starts: it keeps
     /// the daemon running in the session of the user at the screen, with the
-    /// administrator rights of that user (installed by update-rustinput.ps1)
+    /// administrator rights of that user (installed by the installer or by
+    /// update-rustinput.ps1)
     #[cfg(windows)]
     WindowsService,
 }

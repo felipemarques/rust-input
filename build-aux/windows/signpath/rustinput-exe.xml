@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SignPath artifact configuration "rustinput-exe" (DOC.md, "Signing the Windows
+  files"): the Release workflow uploads rustinput.exe alone, which GitHub zips.
+  Only rustinput.exe is signed; the GTK libraries are not this project's.
+-->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <zip-file>
+    <pe-file path="rustinput.exe" product-name="RustInput" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

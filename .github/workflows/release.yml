@@ -121,11 +121,16 @@ jobs:
         Copy-Item -Path "target\release\rustinput.exe" -Destination "rustinput-windows"
         Copy-Item -Path "scripts\update-rustinput.ps1" -Destination "rustinput-windows"
         Compress-Archive -Path "rustinput-windows\*" -DestinationPath rustinput-windows-x86_64.zip
+    # the same files, with the service, the firewall and Settings > Apps
+    - name: Create Installer
+      run: .\build-aux\windows\build-setup.ps1 -PackageDir rustinput-windows -OutputDir .
     - name: Upload build artifact
       uses: actions/upload-artifact@v6
       with:
         name: rustinput-windows-x86_64
-        path: rustinput-windows-x86_64.zip
+        path: |
+          rustinput-windows-x86_64.zip
+          rustinput-windows-x86_64-setup.exe
 
   macos-release-build:
     runs-on: macos-15-intel
@@ -191,6 +196,9 @@ jobs:
     runs-on: "ubuntu-latest"
     permissions:
       contents: write
+    outputs:
+      tag_name: ${{ steps.vars.outputs.tag_name }}
+      prerelease: ${{ steps.vars.outputs.prerelease }}
     steps:
     - uses: actions/checkout@v6
     - name: Download build artifacts
@@ -253,6 +261,9 @@ jobs:
         prerelease: ${{ steps.vars.outputs.prerelease }}
         make_latest: ${{ steps.vars.outputs.make_latest }}
         generate_release_notes: true
+        # before the generated notes
+        body: |
+          Windows: run `rustinput-windows-x86_64-setup.exe`, or update with `update-rustinput.ps1` (see the [README](https://github.com/felipemarques/rust-input#installation)). [Code signing policy](https://github.com/felipemarques/rust-input#code-signing-policy).
         files: |
           rustinput-linux-x86_64/rustinput-linux-x86_64
           rustinput-linux-x86_64/target/release/bundle/deb/rustinput_*.deb
@@ -263,4 +274,96 @@ jobs:
           rustinput-macos-intel/rustinput-macos-intel.zip
           rustinput-macos-arm64/rustinput-macos-arm64.zip
           rustinput-windows-x86_64/rustinput-windows-x86_64.zip
+          rustinput-windows-x86_64/rustinput-windows-x86_64-setup.exe
           scripts/update-rustinput.ps1
+
+  # Signs rustinput.exe and the installer with SignPath (DOC.md, "Signing the
+  # Windows files") and puts the signed files in place of the published ones.
+  # Off until the repository variable SIGNPATH_ORGANIZATION_ID exists:
+  # deleting it turns signing off again. Releases of a version only, not the
+  # pre-releases of every push to main. Each of the two requests waits for an
+  # approval in SignPath; when that does not come in time this job fails, the
+  # release keeps its unsigned files, and "Re-run failed jobs" asks again.
+  windows-sign:
+    name: "Sign the Windows files"
+    needs: [release]
+    if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && needs.release.outputs.prerelease == 'false' }}
+    runs-on: windows-latest
+    timeout-minutes: 350
+    permissions:
+      contents: write
+      actions: read
+    env:
+      TAG: ${{ needs.release.outputs.tag_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+    - uses: actions/checkout@v6
+    - name: Download the Windows build
+      uses: actions/download-artifact@v4
+      with:
+        name: rustinput-windows-x86_64
+        path: unsigned
+    - name: Unpack
+      id: unpack
+      run: |
+        Expand-Archive -Path unsigned\rustinput-windows-x86_64.zip -DestinationPath package
+        New-Item -ItemType Directory -Force exe | Out-Null
+        Copy-Item package\rustinput.exe exe\
+        $version = ([string](Get-Item package\rustinput.exe).VersionInfo.ProductVersion).Trim()
+        if ("v$version" -ne $env:TAG) { throw "rustinput.exe is $version, the release $env:TAG" }
+        "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+    - name: Upload rustinput.exe for signing
+      id: upload-exe
+      uses: actions/upload-artifact@v6
+      with:
+        name: unsigned-rustinput-exe
+        path: exe/rustinput.exe
+    - name: Sign rustinput.exe
+      uses: signpath/github-action-submit-signing-request@v3
+      with:
+        api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+        organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'rust-input' }}
+        signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+        artifact-configuration-slug: rustinput-exe
+        github-artifact-id: ${{ steps.upload-exe.outputs.artifact-id }}
+        parameters: |
+          version: ${{ toJSON(steps.unpack.outputs.version) }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: 12600
+        output-artifact-directory: signed-exe
+    - name: Rebuild the zip and the installer with the signed rustinput.exe
+      run: |
+        $signature = Get-AuthenticodeSignature signed-exe\rustinput.exe
+        if ($signature.Status -ne 'Valid') { throw "rustinput.exe is not signed: $($signature.Status) $($signature.StatusMessage)" }
+        Write-Host "signed by: $($signature.SignerCertificate.Subject)"
+        Copy-Item signed-exe\rustinput.exe package\rustinput.exe -Force
+        New-Item -ItemType Directory -Force signed | Out-Null
+        Compress-Archive -Path "package\*" -DestinationPath signed\rustinput-windows-x86_64.zip
+        .\build-aux\windows\build-setup.ps1 -PackageDir package -OutputDir setup
+    - name: Upload the installer for signing
+      id: upload-setup
+      uses: actions/upload-artifact@v6
+      with:
+        name: unsigned-rustinput-setup
+        path: setup/rustinput-windows-x86_64-setup.exe
+    - name: Sign the installer
+      uses: signpath/github-action-submit-signing-request@v3
+      with:
+        api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+        organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+        project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'rust-input' }}
+        signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+        artifact-configuration-slug: rustinput-setup
+        github-artifact-id: ${{ steps.upload-setup.outputs.artifact-id }}
+        parameters: |
+          version: ${{ toJSON(steps.unpack.outputs.version) }}
+        wait-for-completion: true
+        wait-for-completion-timeout-in-seconds: 7200
+        output-artifact-directory: signed-setup
+    - name: Put the signed files in the release
+      run: |
+        $signature = Get-AuthenticodeSignature signed-setup\rustinput-windows-x86_64-setup.exe
+        if ($signature.Status -ne 'Valid') { throw "the installer is not signed: $($signature.Status) $($signature.StatusMessage)" }
+        Copy-Item signed-setup\rustinput-windows-x86_64-setup.exe signed\
+        gh release upload $env:TAG signed\rustinput-windows-x86_64.zip signed\rustinput-windows-x86_64-setup.exe --clobber --repo $env:GITHUB_REPOSITORY

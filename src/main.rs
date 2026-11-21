@@ -52,8 +52,12 @@ fn main() {
     windows_log::setup(&mut logger);
     logger.init();
 
-    // the Windows service: before the configuration, which is that of a
-    // user and not of the service
+    // what the installer asks, as administrator, and the Windows service:
+    // before the configuration, which is that of a user
+    #[cfg(windows)]
+    if windows_setup::requested() {
+        process::exit(windows_setup::run());
+    }
     #[cfg(windows)]
     if windows_supervisor::requested() {
         if let Err(e) = windows_supervisor::run() {
@@ -196,5 +200,7 @@ async fn run_service(config: Config) -> Result<(), ServiceError> {
 
 #[cfg(windows)]
 mod windows_log;
+#[cfg(windows)]
+mod windows_setup;
 #[cfg(windows)]
 mod windows_supervisor;

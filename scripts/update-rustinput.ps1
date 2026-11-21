@@ -4,9 +4,15 @@
 
 .DESCRIPTION
     Finds the newest release of RustInput on GitHub, downloads it with a
-    progress bar, checks its SHA-256, closes RustInput, replaces the installed
-    copy while keeping the previous one, starts RustInput again and shows
+    progress bar, checks its SHA-256, closes RustInput, installs it while
+    keeping a copy of the previous one, starts RustInput again and shows
     whether it came up, with the end of its logs.
+
+    Since 0.24.0 a release brings an installer
+    (rustinput-windows-x86_64-setup.exe), which this script runs without
+    questions; RustInput then shows in Settings > Apps. Installing an older
+    version (-Version 0.23.1) removes that installation first, keeping the
+    settings, and installs the zip as before.
 
     RustInput is installed in C:\Program Files\RustInput with the Windows
     service "RustInput", which starts with Windows and keeps RustInput running
@@ -31,7 +37,7 @@
 .PARAMETER Uninstall
     Removes RustInput: the service, the program, the Start menu items, the
     "Copy to RustInput" item of Explorer and the firewall rules. The settings
-    and the logs stay.
+    and the logs stay. Same as uninstalling it in Settings > Apps.
 
 .PARAMETER NoService
     Installs without the Windows service, as before 0.23.0: RustInput then runs
@@ -43,7 +49,8 @@
     anyway).
 
 .PARAMETER NoShortcuts
-    Does not create the "RustInput" and "Update RustInput" Start menu items.
+    Does not create the "RustInput" and "Update RustInput" Start menu items
+    (with the installer: no tray icon at sign-in and no desktop shortcut).
 
 .PARAMETER NoPause
     Does not wait for Enter before the window closes.
@@ -53,6 +60,9 @@
 
 .PARAMETER Zip
     Installs this rustinput-windows-x86_64.zip instead of downloading one.
+
+.PARAMETER Setup
+    Runs this rustinput-windows-x86_64-setup.exe instead of downloading one.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File update-rustinput.ps1
@@ -71,7 +81,8 @@ param(
     [switch]$NoShortcuts,
     [switch]$NoPause,
     [string]$InstallDir = '',
-    [string]$Zip = ''
+    [string]$Zip = '',
+    [string]$Setup = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -83,12 +94,16 @@ $ScriptParameters = $PSBoundParameters
 
 $Repo = 'felipemarques/rust-input'
 $AssetName = 'rustinput-windows-x86_64.zip'
+$SetupAssetName = 'rustinput-windows-x86_64-setup.exe'
 $ScriptName = 'update-rustinput.ps1'
 $UserAgent = 'rustinput-updater'
 $ServiceName = 'RustInput'
 $FirewallGroup = 'RustInput'
 # the first version with the service
 $FirstServiceVersion = [version]'0.23.0'
+# the installation by the installer, as Windows lists it in Settings > Apps
+# (AppId of build-aux/windows/rustinput.iss)
+$SetupKey = 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{8C7A4E2B-3F1D-4B6A-9E5C-2D7F1A0B6C34}_is1'
 # 64-bit Program Files, also from a 32-bit PowerShell
 $ProgramFilesDir = $env:ProgramW6432
 if (-not $ProgramFilesDir) { $ProgramFilesDir = $env:ProgramFiles }
@@ -205,6 +220,7 @@ function Test-UnderFolder([string]$Path, [string]$Folder) {
 function Test-NeedsAdministrator {
     if (-not $NoService -and -not ($Uninstall -and -not (Test-Path -LiteralPath $Exe))) { return $true }
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { return $true }
+    if ($Setup -or (Get-SetupInstall)) { return $true }
     return (Test-UnderFolder $InstallDir $ProgramFilesDir)
 }
 
@@ -270,6 +286,14 @@ function Test-ServiceVersion($Version) {
     return ($parsed -and $parsed -ge $FirstServiceVersion)
 }
 
+# a token for the API of GitHub, when RUSTINPUT_GITHUB_TOKEN holds one: the
+# tests on GitHub share addresses that run into the limit of requests
+function Get-GitHubHeaders {
+    $headers = @{}
+    if ($env:RUSTINPUT_GITHUB_TOKEN) { $headers['Authorization'] = 'Bearer ' + $env:RUSTINPUT_GITHUB_TOKEN }
+    return $headers
+}
+
 function Get-Release([string]$Wanted) {
     $api = "https://api.github.com/repos/$Repo/releases/"
     if ($Wanted -eq 'latest') {
@@ -278,7 +302,7 @@ function Get-Release([string]$Wanted) {
         $url = $api + 'tags/v' + $Wanted.TrimStart('v')
     }
     try {
-        return Invoke-RestMethod -Uri $url -UserAgent $UserAgent -TimeoutSec 30
+        return Invoke-RestMethod -Uri $url -UserAgent $UserAgent -Headers (Get-GitHubHeaders) -TimeoutSec 30
     } catch {
         $err = $_
         $status = $null
@@ -296,7 +320,7 @@ function Get-Release([string]$Wanted) {
 # the commits between two tags, newest first, without the version bumps
 function Get-Changes([string]$From, [string]$To) {
     try {
-        $compare = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/compare/$From...$To" -UserAgent $UserAgent -TimeoutSec 30
+        $compare = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/compare/$From...$To" -UserAgent $UserAgent -Headers (Get-GitHubHeaders) -TimeoutSec 30
     } catch {
         return @()
     }
@@ -308,14 +332,14 @@ function Get-Changes([string]$From, [string]$To) {
 # ---------------------------------------------------------------------------
 # download
 
-function Save-File([string]$Url, [string]$Path, [long]$ExpectedSize) {
+function Save-File([string]$Url, [string]$Path, [long]$ExpectedSize, [string]$Name) {
     # shown here only (see the top)
     $ProgressPreference = 'Continue'
     Add-Type -AssemblyName System.Net.Http
     $client = New-Object System.Net.Http.HttpClient
     $client.Timeout = [TimeSpan]::FromMinutes(30)
     $client.DefaultRequestHeaders.UserAgent.ParseAdd($UserAgent)
-    $activity = (T 'Downloading ' 'Baixando ') + $AssetName
+    $activity = (T 'Downloading ' 'Baixando ') + $Name
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $done = [long]0
     try {
@@ -641,9 +665,34 @@ function Set-ServiceState($InstalledVersion) {
 # ---------------------------------------------------------------------------
 # firewall
 
+function Convert-ProfileMask([int]$Mask) {
+    $names = @()
+    if ($Mask -band 1) { $names += 'Domain' }
+    if ($Mask -band 2) { $names += 'Private' }
+    if ($Mask -band 4) { $names += 'Public' }
+    return ($names -join ', ')
+}
+
+# the networks the rules of the installer allowed, before its uninstaller
+# removes them: those the rules of this script allow then
+$script:KeptFirewallProfiles = ''
+function Save-FirewallProfiles {
+    try {
+        $mask = 0
+        foreach ($rule in @(Get-NetFirewallRule -Group $FirewallGroup -ErrorAction Stop)) {
+            if ([string]$rule.Direction -ne 'Inbound' -or [string]$rule.Action -ne 'Allow') { continue }
+            $value = [int]$rule.Profile
+            if ($value -eq 0) { $script:KeptFirewallProfiles = 'Any'; return }
+            $mask = $mask -bor $value
+        }
+        if ($mask -ne 0) { $script:KeptFirewallProfiles = Convert-ProfileMask $mask }
+    } catch { }
+}
+
 # the network profiles the rules of the firewall Windows made for RustInput
 # allow, when it asked: those the new rules allow too
 function Get-FirewallProfiles {
+    if ($script:KeptFirewallProfiles) { return $script:KeptFirewallProfiles }
     $mask = 0
     try {
         $filters = @(Get-NetFirewallApplicationFilter -ErrorAction Stop | Where-Object { $_.Program -like '*\rustinput.exe' })
@@ -656,11 +705,7 @@ function Get-FirewallProfiles {
         }
     } catch { }
     if ($mask -eq 0) { return 'Domain, Private' }
-    $names = @()
-    if ($mask -band 1) { $names += 'Domain' }
-    if ($mask -band 2) { $names += 'Private' }
-    if ($mask -band 4) { $names += 'Public' }
-    return ($names -join ', ')
+    return (Convert-ProfileMask $mask)
 }
 
 # Lets the other computers reach RustInput where it is installed now: Windows
@@ -683,6 +728,120 @@ function Install-FirewallRules {
     } catch {
         Write-Warn ((T 'could not set up the Windows firewall: {0}' 'não deu para configurar o firewall do Windows: {0}') -f $_.Exception.Message)
     }
+}
+
+# ---------------------------------------------------------------------------
+# the installer (rustinput-windows-x86_64-setup.exe, since 0.24.0)
+
+# The installation the installer made, as Windows lists it in Settings > Apps:
+# $null when there is none. The 64-bit registry also from a 32-bit PowerShell.
+function Get-SetupInstall {
+    try {
+        $hive = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64)
+        $key = $hive.OpenSubKey($SetupKey)
+        if (-not $key) { return $null }
+        try {
+            $line = [string]$key.GetValue('UninstallString')
+            $uninstaller = $line
+            if ($line -match '^\s*"([^"]+)"') { $uninstaller = $Matches[1] }
+            return New-Object PSObject -Property @{
+                Folder = ([string]$key.GetValue('InstallLocation')).TrimEnd('\')
+                Version = [string]$key.GetValue('DisplayVersion')
+                Uninstaller = $uninstaller
+            }
+        } finally {
+            $key.Close()
+        }
+    } catch {
+        return $null
+    }
+}
+
+# Removes the installation of the installer with its uninstaller, which
+# removes the service, the firewall rules, the Start menu items and the
+# folders, and keeps the settings. $true if there was one.
+function Remove-SetupInstall {
+    $install = Get-SetupInstall
+    if (-not $install) { return $false }
+    if (-not $install.Uninstaller -or -not (Test-Path -LiteralPath $install.Uninstaller)) {
+        throw ((T 'the uninstaller of RustInput is missing ({0}): uninstall it in Settings > Apps' 'falta o desinstalador do RustInput ({0}): desinstale em Configurações > Aplicativos') -f $install.Uninstaller)
+    }
+    Write-Info ((T 'removing the installation of the installer ({0}), the settings stay...' 'removendo a instalação do instalador ({0}), as configurações ficam...') -f $install.Version)
+    [void](Start-Process -FilePath $install.Uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru)
+    # it goes on in a copy of itself: done once Windows no longer lists it
+    # and its file is gone
+    $deadline = (Get-Date).AddSeconds(120)
+    while (((Get-SetupInstall) -or (Test-Path -LiteralPath $install.Uninstaller)) -and (Get-Date) -lt $deadline) {
+        Start-Sleep -Milliseconds 500
+    }
+    if (Get-SetupInstall) {
+        throw (T 'the uninstaller of RustInput did not finish: uninstall it in Settings > Apps' 'o desinstalador do RustInput não terminou: desinstale em Configurações > Aplicativos')
+    }
+    Write-Ok (T 'removed the installation of the installer' 'removida a instalação do instalador')
+    return $true
+}
+
+# the files of the installed copy into `Destination`, without the uninstaller
+function Copy-Install([string]$Destination) {
+    Remove-Folder $Destination
+    New-Item -ItemType Directory -Force -Path $Destination | Out-Null
+    Get-ChildItem -LiteralPath $InstallDir -Force | Where-Object { $_.Name -notlike 'unins*' } |
+        Copy-Item -Destination $Destination -Recurse -Force
+}
+
+# Turns the installation of the installer into one of this script, with the
+# same files, for a version without the installer (-Version 0.23.1, -Zip,
+# -Restore): its uninstaller removes the service, the firewall rules and the
+# Start menu items, which this script then makes again. The copy of the
+# version before stays.
+function Convert-SetupInstall {
+    if (-not (Get-SetupInstall)) { return }
+    Save-FirewallProfiles
+    $aside = "$InstallDir.restore"
+    $previousAside = "$PreviousDir.restore"
+    $hadFiles = Test-Path -LiteralPath $Exe
+    if ($hadFiles) { Copy-Install $aside }
+    Remove-Folder $previousAside
+    if (Test-Path -LiteralPath $PreviousDir) { Move-Item -LiteralPath $PreviousDir -Destination $previousAside }
+    try {
+        [void](Remove-SetupInstall)
+    } finally {
+        if ($hadFiles) {
+            Remove-Folder $InstallDir
+            Move-Item -LiteralPath $aside -Destination $InstallDir
+        }
+        if (Test-Path -LiteralPath $previousAside) {
+            Remove-Folder $PreviousDir
+            Move-Item -LiteralPath $previousAside -Destination $PreviousDir
+        }
+    }
+}
+
+# Runs the installer without questions (this script runs as administrator).
+# The choices of the last installation stay, unless -NoService or
+# -NoShortcuts turn some off.
+function Invoke-Setup([string]$SetupPath) {
+    $log = Join-Path $LogDir 'setup-install.log'
+    $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', ('/LOG="{0}"' -f $log))
+    $tasks = @()
+    if ($NoService) { $tasks += '!service' }
+    if ($NoShortcuts) { $tasks += '!tray', '!desktopicon' }
+    if ($tasks.Count -gt 0) { $arguments += ('/MERGETASKS="{0}"' -f ($tasks -join ',')) }
+    Write-Detail ('{0} {1}' -f (Split-Path -Leaf $SetupPath), ($arguments -join ' '))
+    $process = Start-Process -FilePath $SetupPath -ArgumentList $arguments -Wait -PassThru
+    $code = $process.ExitCode
+    $setupLog = Join-Path $ServiceLogDir 'setup.log'
+    if ($code -eq 0) {
+        Write-Ok (T 'the installer is done (Settings > Apps lists RustInput)' 'o instalador terminou (Configurações > Aplicativos mostra o RustInput)')
+        return
+    }
+    if ($code -ge 100) {
+        Write-Warn ((T 'installed, but setting up the service or the firewall failed (code {0})' 'instalado, mas a configuração do serviço ou do firewall falhou (código {0})') -f ($code - 100))
+        Show-Log $setupLog (Get-Date).AddMinutes(-10)
+        return
+    }
+    Show-Log $log (Get-Date).AddMinutes(-10)
+    throw ((T 'the installer failed (code {0}), see {1}' 'o instalador falhou (código {0}), veja {1}') -f $code, $log)
 }
 
 # ---------------------------------------------------------------------------
@@ -805,6 +964,9 @@ function Show-Summary([string]$Before, [string]$After, [bool]$Running) {
         Write-Info ((T 'before: {0}' 'antes: {0}') -f $Before)
     }
     Write-Info ((T 'folder:            {0}' 'pasta:             {0}') -f $InstallDir)
+    if (Get-SetupInstall) {
+        Write-Info (T 'installed with:    the installer, uninstalled in Settings > Apps' 'instalado com:     o instalador, desinstala em Configurações > Aplicativos')
+    }
     $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
     if ($service) {
         Write-Info ((T 'Windows service:   {0} ({1})' 'serviço:           {0} ({1})') -f $ServiceName, $service.Status)
@@ -833,6 +995,7 @@ function Invoke-Restore {
     Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
     Stop-RustInput
     Write-Step ((T 'Going back to {0}' 'Voltando para {0}') -f (Get-VersionText $back))
+    Convert-SetupInstall
     $swap = "$InstallDir.swap"
     Remove-Folder $swap
     if (Test-Path -LiteralPath $InstallDir) {
@@ -846,6 +1009,7 @@ function Invoke-Restore {
     Write-Ok ((T 'installed {0}, the other one is now the previous version' 'instalada a {0}; a outra virou a versão anterior') -f (Get-VersionText $back))
     Set-ServiceState $back
     Install-FirewallRules
+    Install-Shortcuts
     $running = Start-RustInput
     Show-Summary (Get-VersionText $before) (Get-VersionText $back) $running
 }
@@ -855,6 +1019,7 @@ function Invoke-Uninstall {
     Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
     Stop-RustInput
     Write-Step (T 'Removing RustInput' 'Removendo o RustInput')
+    [void](Remove-SetupInstall)
     [void](Remove-RustInputService)
     foreach ($dir in $InstallDir, $PreviousDir, $StagingDir, "$InstallDir.swap", $OldDefaultDir, "$OldDefaultDir.previous", "$OldDefaultDir.new", $ServiceLogDir) {
         if (Test-Path -LiteralPath $dir) {
@@ -902,6 +1067,8 @@ function Get-VersionText($Version) {
 function Complete-Install($Installed, [string]$Target, [bool]$Moving) {
     Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
     Stop-RustInput
+    # a version without the installer, over one it installed
+    Convert-SetupInstall
 
     Write-Step ((T 'Installing {0}' 'Instalando a {0}') -f $Target)
     Install-Staged
@@ -923,6 +1090,52 @@ function Complete-Install($Installed, [string]$Target, [bool]$Moving) {
         Write-Warn (T 'to go back to the previous version, run this again with -Restore' 'para voltar para a versão anterior, rode de novo com -Restore')
     }
     Show-Summary (Get-VersionText $Installed) $Target $running
+}
+
+# Runs the installer of a release, keeping a copy of the installed version
+# for -Restore, and starts RustInput.
+function Complete-SetupInstall($Installed, [string]$Target, [string]$SetupPath, [bool]$Moving) {
+    Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
+    Stop-RustInput
+
+    Write-Step ((T 'Installing {0} with its installer' 'Instalando a {0} com o instalador') -f $Target)
+    if (Test-Path -LiteralPath $Exe) {
+        Copy-Install $PreviousDir
+        Write-Ok ((T 'kept a copy of the version before: {0}' 'guardada uma cópia da versão anterior: {0}') -f $PreviousDir)
+    }
+    if ($Moving) { Move-OldInstall }
+    Invoke-Setup $SetupPath
+    $install = Get-SetupInstall
+    if ($install -and $install.Folder -and $install.Folder -ne $InstallDir) {
+        Write-Info ((T 'the installer keeps RustInput in {0}' 'o instalador mantém o RustInput em {0}') -f $install.Folder)
+        $script:InstallDir = $install.Folder
+        $script:Exe = Join-Path $install.Folder 'rustinput.exe'
+    }
+    $now = Get-ExeVersion $Exe
+    if ($now) {
+        Write-Ok ((T 'installed: rustinput.exe {0}' 'instalado: rustinput.exe {0}') -f $now)
+    }
+
+    Write-Step (T 'Starting RustInput' 'Abrindo o RustInput')
+    $running = Start-RustInput
+    if (-not $running -and (Test-Path -LiteralPath $PreviousDir)) {
+        Write-Warn (T 'to go back to the previous version, run this again with -Restore' 'para voltar para a versão anterior, rode de novo com -Restore')
+    }
+    Show-Summary (Get-VersionText $Installed) $Target $running
+}
+
+# runs an installer at hand (-Setup), without GitHub
+function Invoke-SetupFileInstall {
+    $script:StepCount = 3
+    $moving = Test-Moving
+    $installed = Get-ExeVersion $Exe
+    if ($moving) { $installed = Get-ExeVersion (Join-Path $OldDefaultDir 'rustinput.exe') }
+    $setupPath = (Resolve-Path -LiteralPath $Setup).Path
+    $target = [string](Get-Item -LiteralPath $setupPath).VersionInfo.ProductVersion
+    Write-Info ((T 'installed:  {0}' 'instalada:  {0}') -f (Get-VersionText $installed))
+    Write-Info ((T 'installer:  {0} ({1})' 'instalador: {0} ({1})') -f $setupPath, $target)
+    Write-Detail ('SHA-256: {0}' -f (Get-FileHash -Algorithm SHA256 -LiteralPath $setupPath).Hash.ToLowerInvariant())
+    Complete-SetupInstall $installed $target $setupPath $moving
 }
 
 # installs a zip at hand (-Zip), without GitHub
@@ -948,7 +1161,12 @@ function Invoke-Update {
     Write-Step (T 'Looking for the version on GitHub' 'Procurando a versão no GitHub')
     $release = Get-Release $Version
     $target = ([string]$release.tag_name).TrimStart('v')
-    $asset = $release.assets | Where-Object { $_.name -eq $AssetName } | Select-Object -First 1
+    # the installer since 0.24.0, the zip before
+    $asset = $release.assets | Where-Object { $_.name -eq $SetupAssetName } | Select-Object -First 1
+    $withSetup = [bool]$asset
+    if (-not $asset) {
+        $asset = $release.assets | Where-Object { $_.name -eq $AssetName } | Select-Object -First 1
+    }
     if (-not $asset) {
         throw ((T 'release {0} has no {1}' 'a versão {0} não tem o {1}') -f $target, $AssetName)
     }
@@ -970,10 +1188,13 @@ function Invoke-Update {
             } else {
                 Write-Ok (T 'the installed version is newer than the published one (-Force installs it anyway)' 'a versão instalada é mais nova que a publicada (-Force instala mesmo assim)')
             }
-            Install-Self
-            Set-ServiceState $installed
-            Install-FirewallRules
-            Install-Shortcuts
+            # the installer keeps its own installation in order
+            if (-not (Get-SetupInstall)) {
+                Install-Self
+                Set-ServiceState $installed
+                Install-FirewallRules
+                Install-Shortcuts
+            }
             $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
             $daemon = @(Get-RustInputProcess | Where-Object { $_.Role -eq 'daemon' }).Count -gt 0
             $running = $daemon -and (-not $service -or $service.Status -eq 'Running')
@@ -1003,9 +1224,9 @@ function Invoke-Update {
         }
     }
 
-    Write-Step ((T 'Downloading {0}' 'Baixando {0}') -f $AssetName)
-    $zip = Join-Path $env:TEMP ("rustinput-{0}.zip" -f $target)
-    $download = Save-File $asset.browser_download_url $zip ([long]$asset.size)
+    Write-Step ((T 'Downloading {0}' 'Baixando {0}') -f $asset.name)
+    $zip = Join-Path $env:TEMP ('rustinput-{0}-{1}' -f $target, $asset.name)
+    $download = Save-File $asset.browser_download_url $zip ([long]$asset.size) $asset.name
     Write-Ok ('{0} {1} {2:N1} s ({3}/s)' -f (Format-Size $download.Bytes), (T 'in' 'em'), $download.Seconds, (Format-Size ($download.Bytes / [Math]::Max($download.Seconds, 0.001))))
 
     Write-Step (T 'Checking the download' 'Conferindo o download')
@@ -1024,6 +1245,14 @@ function Invoke-Update {
         Write-Ok ((T 'SHA-256 matches GitHub: {0}' 'SHA-256 confere com o GitHub: {0}') -f $hash)
     } else {
         Write-Warn ((T 'GitHub does not list the SHA-256 of this file; SHA-256: {0}' 'o GitHub não informa o SHA-256 deste arquivo; SHA-256: {0}') -f $hash)
+    }
+    if ($withSetup) {
+        try {
+            Complete-SetupInstall $installed $target $zip $moving
+        } finally {
+            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+        }
+        return
     }
     [void](Expand-Release $zip)
     Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
@@ -1058,6 +1287,8 @@ try {
         Invoke-Uninstall
     } elseif ($Restore) {
         Invoke-Restore
+    } elseif ($Setup) {
+        Invoke-SetupFileInstall
     } elseif ($Zip) {
         Invoke-ZipInstall
     } else {

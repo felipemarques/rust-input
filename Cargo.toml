@@ -94,6 +94,14 @@ x11rb = { version = "0.14.0", features = ["xinput", "shape", "randr"] }
 clipboard-win = "5.4.3"
 # the Windows service that keeps the daemon running (windows_supervisor.rs)
 windows-service = "0.8.1"
+# the rules of the Windows firewall the installer sets (windows_setup.rs)
+windows = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
 windows-sys = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_Globalization",
