@@ -49,6 +49,7 @@ use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use webrtc_dtls::crypto::Certificate;
 
 use crate::{
+    arrangement::{self, Arrangement},
     clipboard::{ClipboardHandle, ClipboardMsg, Peer},
     crypto,
     pairing::{self, Pairing},
@@ -167,6 +168,8 @@ impl FilesHandle {
 /// Starts the file transfers. Whenever the transfers change, their state is
 /// sent to `reports`. The TCP port also takes pairing (see [`pairing`]); file
 /// channels only if `enabled`.
+// one argument per thing the TCP port answers for
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn spawn(
     cert: Certificate,
     authorized: AuthorizedKeys,
@@ -174,6 +177,7 @@ pub(crate) fn spawn(
     clipboard: ClipboardHandle,
     reports: Sender<Vec<TransferInfo>>,
     pairing: Pairing,
+    arrangement: Arrangement,
     enabled: bool,
 ) -> FilesHandle {
     let (tx, requests) = channel();
@@ -203,6 +207,7 @@ pub(crate) fn spawn(
         acceptor,
         listener: None,
         pairing,
+        arrangement,
         enabled,
         received_dir,
         journal: Journal::open(),
@@ -380,6 +385,7 @@ struct Task {
     acceptor: Option<TlsAcceptor>,
     listener: Option<JoinHandle<()>>,
     pairing: Pairing,
+    arrangement: Arrangement,
     /// file channels are taken
     enabled: bool,
     received_dir: Option<PathBuf>,
@@ -440,6 +446,7 @@ impl Task {
             acceptor,
             internal: self.internal_tx.clone(),
             pairing: self.pairing.clone(),
+            arrangement: self.arrangement.clone(),
             authorized: self.authorized.clone(),
             own: crypto::certificate_fingerprint(&self.cert),
             enabled: self.enabled,
@@ -1258,6 +1265,7 @@ struct Accept {
     acceptor: TlsAcceptor,
     internal: Sender<Internal>,
     pairing: Pairing,
+    arrangement: Arrangement,
     authorized: AuthorizedKeys,
     /// fingerprint of this device
     own: String,
@@ -1299,14 +1307,30 @@ impl Accept {
             }
             return;
         }
-        if magic != wire::MAGIC {
-            return log::info!("connection from {addr}: not RustInput");
-        }
         let authorized = self
             .authorized
             .read()
             .expect("lock")
             .contains_key(&fingerprint);
+        if magic == arrangement::MAGIC {
+            let answer = async {
+                stream.write_all(&arrangement::MAGIC).await?;
+                stream.flush().await?;
+                self.arrangement
+                    .serve(&mut stream, &fingerprint, authorized, addr)
+                    .await
+            };
+            if let Err(e) = timeout(HANDSHAKE_TIMEOUT, answer)
+                .await
+                .unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timed out")))
+            {
+                log::info!("arrangement with {addr}: {e}");
+            }
+            return;
+        }
+        if magic != wire::MAGIC {
+            return log::info!("connection from {addr}: not RustInput");
+        }
         if !authorized || !self.enabled {
             let why = if authorized {
                 "file transfers are off"

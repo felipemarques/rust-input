@@ -65,6 +65,10 @@ pub struct Window {
     /// the version next to the name, always in sight
     #[template_child]
     pub version_label: TemplateChild<Label>,
+    #[template_child]
+    pub arrangement_group: TemplateChild<PreferencesGroup>,
+    /// the editor of the arrangement and what goes with it
+    pub arrangement: RefCell<Option<crate::window::ArrangementParts>>,
     /// the certificate fingerprint of this computer, as copied (the row shows
     /// it in groups)
     pub fingerprint: RefCell<String>,
@@ -262,6 +266,7 @@ impl ObjectImpl for Window {
         obj.setup_icon();
         obj.setup_clients();
         obj.setup_authorized();
+        obj.setup_arrangement();
     }
 }
 

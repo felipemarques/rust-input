@@ -404,6 +404,14 @@ pub enum FrontendEvent {
     LinkStats(Vec<LinkStats>),
     /// light or dark windows, from the configuration
     Theme(Theme),
+    /// this computer, the arrangement and the computers it connects to,
+    /// answering [`FrontendRequest::Arrangement`], again as they describe
+    /// themselves
+    Arrangement(layout::ArrangementView),
+    /// the arrangement went to the computer `name`, or did not (`error`)
+    ArrangementSent { name: String, error: Option<String> },
+    /// another computer, `by`, changed the arrangement
+    ArrangementChanged { by: String },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -428,6 +436,11 @@ pub enum FrontendRequest {
     UpdatePosition(ClientHandle, Position),
     /// change where the client meets this device on the edge at its position
     UpdateLink(ClientHandle, EdgeLink),
+    /// the arrangement of the computers, with their monitors
+    /// ([`FrontendEvent::Arrangement`])
+    Arrangement,
+    /// arrange the computers so, here and on the others
+    Arrange(layout::Layout),
     /// update fix-ips
     UpdateFixIps(ClientHandle, Vec<IpAddr>),
     /// request reenabling input capture

@@ -1,3 +1,4 @@
+mod arrangement;
 mod authorization_window;
 mod client_object;
 mod client_row;
@@ -65,7 +66,7 @@ pub(crate) fn local_commit_str() -> String {
         .to_string()
 }
 
-use rustinput_ipc::{FrontendEvent, Theme, TransferState};
+use rustinput_ipc::{FrontendEvent, FrontendRequest, Theme, TransferState};
 
 use adw::Application;
 use gtk::{IconTheme, gdk::Display, glib::clone, prelude::*};
@@ -377,13 +378,24 @@ fn build_ui(app: &Application) {
         async move {
             // received transfers already announced in the window
             let mut announced = std::collections::HashSet::new();
+            // the arrangement, with the monitors of the other computers
+            window.request(FrontendRequest::Arrangement);
             loop {
                 let notify = receiver.recv().await.unwrap_or_else(|_| process::exit(1));
                 match notify {
                     FrontendEvent::Created(handle, client, state) => {
-                        window.new_client(handle, client, state)
+                        window.new_client(handle, client, state);
+                        window.request(FrontendRequest::Arrangement);
                     }
-                    FrontendEvent::Deleted(client) => window.delete_client(client),
+                    FrontendEvent::Deleted(client) => {
+                        window.delete_client(client);
+                        window.request(FrontendRequest::Arrangement);
+                    }
+                    FrontendEvent::Arrangement(view) => window.show_arrangement(&view),
+                    FrontendEvent::ArrangementSent { name, error } => {
+                        window.arrangement_sent(&name, error.as_deref())
+                    }
+                    FrontendEvent::ArrangementChanged { by } => window.arrangement_received(&by),
                     FrontendEvent::State(handle, config, state) => {
                         window.update_client_config(handle, config);
                         window.update_client_state(handle, state);

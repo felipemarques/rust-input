@@ -1,4 +1,5 @@
 use crate::{
+    arrangement::{self, ArrangeError, Arrangement, ArrangementEvent, Description},
     capture::{Capture, CaptureType, ICaptureEvent},
     client::ClientManager,
     clipboard::{self, ClipboardHandle, ClipboardMsg, Peer, PeerLinks},
@@ -20,6 +21,7 @@ use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, DEFAULT_PORT, EdgeLink, FileOptions, FrontendEvent,
     FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span, Status, Theme,
     TransferInfo,
+    layout::{ArrangementView, Layout, Machine, Monitor, Peer as ArrangedPeer},
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -107,6 +109,22 @@ pub struct Service {
     netstats: NetStats,
     /// light or dark windows, as configured
     theme: Theme,
+    /// the arrangement of the computers, the same on all of them
+    layout: Layout,
+    /// answers the other devices about the arrangement, on the TCP port
+    arrangement: Arrangement,
+    arrangement_events: Receiver<ArrangementEvent>,
+    /// outcomes of describing and arranging other devices from here
+    arrange_results: Receiver<ArrangeResult>,
+    arrange_results_tx: Sender<ArrangeResult>,
+    /// the clients as they described themselves: fingerprint and description
+    descriptions: HashMap<ClientHandle, Result<(String, Description), String>>,
+}
+
+/// how describing or arranging another device went
+enum ArrangeResult {
+    Described(ClientHandle, Result<(String, Description), ArrangeError>),
+    Sent(String, Result<(), ArrangeError>),
 }
 
 #[derive(Debug)]
@@ -163,6 +181,10 @@ impl Service {
             .unwrap_or_else(|| "RustInput".into());
         let (pairing_tx, pairing_events) = channel();
         let pairing = Pairing::new(name.clone(), pairing_tx);
+        let layout = config.layout();
+        let (arrangement_tx, arrangement_events) = channel();
+        let arrangement = Arrangement::new(name.clone(), layout.revision, arrangement_tx);
+        let (arrange_results_tx, arrange_results) = channel();
         // the TCP port is open for pairing even without file transfers
         let file_channel = files::spawn(
             cert.clone(),
@@ -171,6 +193,7 @@ impl Service {
             clipboard.clone(),
             reports_tx,
             pairing.clone(),
+            arrangement.clone(),
             clipboard.files_enabled(),
         );
         let files = clipboard.files_enabled().then(|| file_channel.clone());
@@ -232,6 +255,12 @@ impl Service {
             texts: Texts::new(),
             notices,
             locked: false,
+            layout,
+            arrangement,
+            arrangement_events,
+            arrange_results,
+            arrange_results_tx,
+            descriptions: HashMap::new(),
         };
         Ok(service)
     }
@@ -275,6 +304,8 @@ impl Service {
                 Some(action) = self.radial_actions.recv() => self.radial_action(action),
                 Some(notice) = self.notices.recv() => self.notify_frontend(FrontendEvent::Notice(notice)),
                 Some((handle, result)) = self.pair_results.recv() => self.pairing_done(handle, result),
+                Some(event) = self.arrangement_events.recv() => self.handle_arrangement_event(event),
+                Some(result) = self.arrange_results.recv() => self.arrange_done(result),
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
         }
@@ -336,6 +367,8 @@ impl Service {
                 self.update_link(handle, link);
                 self.save_config();
             }
+            FrontendRequest::Arrangement => self.show_arrangement(true),
+            FrontendRequest::Arrange(layout) => self.arrange(layout),
             FrontendRequest::ResolveDns(handle) => self.resolve(handle),
             FrontendRequest::Sync => self.sync_frontend(),
             FrontendRequest::RemoveAuthorizedKey(key) => {
@@ -395,6 +428,9 @@ impl Service {
             })
             .collect();
         self.config.set_clients(clients);
+        if !self.layout.machines.is_empty() {
+            self.config.set_layout(self.layout.clone());
+        }
         let authorized_keys = self.authorized_keys.read().expect("lock").clone();
         self.config.set_authorized_keys(authorized_keys);
         if let Err(e) = self.config.write_back() {
@@ -1055,4 +1091,340 @@ fn link_stats(
         sent_total: sample.sent_total,
         received_total: sample.received_total,
     }
+}
+
+/// The arrangement of the computers (see [`crate::arrangement`] and
+/// `rustinput_ipc::layout`): shown and changed in the window, sent to the
+/// other computers of it, and taken from them.
+impl Service {
+    /// this computer as a machine of the arrangement, at its place in it
+    fn own_machine(&self) -> Machine {
+        let (monitors, width, height) =
+            arrangement::own_monitors().unwrap_or_else(|| (Vec::new(), 1920, 1080));
+        let placed = self.layout.machine(&self.public_key_fingerprint);
+        Machine {
+            id: self.public_key_fingerprint.clone(),
+            name: self.name.clone(),
+            x: placed.map_or(0, |m| m.x),
+            y: placed.map_or(0, |m| m.y),
+            width,
+            height,
+            monitors,
+            hostname: Some(self.name.clone()),
+            ips: Vec::new(),
+            port: self.port,
+        }
+    }
+
+    /// the id of a client in the arrangement: its fingerprint once it
+    /// described itself, else a stand-in for it on this computer
+    fn client_id(&self, handle: ClientHandle) -> String {
+        match self.descriptions.get(&handle) {
+            Some(Ok((fingerprint, _))) => fingerprint.clone(),
+            _ => self
+                .layout
+                .machines
+                .iter()
+                .find(|m| self.client_for(m, None) == Some(handle))
+                .map(|m| m.id.clone())
+                .unwrap_or_else(|| format!("client-{handle}")),
+        }
+    }
+
+    /// where a client listens: where it was reached, then its addresses
+    fn client_addrs(&self, handle: ClientHandle) -> Vec<SocketAddr> {
+        let port = self.client_manager.get_port(handle).unwrap_or(DEFAULT_PORT);
+        let mut addrs: Vec<SocketAddr> = self
+            .client_manager
+            .active_addr(handle)
+            .into_iter()
+            .collect();
+        for ip in self.client_manager.get_ips(handle).unwrap_or_default() {
+            let addr = SocketAddr::new(ip, port);
+            if !addrs.contains(&addr) {
+                addrs.push(addr);
+            }
+        }
+        addrs
+    }
+
+    /// The window shows the arrangement; with `describe`, the clients are
+    /// asked about their monitors, and it is shown again as they answer.
+    fn show_arrangement(&mut self, describe: bool) {
+        let own = self.own_machine();
+        let mut peers = Vec::new();
+        for handle in self.client_manager.registered_clients() {
+            let Some((config, state)) = self.client_manager.get_state(handle) else {
+                continue;
+            };
+            let id = self.client_id(handle);
+            let placed = self.layout.machine(&id);
+            let (described, error, name, monitors) = match self.descriptions.get(&handle) {
+                Some(Ok((_, d))) => (true, None, d.name.clone(), d.monitors.clone()),
+                Some(Err(e)) => (false, Some(e.clone()), String::new(), Vec::new()),
+                None => (false, None, String::new(), Vec::new()),
+            };
+            let name = Some(name)
+                .filter(|n| !n.is_empty())
+                .or_else(|| config.hostname.clone())
+                .or_else(|| config.fix_ips.first().map(|ip| ip.to_string()))
+                .unwrap_or_else(|| format!("client {handle}"));
+            let (width, height) = bounds(&monitors)
+                .or_else(|| placed.map(|m| (m.width, m.height)))
+                .unwrap_or((0, 0));
+            let monitors = if monitors.is_empty() {
+                placed.map(|m| m.monitors.clone()).unwrap_or_default()
+            } else {
+                monitors
+            };
+            peers.push(ArrangedPeer {
+                handle,
+                machine: Machine {
+                    id,
+                    name,
+                    x: placed.map_or(0, |m| m.x),
+                    y: placed.map_or(0, |m| m.y),
+                    width,
+                    height,
+                    monitors,
+                    hostname: config.hostname.clone(),
+                    ips: config.fix_ips.clone(),
+                    port: config.port,
+                },
+                described,
+                error,
+                pos: config.pos,
+                active: state.active,
+            });
+        }
+        self.notify_frontend(FrontendEvent::Arrangement(ArrangementView {
+            own,
+            layout: self.layout.clone(),
+            peers,
+        }));
+        if !describe {
+            return;
+        }
+        for handle in self.client_manager.registered_clients() {
+            let addrs = self.client_addrs(handle);
+            let (cert, results) = (self.cert.clone(), self.arrange_results_tx.clone());
+            tokio::task::spawn_local(async move {
+                let result = arrangement::describe(cert, addrs, None).await;
+                let _ = results.send(ArrangeResult::Described(handle, result));
+            });
+        }
+    }
+
+    /// arranges the computers as the window says, here and on the others
+    fn arrange(&mut self, mut layout: Layout) {
+        layout.revision = layout.revision.max(self.layout.revision) + 1;
+        // this computer as it is now
+        let own = self.own_machine();
+        if let Some(me) = layout
+            .machines
+            .iter_mut()
+            .find(|m| m.id == self.public_key_fingerprint)
+        {
+            me.name = own.name;
+            me.hostname = own.hostname;
+            me.port = own.port;
+        }
+        let me = self.public_key_fingerprint.clone();
+        log::info!("arrangement {} from the window", layout.revision);
+        self.apply_layout(layout.clone(), &me, None);
+        for machine in layout.machines.iter().filter(|m| m.id != me) {
+            let handle = self.client_for(machine, None);
+            let mut addrs = handle.map(|h| self.client_addrs(h)).unwrap_or_default();
+            for ip in &machine.ips {
+                let addr = SocketAddr::new(*ip, machine.port);
+                if !addrs.contains(&addr) {
+                    addrs.push(addr);
+                }
+            }
+            let expected = is_fingerprint(&machine.id).then(|| machine.id.clone());
+            let (cert, results) = (self.cert.clone(), self.arrange_results_tx.clone());
+            let (layout, you, name) = (layout.clone(), machine.id.clone(), machine.name.clone());
+            tokio::task::spawn_local(async move {
+                let result = arrangement::arrange(cert, addrs, expected, layout, you).await;
+                let _ = results.send(ArrangeResult::Sent(name, result));
+            });
+        }
+    }
+
+    fn handle_arrangement_event(&mut self, event: ArrangementEvent) {
+        let ArrangementEvent::Received {
+            layout,
+            you,
+            from,
+            addr,
+        } = event;
+        if layout.revision < self.layout.revision {
+            log::info!(
+                "arrangement {} from {addr} is older than this one ({}), kept this one",
+                layout.revision,
+                self.layout.revision
+            );
+            return;
+        }
+        let by = layout
+            .machine(&from)
+            .map(|m| m.name.clone())
+            .or_else(|| {
+                self.authorized_keys
+                    .read()
+                    .expect("lock")
+                    .get(&from)
+                    .cloned()
+            })
+            .unwrap_or_else(|| addr.ip().to_string());
+        self.apply_layout(layout, &you, Some((from, addr)));
+        self.notify_frontend(FrontendEvent::ArrangementChanged { by });
+        self.show_arrangement(false);
+    }
+
+    fn arrange_done(&mut self, result: ArrangeResult) {
+        match result {
+            ArrangeResult::Described(handle, result) => {
+                if let Err(e) = &result {
+                    log::info!("client {handle} did not describe itself: {e}");
+                }
+                self.descriptions
+                    .insert(handle, result.map_err(|e| e.to_string()));
+                self.show_arrangement(false);
+            }
+            ArrangeResult::Sent(name, result) => {
+                let error = result.err().map(|e| e.to_string());
+                match &error {
+                    None => log::info!("arrangement sent to {name}"),
+                    Some(e) => log::warn!("arrangement not sent to {name}: {e}"),
+                }
+                self.notify_frontend(FrontendEvent::ArrangementSent { name, error });
+            }
+        }
+    }
+
+    /// The client of `machine`: by the fingerprint it described itself
+    /// with, by the stand-in id of this computer, by name, by address, or
+    /// (`sender`) by the address an arrangement came from.
+    fn client_for(
+        &self,
+        machine: &Machine,
+        sender: Option<&(String, SocketAddr)>,
+    ) -> Option<ClientHandle> {
+        let clients = self.client_manager.get_client_states();
+        let by_fingerprint = clients.iter().find(
+            |(h, ..)| matches!(self.descriptions.get(h), Some(Ok((fp, _))) if *fp == machine.id),
+        );
+        let by_stand_in = || {
+            clients
+                .iter()
+                .find(|(h, ..)| machine.id == format!("client-{h}"))
+        };
+        let same_name = |name: &Option<String>| {
+            name.as_ref().is_some_and(|n| {
+                machine
+                    .hostname
+                    .iter()
+                    .chain(std::iter::once(&machine.name))
+                    .any(|m| m.eq_ignore_ascii_case(n))
+            })
+        };
+        let by_name = || clients.iter().find(|(_, c, _)| same_name(&c.hostname));
+        let by_address = || {
+            clients.iter().find(|(_, c, s)| {
+                let sent_from = sender
+                    .filter(|(fp, _)| *fp == machine.id)
+                    .map(|(_, addr)| addr.ip());
+                c.fix_ips
+                    .iter()
+                    .chain(s.ips.iter())
+                    .any(|ip| machine.ips.contains(ip) || Some(*ip) == sent_from)
+            })
+        };
+        by_fingerprint
+            .or_else(by_stand_in)
+            .or_else(by_name)
+            .or_else(by_address)
+            .map(|(h, ..)| *h)
+    }
+
+    /// Takes `layout`, in which this computer is `me`: each computer next to
+    /// it becomes an active client at its edge and part of it, a computer of
+    /// the arrangement that does not touch it is not reached any more.
+    /// `sender` is the computer the arrangement came from.
+    fn apply_layout(&mut self, layout: Layout, me: &str, sender: Option<(String, SocketAddr)>) {
+        let neighbors = layout.neighbors(me);
+        for machine in layout.machines.iter().filter(|m| m.id != me) {
+            let handle = self.client_for(machine, sender.as_ref());
+            let neighbor = neighbors.iter().find(|n| n.id == machine.id);
+            match (handle, neighbor) {
+                (Some(handle), Some(n)) => self.place_client(handle, n.pos, n.link),
+                (None, Some(n)) => {
+                    // a computer this one did not know: reached at its name,
+                    // its addresses, or where the arrangement came from
+                    let handle = self.client_manager.add_client();
+                    let mut ips: Vec<IpAddr> = machine.ips.clone();
+                    if let Some((fp, addr)) = &sender {
+                        if *fp == machine.id && !ips.contains(&addr.ip()) {
+                            ips.push(addr.ip());
+                        }
+                    }
+                    let hostname = machine.hostname.clone().filter(|_| ips.is_empty());
+                    log::info!(
+                        "arrangement: new client {handle} for {} ({hostname:?}, {ips:?})",
+                        machine.name
+                    );
+                    self.client_manager.set_hostname(handle, hostname);
+                    self.client_manager.set_fix_ips(handle, ips);
+                    self.client_manager.set_port(handle, machine.port);
+                    self.notify_frontend(FrontendEvent::Created(
+                        handle,
+                        self.client_manager.get_state(handle).expect("client").0,
+                        self.client_manager.get_state(handle).expect("client").1,
+                    ));
+                    self.place_client(handle, n.pos, n.link);
+                }
+                (Some(handle), None) => {
+                    // in the arrangement, not next to this computer
+                    if self.client_manager.active_clients().contains(&handle) {
+                        log::info!("arrangement: client {handle} is not next to this computer");
+                        self.deactivate_client(handle);
+                        self.broadcast_client(handle);
+                    }
+                }
+                (None, None) => {}
+            }
+        }
+        self.layout = layout;
+        self.arrangement.set_revision(self.layout.revision);
+        self.save_config();
+    }
+
+    /// puts the client at `pos`, on the parts of the edges in `link`, active
+    fn place_client(&mut self, handle: ClientHandle, pos: Position, link: EdgeLink) {
+        let active = self.client_manager.active_clients().contains(&handle);
+        if active {
+            self.deactivate_client(handle);
+        }
+        self.client_manager.set_pos(handle, pos);
+        self.client_manager.set_link(handle, link);
+        self.activate_client(handle);
+        self.broadcast_client(handle);
+        log::info!("arrangement: client {handle} at {pos}, {link:?}");
+    }
+}
+
+/// the size of the desktop of `monitors`, none without monitors
+fn bounds(monitors: &[Monitor]) -> Option<(i32, i32)> {
+    let width = monitors.iter().map(|m| m.x + m.width).max()?;
+    let height = monitors.iter().map(|m| m.y + m.height).max()?;
+    Some((width, height))
+}
+
+/// whether `id` is a certificate fingerprint (32 bytes in hex, with colons)
+fn is_fingerprint(id: &str) -> bool {
+    id.len() == 95
+        && id
+            .split(':')
+            .all(|b| b.len() == 2 && b.chars().all(|c| c.is_ascii_hexdigit()))
 }

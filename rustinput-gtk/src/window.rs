@@ -16,9 +16,20 @@ use rustinput_ipc::{
 };
 
 use crate::{
-    authorization_window::AuthorizationWindow, fingerprint_window::FingerprintWindow,
-    key_object::KeyObject, key_row::KeyRow,
+    arrangement::ArrangementArea, authorization_window::AuthorizationWindow,
+    fingerprint_window::FingerprintWindow, key_object::KeyObject, key_row::KeyRow,
 };
+
+/// the editor of the arrangement, its state line, its buttons and the
+/// computers next to the selected one
+pub struct ArrangementParts {
+    area: ArrangementArea,
+    status: gtk::Label,
+    apply: gtk::Button,
+    undo: gtk::Button,
+    links: gtk::ListBox,
+    links_title: gtk::Label,
+}
 
 use super::{client_object::ClientObject, client_row::ClientRow};
 
@@ -61,6 +72,198 @@ impl Window {
             row.set_visible(true);
         }
         window
+    }
+
+    /// The editor of the arrangement in its group: the area, a line on what
+    /// is not applied or not reached, Undo and Apply, and the computers next
+    /// to the selected one, each with whether they meet over the whole edges.
+    pub(super) fn setup_arrangement(&self) {
+        let area = ArrangementArea::default();
+        let frame = gtk::Frame::builder().child(&area).build();
+        frame.add_css_class("view");
+        frame.add_css_class("arrangement");
+        let status = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .hexpand(true)
+            .build();
+        status.add_css_class("dim-label");
+        let undo = gtk::Button::with_label("Undo changes");
+        let apply = gtk::Button::with_label("Apply");
+        apply.add_css_class("suggested-action");
+        let bar = gtk::Box::builder().spacing(8).margin_top(10).build();
+        bar.append(&status);
+        bar.append(&undo);
+        bar.append(&apply);
+        let links_title = gtk::Label::builder()
+            .xalign(0.0)
+            .margin_top(14)
+            .margin_bottom(6)
+            .build();
+        links_title.add_css_class("heading");
+        let links = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .build();
+        links.add_css_class("boxed-list");
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
+        content.append(&frame);
+        content.append(&bar);
+        content.append(&links_title);
+        content.append(&links);
+        self.imp().arrangement_group.add(&content);
+
+        area.connect_changed(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move || window.arrangement_changed_here()
+        ));
+        undo.connect_clicked(clone!(
+            #[weak]
+            area,
+            move |_| area.undo()
+        ));
+        apply.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.apply_arrangement()
+        ));
+        self.imp().arrangement.replace(Some(ArrangementParts {
+            area,
+            status,
+            apply,
+            undo,
+            links,
+            links_title,
+        }));
+        self.arrangement_changed_here();
+    }
+
+    /// the service told how the computers are arranged
+    pub(super) fn show_arrangement(&self, view: &rustinput_ipc::layout::ArrangementView) {
+        if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
+            parts.area.set_view(view);
+        }
+    }
+
+    fn apply_arrangement(&self) {
+        let Some(layout) = self
+            .imp()
+            .arrangement
+            .borrow()
+            .as_ref()
+            .map(|p| p.area.layout())
+        else {
+            return;
+        };
+        self.request(FrontendRequest::Arrange(layout));
+        if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
+            parts.area.mark_applied();
+        }
+        self.show_toast("Arrangement applied");
+    }
+
+    /// the arrangement went to `name`, or not
+    pub(super) fn arrangement_sent(&self, name: &str, error: Option<&str>) {
+        match error {
+            None => self.show_toast(&format!("Arrangement sent to {name}")),
+            Some(e) => self.show_toast(&format!("Arrangement not sent to {name}: {e}")),
+        }
+    }
+
+    /// another computer changed the arrangement
+    pub(super) fn arrangement_received(&self, by: &str) {
+        self.show_toast(&format!("{by} changed the arrangement"));
+    }
+
+    /// what the line under the editor says, the buttons and the rows of the
+    /// selected computer, after any change in the editor
+    fn arrangement_changed_here(&self) {
+        let parts = self.imp().arrangement.borrow();
+        let Some(parts) = parts.as_ref() else {
+            return;
+        };
+        let dirty = parts.area.is_dirty();
+        let unreachable = parts.area.unreachable();
+        let guessed = parts.area.guessed();
+        let text = if !unreachable.is_empty() {
+            format!(
+                "{} does not touch a computer this one reaches: move it next to one",
+                unreachable.join(", ")
+            )
+        } else if parts.area.is_proposal() && dirty {
+            "Made from the connections as they are now: arrange and apply".to_owned()
+        } else if dirty {
+            "Changes not applied yet".to_owned()
+        } else if !guessed.is_empty() {
+            format!(
+                "{} did not tell its size: update RustInput there to 0.26.0 or newer",
+                guessed.join(", ")
+            )
+        } else {
+            "Applied on the computers of the arrangement".to_owned()
+        };
+        parts.status.set_text(&text);
+        parts.apply.set_sensitive(dirty && unreachable.is_empty());
+        parts.undo.set_sensitive(dirty && !parts.area.is_proposal());
+
+        while let Some(row) = parts.links.first_child() {
+            parts.links.remove(&row);
+        }
+        let selected = parts.area.selected_name();
+        let links = parts.area.selected_links();
+        parts.links_title.set_visible(selected.is_some());
+        parts.links.set_visible(selected.is_some());
+        let Some(selected) = selected else {
+            return;
+        };
+        parts
+            .links_title
+            .set_text(&format!("Where the mouse leaves {selected}"));
+        if links.is_empty() {
+            let row = adw::ActionRow::builder()
+                .title("Nowhere")
+                .subtitle("It touches no other computer")
+                .build();
+            parts.links.append(&row);
+        }
+        for link in links {
+            let side = match link.pos {
+                Position::Left => "Left",
+                Position::Right => "Right",
+                Position::Top => "Top",
+                Position::Bottom => "Bottom",
+            };
+            let subtitle = if link.can_be_whole {
+                format!(
+                    "{}; the whole edge, in proportion, when switched on",
+                    link.part
+                )
+            } else {
+                format!(
+                    "{}; this edge is shared, so only where they touch",
+                    link.part
+                )
+            };
+            let row = adw::ActionRow::builder()
+                .title(format!("{side}: {}", link.other_name))
+                .subtitle(subtitle)
+                .build();
+            let switch = gtk::Switch::builder()
+                .valign(gtk::Align::Center)
+                .active(link.whole && link.can_be_whole)
+                .sensitive(link.can_be_whole)
+                .tooltip_text("Whole edge, in proportion")
+                .build();
+            let other = link.other.clone();
+            switch.connect_active_notify(clone!(
+                #[weak(rename_to = area)]
+                parts.area,
+                move |switch| area.set_whole(&other, switch.is_active())
+            ));
+            row.add_suffix(&switch);
+            row.set_activatable_widget(Some(&switch));
+            parts.links.append(&row);
+        }
     }
 
     /// opens a web page or a folder the way the system does

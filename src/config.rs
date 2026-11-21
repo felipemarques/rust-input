@@ -17,7 +17,7 @@ use toml;
 use toml_edit::{self, DocumentMut};
 
 use rustinput_cli::CliArgs;
-use rustinput_ipc::{DEFAULT_PORT, EdgeLink, FileOptions, Position, Span, Theme};
+use rustinput_ipc::{DEFAULT_PORT, EdgeLink, FileOptions, Position, Span, Theme, layout::Layout};
 
 use input_event::scancode::{
     self,
@@ -78,6 +78,9 @@ struct ConfigToml {
     theme: Option<String>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
+    /// the arrangement of the computers, the same on all of them (see
+    /// `rustinput_ipc::layout`)
+    layout: Option<Layout>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -612,6 +615,21 @@ impl Config {
         }
         self.config_toml.as_mut().expect("config").clients =
             Some(clients.into_iter().map(|c| c.into()).collect::<Vec<_>>());
+    }
+
+    /// the arrangement of the computers, empty when there is none
+    pub fn layout(&self) -> Layout {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.layout.clone())
+            .unwrap_or_default()
+    }
+
+    pub fn set_layout(&mut self, layout: Layout) {
+        if self.config_toml.is_none() {
+            self.config_toml = Some(Default::default());
+        }
+        self.config_toml.as_mut().expect("config").layout = Some(layout);
     }
 
     /// set authorized keys

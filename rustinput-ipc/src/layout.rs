@@ -79,6 +79,33 @@ pub struct Layout {
     pub whole_edges: Vec<[String; 2]>,
 }
 
+/// What the window needs to arrange the computers: this one, the
+/// arrangement as it is, and the computers this one connects to.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ArrangementView {
+    /// this computer, at its place in the arrangement (or at 0, 0)
+    pub own: Machine,
+    pub layout: Layout,
+    pub peers: Vec<Peer>,
+}
+
+/// a computer this one connects to, as far as it is known
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct Peer {
+    pub handle: crate::ClientHandle,
+    /// its size is that of its desktop when it described itself, 0 x 0 when
+    /// it did not (yet)
+    pub machine: Machine,
+    /// whether it answered: it runs RustInput 0.26.0 or newer and this
+    /// computer is authorized there
+    pub described: bool,
+    /// why it did not answer, when it did not
+    pub error: Option<String>,
+    /// the edge of this computer it is at now, and whether it is reached
+    pub pos: Position,
+    pub active: bool,
+}
+
 /// a computer next to another one, as seen from that one
 #[derive(Clone, Debug, PartialEq)]
 pub struct Neighbor {
