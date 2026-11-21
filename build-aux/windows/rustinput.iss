@@ -183,14 +183,16 @@ begin
   end;
 end;
 
-// 0, or 100 plus the code of rustinput.exe windows-setup (Inno Setup itself
-// ends with 1 to 8)
+// 0, or 100 plus the code of rustinput.exe windows-setup, 199 when it did
+// not start at all (Inno Setup itself ends with 1 to 8)
 function GetCustomSetupExitCode: Integer;
 begin
-  if SetupFailure <> 0 then
-    Result := 100 + Abs(SetupFailure)
+  if SetupFailure = 0 then
+    Result := 0
+  else if SetupFailure < 0 then
+    Result := 199
   else
-    Result := 0;
+    Result := 100 + SetupFailure;
 end;
 
 function UpdateReadyMemo(Space, NewLine, MemoUserInfoInfo, MemoDirInfo, MemoTypeInfo, MemoComponentsInfo, MemoGroupInfo, MemoTasksInfo: String): String;

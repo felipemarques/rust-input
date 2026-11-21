@@ -91,6 +91,15 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 # handed on when the script starts itself again as administrator
 $ScriptParameters = $PSBoundParameters
+# that one starts in another folder: files at hand by their full path
+foreach ($name in 'Zip', 'Setup') {
+    $value = [string](Get-Variable -Name $name -ValueOnly)
+    if ($value -and (Test-Path -LiteralPath $value)) {
+        $full = (Resolve-Path -LiteralPath $value).Path
+        Set-Variable -Name $name -Value $full
+        $ScriptParameters[$name] = $full
+    }
+}
 
 $Repo = 'felipemarques/rust-input'
 $AssetName = 'rustinput-windows-x86_64.zip'
