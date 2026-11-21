@@ -6,8 +6,9 @@ use input_event::{
 };
 
 use async_trait::async_trait;
+use std::cell::Cell;
 use std::ops::BitOrAssign;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::task::AbortHandle;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
@@ -19,7 +20,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_WHEEL, MOUSEINPUT,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    INPUT_0, KEYEVENTF_EXTENDEDKEY, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP, SendInput,
+    INPUT_0, KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, MOUSEEVENTF_XDOWN, MOUSEEVENTF_XUP,
+    SendInput, VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
@@ -68,9 +70,10 @@ impl Emulation for WindowsEmulation {
                     state,
                 } => {
                     match state {
-                        // pressed
                         0 => self.kill_repeat_task(),
-                        1 => self.spawn_repeat_task(key).await,
+                        // pressed
+                        1 if repeats(key) => self.spawn_repeat_task(key).await,
+                        1 => self.kill_repeat_task(),
                         _ => {}
                     }
                     key_event(key, state)
@@ -130,14 +133,32 @@ impl WindowsEmulation {
     }
 }
 
+thread_local! {
+    /// when it was last logged that Windows refused input
+    static REFUSED_LOGGED: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// Windows refuses input while the lock screen or a prompt of User Account
+/// Control is up, which RustInput does not reach: the input is dropped then,
+/// after a few tries, rather than tried again forever.
 fn send_input_safe(input: INPUT) {
-    unsafe {
-        loop {
-            /* retval = number of successfully submitted events */
-            if SendInput(&[input], std::mem::size_of::<INPUT>() as i32) > 0 {
-                break;
-            }
+    for _ in 0..3 {
+        /* retval = number of successfully submitted events */
+        if unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) } > 0 {
+            return;
         }
+    }
+    let error = std::io::Error::last_os_error();
+    let now = Instant::now();
+    let due = REFUSED_LOGGED
+        .get()
+        .is_none_or(|last| now.duration_since(last) >= Duration::from_secs(10));
+    if due {
+        REFUSED_LOGGED.set(Some(now));
+        log::warn!(
+            "Windows refuses the keyboard and the mouse of RustInput ({error}): the lock \
+             screen or a prompt of User Account Control is up"
+        );
     }
 }
 
@@ -221,10 +242,63 @@ fn scroll(axis: u8, value: i32) {
 }
 
 fn key_event(key: u32, state: u8) {
-    let scancode = match linux_keycode_to_windows_scancode(key) {
-        Some(code) => code,
-        None => return,
+    let Ok(linux) = scancode::Linux::try_from(key) else {
+        log::warn!("unknown keycode: {key}");
+        return;
     };
+    // "Flip" of Logitech keyboards, "show all windows": the task view
+    if linux == scancode::Linux::KeyScale {
+        let keys = [scancode::Windows::KeyLeftGUI, scancode::Windows::KeyTab];
+        if state == 1 {
+            keys.iter().for_each(|k| scancode_event(*k as u16, 1));
+        } else {
+            keys.iter().rev().for_each(|k| scancode_event(*k as u16, 0));
+        }
+        return;
+    }
+    if let Some(vk) = scancode::windows_virtual_key(linux) {
+        virtual_key_event(vk, linux, state);
+        return;
+    }
+    if let Some(code) = linux_keycode_to_windows_scancode(linux) {
+        scancode_event(code, state);
+    }
+}
+
+/// whether holding `key` repeats it: the volume does, starting a program or
+/// opening the task view again and again would not help
+fn repeats(key: u32) -> bool {
+    let Ok(linux) = scancode::Linux::try_from(key) else {
+        return true;
+    };
+    match linux {
+        scancode::Linux::KeyVolumeUp | scancode::Linux::KeyVolumeDown => true,
+        scancode::Linux::KeyScale => false,
+        _ => scancode::windows_virtual_key(linux).is_none(),
+    }
+}
+
+/// a key of media or of starting a program as its virtual key, with its
+/// scancode for the hooks of other programs
+fn virtual_key_event(vk: u16, linux: scancode::Linux, state: u8) {
+    let scancode = scancode::Windows::try_from(linux).map_or(0, |s| s as u32);
+    let mut flags = KEYBD_EVENT_FLAGS::default();
+    if scancode > 0xff {
+        flags.bitor_assign(KEYEVENTF_EXTENDEDKEY);
+    }
+    if state == 0 {
+        flags.bitor_assign(KEYEVENTF_KEYUP);
+    }
+    send_keyboard_input(KEYBDINPUT {
+        wVk: VIRTUAL_KEY(vk),
+        wScan: (scancode & 0xff) as u16,
+        dwFlags: flags,
+        time: 0,
+        dwExtraInfo: 0,
+    });
+}
+
+fn scancode_event(scancode: u16, state: u8) {
     let extended = scancode > 0xff;
     let scancode = scancode & 0xff;
     let mut flags = KEYEVENTF_SCANCODE;
@@ -244,14 +318,7 @@ fn key_event(key: u32, state: u8) {
     send_keyboard_input(ki);
 }
 
-fn linux_keycode_to_windows_scancode(linux_keycode: u32) -> Option<u16> {
-    let linux_scancode = match scancode::Linux::try_from(linux_keycode) {
-        Ok(s) => s,
-        Err(_) => {
-            log::warn!("unknown keycode: {linux_keycode}");
-            return None;
-        }
-    };
+fn linux_keycode_to_windows_scancode(linux_scancode: scancode::Linux) -> Option<u16> {
     log::trace!("linux code: {linux_scancode:?}");
     let windows_scancode = match scancode::Windows::try_from(linux_scancode) {
         Ok(s) => s,

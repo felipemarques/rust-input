@@ -994,21 +994,16 @@ fn is_repeat(held: &mut HashSet<u32>, key: u32, state: u8) -> bool {
 
 fn to_key_event(wparam: WPARAM, lparam: LPARAM) -> Option<KeyboardEvent> {
     let kybrdllhookstruct: KBDLLHOOKSTRUCT = unsafe { *(lparam.0 as *const KBDLLHOOKSTRUCT) };
-    let mut scan_code = kybrdllhookstruct.scanCode;
-    log::trace!("scan_code: {scan_code}");
-    if kybrdllhookstruct.flags.contains(LLKHF_EXTENDED) {
-        scan_code |= 0xE000;
-    }
-    let Ok(win_scan_code) = scancode::Windows::try_from(scan_code) else {
-        log::warn!("failed to translate to windows scancode: {scan_code}");
-        return None;
+    // keys of media and of starting programs by their virtual key: some
+    // keyboards report no scancode for them
+    let linux_scan_code = match u16::try_from(kybrdllhookstruct.vkCode)
+        .ok()
+        .and_then(scancode::linux_key_of_windows_virtual_key)
+    {
+        Some(key) => key,
+        None => linux_key_of_scancode(&kybrdllhookstruct)?,
     };
-    log::trace!("windows_scan: {win_scan_code:?}");
-    let Ok(linux_scan_code): Result<Linux, ()> = win_scan_code.try_into() else {
-        log::warn!("failed to translate into linux scancode: {win_scan_code:?}");
-        return None;
-    };
-    log::trace!("windows_scan: {linux_scan_code:?}");
+    log::trace!("linux key: {linux_scan_code:?}");
     let scan_code = linux_scan_code as u32;
     match wparam {
         WPARAM(p) if p == WM_KEYDOWN as usize => Some(KeyboardEvent::Key {
@@ -1033,6 +1028,27 @@ fn to_key_event(wparam: WPARAM, lparam: LPARAM) -> Option<KeyboardEvent> {
         }),
         _ => None,
     }
+}
+
+fn linux_key_of_scancode(kybrdllhookstruct: &KBDLLHOOKSTRUCT) -> Option<Linux> {
+    let mut scan_code = kybrdllhookstruct.scanCode;
+    log::trace!("scan_code: {scan_code}");
+    if kybrdllhookstruct.flags.contains(LLKHF_EXTENDED) {
+        scan_code |= 0xE000;
+    }
+    let Ok(win_scan_code) = scancode::Windows::try_from(scan_code) else {
+        log::warn!(
+            "failed to translate to windows scancode: {scan_code:#x} (virtual key {:#x})",
+            kybrdllhookstruct.vkCode
+        );
+        return None;
+    };
+    log::trace!("windows_scan: {win_scan_code:?}");
+    let Ok(linux_scan_code): Result<Linux, ()> = win_scan_code.try_into() else {
+        log::warn!("failed to translate into linux scancode: {win_scan_code:?}");
+        return None;
+    };
+    Some(linux_scan_code)
 }
 
 fn to_mouse_event(wparam: WPARAM, lparam: LPARAM) -> Option<PointerEvent> {

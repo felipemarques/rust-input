@@ -153,8 +153,8 @@ pub enum Windows {
     KeyMute = 0xE020,
     KeyVolumeUp = 0xE030,
     KeyVolumeDown = 0xE02E,
-    #[allow(dead_code)]
-    ALConsumerControlConfiguration = 0xE06D, // TODO Unused
+    /// the media player key
+    ALConsumerControlConfiguration = 0xE06D,
     ALEmailReader = 0xE06C,
     ALCalculator = 0xE021,
     ALLocalMachineBrowser = 0xE06B,
@@ -586,14 +586,15 @@ impl TryFrom<Linux> for Windows {
             Linux::KeyXfer => Err(()),
             Linux::KeyProg1 => Err(()),
             Linux::KeyProg2 => Err(()),
-            Linux::KeyWww => Ok(Self::ACSearch), // TODO unsure
+            // AL Internet Browser: the home page of the browser is closest
+            Linux::KeyWww => Ok(Self::ACHome),
             Linux::KeyMsdos => Err(()),
             Linux::KeyCoffee => Err(()),
             Linux::KeyRotateDisplay => Err(()),
             Linux::KeyCyclewindows => Err(()),
             Linux::KeyMail => Ok(Self::ALEmailReader),
             Linux::KeyBookmarks => Ok(Self::ACBookmarks),
-            Linux::KeyComputer => Ok(Self::ACHome),
+            Linux::KeyComputer => Ok(Self::ALLocalMachineBrowser),
             Linux::KeyBack => Ok(Self::ACBack),
             Linux::KeyForward => Ok(Self::ACForward),
             Linux::KeyClosecd => Err(()),
@@ -607,7 +608,8 @@ impl TryFrom<Linux> for Windows {
             Linux::KeyRewind => Err(()),
             Linux::KeyPhone => Err(()),
             Linux::KeyIso => Err(()),
-            Linux::KeyConfig => Err(()),
+            // AL Consumer Control Configuration, the media player key
+            Linux::KeyConfig => Ok(Self::ALConsumerControlConfiguration),
             Linux::KeyHomepage => Ok(Self::ACHome),
             Linux::KeyRefresh => Ok(Self::ACRefresh),
             Linux::KeyExit => Err(()),
@@ -631,14 +633,14 @@ impl TryFrom<Linux> for Windows {
             Linux::KeyF22 => Ok(Self::KeyF22),
             Linux::KeyF23 => Ok(Self::KeyF23),
             Linux::KeyF24 => Ok(Self::KeyF24),
-            Linux::KeyPlaycd => Err(()),
-            Linux::KeyPausecd => Err(()),
+            Linux::KeyPlaycd => Ok(Self::KeyPlayPause),
+            Linux::KeyPausecd => Ok(Self::KeyPlayPause),
             Linux::KeyProg3 => Err(()),
             Linux::KeyProg4 => Err(()),
             Linux::KeyAllApplications => Err(()),
             Linux::KeySuspend => Err(()),
             Linux::KeyClose => Err(()),
-            Linux::KeyPlay => Err(()),
+            Linux::KeyPlay => Ok(Self::KeyPlayPause),
             Linux::KeyFastforward => Err(()),
             Linux::KeyBassboost => Err(()),
             Linux::KeyPrint => Err(()),
@@ -648,7 +650,7 @@ impl TryFrom<Linux> for Windows {
             Linux::KeyQuestion => Err(()),
             Linux::KeyEmail => Err(()),
             Linux::KeyChat => Err(()),
-            Linux::KeySearch => Err(()),
+            Linux::KeySearch => Ok(Self::ACSearch),
             Linux::KeyConnect => Err(()),
             Linux::KeyFinance => Err(()),
             Linux::KeySport => Err(()),
@@ -657,7 +659,7 @@ impl TryFrom<Linux> for Windows {
             Linux::KeyCancel => Err(()),
             Linux::KeyBrightnessdown => Err(()),
             Linux::KeyBrightnessup => Err(()),
-            Linux::KeyMedia => Err(()),
+            Linux::KeyMedia => Ok(Self::ALConsumerControlConfiguration),
             Linux::KeySwitchvideomode => Err(()),
             Linux::KeyKbdillumtoggle => Err(()),
             Linux::KeyKbdillumdown => Err(()),
@@ -835,11 +837,11 @@ impl TryFrom<Windows> for Linux {
             Windows::KeyMute => Ok(Self::KeyMute),
             Windows::KeyVolumeUp => Ok(Self::KeyVolumeUp),
             Windows::KeyVolumeDown => Ok(Self::KeyVolumeDown),
-            Windows::ALConsumerControlConfiguration => Err(()),
+            Windows::ALConsumerControlConfiguration => Ok(Self::KeyMedia),
             Windows::ALEmailReader => Ok(Self::KeyMail),
             Windows::ALCalculator => Ok(Self::KeyCalc),
             Windows::ALLocalMachineBrowser => Ok(Self::KeyFile),
-            Windows::ACSearch => Ok(Self::KeyWww),
+            Windows::ACSearch => Ok(Self::KeySearch),
             Windows::ACHome => Ok(Self::KeyHomepage),
             Windows::ACBack => Ok(Self::KeyBack),
             Windows::ACForward => Ok(Self::KeyForward),
@@ -847,5 +849,105 @@ impl TryFrom<Windows> for Linux {
             Windows::ACRefresh => Ok(Self::KeyRefresh),
             Windows::ACBookmarks => Ok(Self::KeyBookmarks),
         }
+    }
+}
+
+/// The virtual keys of Windows (`VK_VOLUME_UP`...) of the keys of media and
+/// of starting programs, which Windows acts on: keyboards whose media keys
+/// report no scancode still report these to the hooks, and `SendInput` takes
+/// them more reliably than the scancodes.
+const MEDIA_KEYS: [(Linux, u16); 18] = [
+    (Linux::KeyMute, 0xAD),
+    (Linux::KeyVolumeDown, 0xAE),
+    (Linux::KeyVolumeUp, 0xAF),
+    (Linux::KeyNextsong, 0xB0),
+    (Linux::KeyPrevioussong, 0xB1),
+    (Linux::KeyStopcd, 0xB2),
+    (Linux::KeyPlaypause, 0xB3),
+    (Linux::KeyMail, 0xB4),
+    // VK_LAUNCH_MEDIA_SELECT, the media player
+    (Linux::KeyMedia, 0xB5),
+    // VK_LAUNCH_APP1, "My Computer": the file manager
+    (Linux::KeyFile, 0xB6),
+    // VK_LAUNCH_APP2
+    (Linux::KeyCalc, 0xB7),
+    (Linux::KeyBack, 0xA6),
+    (Linux::KeyForward, 0xA7),
+    (Linux::KeyRefresh, 0xA8),
+    (Linux::KeyStop, 0xA9),
+    (Linux::KeySearch, 0xAA),
+    (Linux::KeyBookmarks, 0xAB),
+    (Linux::KeyHomepage, 0xAC),
+];
+
+/// Linux keys without a virtual key of their own, sent to Windows as the
+/// closest one.
+const MEDIA_KEY_ALIASES: [(Linux, u16); 7] = [
+    // AL Consumer Control Configuration: the media player key of Logitech
+    // keyboards, among others
+    (Linux::KeyConfig, 0xB5),
+    (Linux::KeyComputer, 0xB6),
+    // AL Internet Browser
+    (Linux::KeyWww, 0xAC),
+    (Linux::KeyFind, 0xAA),
+    (Linux::KeyPlay, 0xB3),
+    (Linux::KeyPlaycd, 0xB3),
+    (Linux::KeyPausecd, 0xB3),
+];
+
+/// The virtual key of Windows `key` goes out as, for keys of media and of
+/// starting programs.
+pub fn windows_virtual_key(key: Linux) -> Option<u16> {
+    MEDIA_KEYS
+        .iter()
+        .chain(MEDIA_KEY_ALIASES.iter())
+        .find(|(k, _)| *k == key)
+        .map(|(_, vk)| *vk)
+}
+
+/// The key a virtual key of Windows comes in as, for keys of media and of
+/// starting programs.
+pub fn linux_key_of_windows_virtual_key(vk: u16) -> Option<Linux> {
+    MEDIA_KEYS.iter().find(|(_, v)| *v == vk).map(|(k, _)| *k)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_keys_go_both_ways() {
+        for (key, vk) in MEDIA_KEYS {
+            assert_eq!(windows_virtual_key(key), Some(vk), "{key:?}");
+            assert_eq!(linux_key_of_windows_virtual_key(vk), Some(key), "{vk:#x}");
+            // and they have scancodes, which go along with the virtual key
+            let scancode = Windows::try_from(key).expect("a scancode");
+            assert_eq!(Linux::try_from(scancode), Ok(key), "{key:?}");
+        }
+        for (key, vk) in MEDIA_KEY_ALIASES {
+            assert_eq!(windows_virtual_key(key), Some(vk), "{key:?}");
+            assert!(Windows::try_from(key).is_ok(), "{key:?}");
+        }
+        assert_eq!(windows_virtual_key(Linux::KeyA), None);
+        assert_eq!(linux_key_of_windows_virtual_key(0x41), None);
+    }
+
+    #[test]
+    fn search_and_browser_keys() {
+        // the search key of Windows is the search key of Linux, not the
+        // browser key
+        assert_eq!(Linux::try_from(Windows::ACSearch), Ok(Linux::KeySearch));
+        assert!(matches!(
+            Windows::try_from(Linux::KeySearch),
+            Ok(Windows::ACSearch)
+        ));
+        assert!(matches!(
+            Windows::try_from(Linux::KeyWww),
+            Ok(Windows::ACHome)
+        ));
+        assert!(matches!(
+            Windows::try_from(Linux::KeyComputer),
+            Ok(Windows::ALLocalMachineBrowser)
+        ));
     }
 }

@@ -361,6 +361,22 @@ while capturing, because what is typed would go to it.
 Keys and mouse buttons held down on Windows when the pointer leaves are
 released on Windows, not on the other device, which never saw them pressed.
 
+## Keys of media and of starting programs
+
+Keys travel as Linux key codes (`input-event/src/scancode.rs`), which Windows
+translates from and to its scancodes. The keys of media and of starting
+programs (volume, play, calculator, mail, browser, search...) go to Windows
+as its virtual keys instead (`VK_VOLUME_UP`...), with the scancode along for
+the hooks of other programs: Windows acts on those, and some keyboards report
+no scancode for these keys at all, so capturing on Windows looks at the
+virtual key first (`windows_virtual_key`, `linux_key_of_windows_virtual_key`).
+Linux keys without a virtual key of their own go out as the closest one: the
+media player key of Logitech keyboards (`KEY_CONFIG`) as
+`VK_LAUNCH_MEDIA_SELECT`, `KEY_WWW` as the home page of the browser. "Flip"
+(`KEY_SCALE`, show all windows) becomes Windows+Tab, the task view. Holding a
+key repeats it on Windows, except the keys that start a program or the task
+view; the volume keys repeat.
+
 ## The Windows service
 
 Installed by `scripts/update-rustinput.ps1`, the service "RustInput"
