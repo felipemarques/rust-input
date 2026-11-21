@@ -628,7 +628,7 @@ function Remove-RustInputService {
 
 # the service as asked: installed, unless -NoService or the version installed
 # can not run as one
-function Set-ServiceState([string]$InstalledVersion) {
+function Set-ServiceState($InstalledVersion) {
     if (-not $NoService -and (Test-ServiceVersion $InstalledVersion)) {
         Install-RustInputService
     } elseif (Remove-RustInputService) {
@@ -898,7 +898,8 @@ function Get-VersionText($Version) {
 
 # Puts the unpacked release in place, then the service, the firewall and the
 # Start menu, and starts RustInput.
-function Complete-Install([string]$Installed, [string]$Target, [bool]$Moving) {
+# $Installed untyped: $null (not installed) must not become '' (unknown)
+function Complete-Install($Installed, [string]$Target, [bool]$Moving) {
     Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
     Stop-RustInput
 

@@ -245,7 +245,8 @@ impl Supervisor {
                     ran.as_secs(),
                     self.next_start
                         .saturating_duration_since(Instant::now())
-                        .as_secs()
+                        .as_secs_f64()
+                        .ceil()
                 );
             }
         }
