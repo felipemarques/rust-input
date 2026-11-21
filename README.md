@@ -266,7 +266,7 @@ Most current desktop environments and operating systems are fully supported, thi
 >
 > - **Windows, programs run as administrator**: Windows keeps the input going to a program run as administrator
 > (Task Manager is one, so is a terminal whose title starts with "Administrator:") from programs that are not.
-> Installed with the script below, RustInput runs as a Windows service with administrator rights and reaches those
+> Installed with the installer or the script below, RustInput runs as a Windows service with administrator rights and reaches those
 > programs too, whether it captures the keyboard and the mouse while one is in front or types into one from another
 > computer. Installed by hand, or with `-NoService`, it does not: while such a program is in front, RustInput does not
 > see the keyboard; while the pointer is over one of its windows, it does not see the mouse, so the pointer does not
@@ -311,7 +311,33 @@ Use the precompiled binaries from the [releases section](https://github.com/feli
 <details>
     <summary>Windows</summary>
 
-To install or update, paste this into PowerShell:
+Download `rustinput-windows-x86_64-setup.exe` from the [releases page](https://github.com/felipemarques/rust-input/releases/latest)
+and run it. It installs RustInput into `C:\Program Files\RustInput` and lists it in Settings > Apps, where it is also
+uninstalled. Windows asks for administrator rights once. Before it installs, the installer shows what it changes in
+Windows:
+
+- the Windows service **RustInput**, which starts with Windows and keeps RustInput running in the session of the user
+  at the screen, with the administrator rights of that user, without asking: RustInput then reaches programs run as
+  administrator too (see [Caveats](#caveats--known-issues)). Windows starts the service again if it fails, and the
+  service starts RustInput again if it ends. Closing the window, or quitting it from the tray, leaves the keyboard and
+  the mouse shared; the window only shows and changes the settings. The service can be left out (then RustInput runs
+  without administrator rights, as before 0.23.0);
+- two rules of the Windows firewall, `RustInput (UDP)` and `RustInput (TCP)`, which let the other computers reach
+  `rustinput.exe`, on the networks Windows allowed RustInput on before (private and domain networks otherwise);
+- **RustInput** and **Update RustInput** in the Start menu, the tray icon at sign-in (can be left out) and, if chosen,
+  a desktop shortcut. RustInput itself adds "Copy to RustInput" to the menu of Explorer (it can be turned off in its
+  settings).
+
+Uninstalling undoes all of it and keeps the settings in `%LOCALAPPDATA%\rustinput`. Installing a newer version over an
+older one keeps the choices made before. An installation made by the update script below is taken over as it is.
+For a silent installation: `rustinput-windows-x86_64-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, with
+`/MERGETASKS="!service"` to leave the service out.
+
+> [!Note]
+> Until the Windows files are signed (see [Code signing policy](#code-signing-policy)), Windows SmartScreen may say
+> "Windows protected your PC" for the downloaded installer: choose "More info", then "Run anyway".
+
+To update from PowerShell, or to install without downloading by hand, paste this:
 
 ```powershell
 iwr -UseBasicParsing https://github.com/felipemarques/rust-input/releases/latest/download/update-rustinput.ps1 -OutFile $env:TEMP\update-rustinput.ps1; powershell -NoProfile -ExecutionPolicy Bypass -File $env:TEMP\update-rustinput.ps1
@@ -320,26 +346,22 @@ iwr -UseBasicParsing https://github.com/felipemarques/rust-input/releases/latest
 The script ([scripts/update-rustinput.ps1](scripts/update-rustinput.ps1)) asks Windows for administrator rights
 (confirm in the window Windows shows; the script goes on in a window of its own) and goes step by step:
 1. It shows the installed version, the newest one and what changed between them.
-2. It downloads the newest version with a progress bar and checks its SHA-256 against GitHub.
-3. It closes RustInput and installs it into `C:\Program Files\RustInput`, keeping the previous copy in
-   `RustInput.previous`. An install of a version before 0.23.0, in `%LOCALAPPDATA%\Programs\RustInput`, moves there
-   and becomes the previous copy.
-4. It installs the Windows service **RustInput**, which starts with Windows and keeps RustInput running in the session
-   of the user at the screen, with the administrator rights of that user, without asking: RustInput then reaches
-   programs run as administrator too (see [Caveats](#caveats--known-issues)). Windows starts the service again if it
-   fails, and the service starts RustInput again if it ends. Closing the window, or quitting it from the tray, leaves
-   the keyboard and the mouse shared; the window only shows and changes the settings.
-5. It lets the other computers reach RustInput through the Windows firewall, on the networks Windows allowed RustInput
-   on before (private and domain networks otherwise).
-6. It starts RustInput again and shows whether it came up: the service, whether RustInput runs with administrator
+2. It downloads the installer of the newest version with a progress bar and checks its SHA-256 against GitHub.
+3. It closes RustInput, keeps a copy of the installed version in `C:\Program Files\RustInput.previous` and runs the
+   installer without questions. An install of a version before 0.23.0, in `%LOCALAPPDATA%\Programs\RustInput`, moves
+   to `C:\Program Files\RustInput` and becomes the previous copy.
+4. It starts RustInput again and shows whether it came up: the service, whether RustInput runs with administrator
    rights, the ports it listens on and the end of its logs.
-7. It adds **RustInput** and **Update RustInput** to the Start menu, so the next update is one click.
 
-Everything it shows also goes to `%LOCALAPPDATA%\rustinput\logs\update.log`; the service logs to
-`C:\Windows\Logs\RustInput\service.log`. `-Version 0.18.0` installs an older version, `-Restore` goes back to the
-previous copy, `-Force` reinstalls the same version, `-NoStart` leaves the window closed, `-NoService` installs without
-the service (as before 0.23.0) and `-Uninstall` removes RustInput, keeping its settings. Run `Get-Help` on the script
-for the others.
+The **Update RustInput** item of the Start menu runs it, so the next update is one click. Everything it shows also
+goes to `%LOCALAPPDATA%\rustinput\logs\update.log`; the installer logs to `%LOCALAPPDATA%\rustinput\logs\setup-install.log`
+and `C:\Windows\Logs\RustInput\setup.log`, the service to `C:\Windows\Logs\RustInput\service.log`.
+
+To go back: `-Restore` returns to the copy kept in `RustInput.previous`, and `-Version 0.23.1` installs that version
+(any version works; one older than 0.24.0, which has no installer, replaces the installation of the installer with one
+of the script, keeping the settings, the service and the firewall rules). `-Force` reinstalls the same version,
+`-NoStart` leaves the window closed, `-NoService` installs without the service and `-Uninstall` removes RustInput,
+keeping its settings. Run `Get-Help` on the script for the others.
 
 > [!Note]
 > A program run as administrator can do anything on the computer, and RustInput run by the service receives keyboard
@@ -429,6 +451,28 @@ For a detailed list of available features, checkout the [Cargo.toml](./Cargo.tom
 
 
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+- Committers and reviewers: [felipemarques](https://github.com/felipemarques)
+- Approvers: [felipemarques](https://github.com/felipemarques)
+
+Signed are only the Windows files built from this repository by the [Release workflow](.github/workflows/release.yml):
+`rustinput.exe` and `rustinput-windows-x86_64-setup.exe`. The GTK libraries next to `rustinput.exe` come from GTK
+(LGPL) and are not signed by this project. Every signing is approved by hand. Signing starts with the first release
+after SignPath Foundation accepts the project; until then the Windows files are unsigned. How it works:
+[DOC.md](DOC.md#signing-the-windows-files).
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user
+or the person installing or operating it.
+
+RustInput sends keyboard, mouse, clipboard and file data only to the computers its user adds and authorizes, over
+encrypted connections on the local network. The installer and `update-rustinput.ps1` connect only to GitHub, to find
+and download releases of RustInput. RustInput collects no usage data and sends nothing anywhere else.
+
 ## Development
 
 ### Git pre-commit hook
@@ -456,6 +500,9 @@ Releases are published by the [Release workflow](.github/workflows/release.yml),
 - If the `version` in the root [Cargo.toml](./Cargo.toml) has no `v<version>` tag yet, the workflow creates that tag and a release for it. To publish a new version, bump `version` in the pull request.
 - Otherwise it publishes a pre-release named `main-<short commit>`.
 - Pushing a `v*` tag by hand also publishes a release for that tag.
+- For Windows it publishes the zip and the installer (`rustinput-windows-x86_64-setup.exe`). After a release of a
+  version, the job `windows-sign` has them signed through SignPath and replaces them, while the repository variable
+  `SIGNPATH_ORGANIZATION_ID` exists (see [DOC.md](DOC.md#signing-the-windows-files)).
 
 ### Dependencies & Compiling from Source
 <details>

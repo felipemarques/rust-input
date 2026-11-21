@@ -379,7 +379,7 @@ view; the volume keys repeat.
 
 ## The Windows service
 
-Installed by `scripts/update-rustinput.ps1`, the service "RustInput"
+Installed by the installer (see below), the service "RustInput"
 (`rustinput windows-service`, `src/windows_supervisor.rs`) starts with Windows
 as LocalSystem and keeps `rustinput daemon` running with administrator rights,
 so that programs run as administrator are in reach (see above), for the
@@ -418,7 +418,104 @@ The lock screen and the prompts of User Account Control appear on another
 desktop of Windows (`Winlogon`), which only a process of the system may open;
 the daemon, running as the user, does not reach it.
 
-`.github/workflows/windows-service.yml` installs the service from a zip of the
-build on a Windows runner, checks that it starts the daemon with
-administrator rights and starts it again after it is ended, and removes it.
+## The Windows installer
+
+`rustinput-windows-x86_64-setup.exe`, built with Inno Setup 6 from
+`build-aux/windows/rustinput.iss` by `build-aux/windows/build-setup.ps1`, holds
+what the zip holds (`rustinput.exe`, the DLLs of GTK, `update-rustinput.ps1`)
+and installs it per machine in `C:\Program Files\RustInput`, where
+`update-rustinput.ps1` installed since 0.23.0, so it takes such an
+installation over. Its `AppId` (`{8C7A4E2B-3F1D-4B6A-9E5C-2D7F1A0B6C34}`)
+must never change: Windows lists the installation in Settings > Apps under
+`HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`, and
+`update-rustinput.ps1` finds it there.
+
+Before it replaces files it stops the service (`net stop`, which waits) and
+ends every `rustinput.exe` (`taskkill /F`): the daemon, the windows of every
+user, "Copy to RustInput". The service and the firewall are then set up by
+RustInput itself, `rustinput windows-setup install [--no-service]`
+(`src/windows_setup.rs`), and removed by `rustinput windows-setup uninstall`
+before the uninstaller deletes the files:
+
+- the service as `update-rustinput.ps1` made it: automatic, LocalSystem,
+  started again by Windows after 5 s, 10 s and then every minute, also when it
+  stops with an error of its own;
+- two inbound rules of the firewall, "RustInput (UDP)" and "RustInput (TCP)",
+  in the group "RustInput", for the installed `rustinput.exe` only, through
+  the COM interface of the firewall (`INetFwPolicy2`). They allow the networks
+  the rules of the group allowed before, else those of the rules Windows made
+  for `rustinput.exe` when it asked, else private and domain networks: a user
+  who allowed public networks keeps them.
+
+`windows-setup` logs to `%SystemRoot%\Logs\RustInput\setup.log` and ends with
+0, 2 (usage), 3 (service) or 4 (firewall); the installer shows a failure and
+ends with 100 plus that code (Inno Setup itself uses 1 to 8). The tasks of the
+installer: the service (on; off installs without it, as before 0.23.0), the
+tray icon at sign-in (on, `{commonstartup}`) and a desktop shortcut (off).
+Silent: `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`, `/MERGETASKS="!service"`;
+an upgrade keeps the tasks chosen before. The uninstaller keeps the settings
+(`%LOCALAPPDATA%\rustinput`) and removes the logs of the service unless
+removing the service failed.
+
+`update-rustinput.ps1` runs the installer of a release that has one, silently,
+after keeping a copy of the installed files in `RustInput.previous`. For a
+version without it (`-Version 0.23.1`), `-Zip` and `-Restore`, it first turns
+the installation into one of its own (`Convert-SetupInstall`): it keeps the
+files and the copy aside, runs the uninstaller, which also deletes
+`RustInput.previous`, puts both back and makes the service, the rules (with
+the networks the removed rules allowed) and the Start menu items itself.
+`-Uninstall` runs the uninstaller. The uninstaller goes on in a copy of
+itself, so the script waits until Windows no longer lists the installation
+and the uninstaller is gone.
+
+`.github/workflows/windows-install.yml` builds this version and its installer
+on a Windows runner and runs `.github/windows-install-test.ps1`: 0.23.1 with
+the script, the installer over it, the installer again, back to 0.23.1,
+forward with `-Setup`, `-Restore`, forward again and the uninstaller, checking
+the version, Settings > Apps, the service and how Windows restarts it, the
+two rules and their networks, the Start menu, that the daemon runs with
+administrator rights and comes back when ended, and what the uninstaller
+leaves (only the settings).
+
+## Signing the Windows files
+
+`rustinput.exe` and the installer are meant to be signed through the free
+program of SignPath Foundation for open source, by the job `windows-sign` of
+`.github/workflows/release.yml`. The certificate is issued to SignPath
+Foundation, which Windows then shows as the publisher. The job runs after a
+release of a version (not after the pre-release of every push to `main`) and
+only while the repository variable `SIGNPATH_ORGANIZATION_ID` exists:
+
+1. it uploads `rustinput.exe` of the build and asks SignPath to sign it
+   (artifact configuration `rustinput-exe`), then waits;
+2. it puts the signed `rustinput.exe` in the zip and builds the installer
+   again around it, then asks SignPath to sign the installer (`rustinput-setup`)
+   and waits;
+3. it checks both signatures and replaces the zip and the installer of the
+   release (`gh release upload --clobber`), whose SHA-256 on GitHub changes
+   with them; `update-rustinput.ps1` checks against the new one.
+
+Each request waits for an approval in SignPath (3.5 and 2 hours). When none
+comes in time the job fails and the release keeps its unsigned files: "Re-run
+failed jobs" asks again. Only `rustinput.exe` and the installer are signed,
+never the DLLs of GTK, which are not this project's.
+
+Setting it up, once SignPath Foundation accepted the project
+(https://signpath.org/apply):
+
+- in SignPath: the project `rust-input` with the repository URL; the
+  predefined trusted build system *GitHub.com* linked to it (and the SignPath
+  GitHub App given access to the repository); the artifact configurations
+  `rustinput-exe` and `rustinput-setup` from
+  `build-aux/windows/signpath/*.xml`; the signing policy `release-signing`
+  with the approval process and origin verification for the branch `main`; a
+  CI user with submitter rights on that policy;
+- in GitHub, Settings > Secrets and variables > Actions: the secret
+  `SIGNPATH_API_TOKEN` (the API token of that CI user) and the variable
+  `SIGNPATH_ORGANIZATION_ID`; `SIGNPATH_PROJECT_SLUG` and
+  `SIGNPATH_SIGNING_POLICY_SLUG` only when the slugs differ from the above.
+
+Deleting the variable `SIGNPATH_ORGANIZATION_ID` turns signing off: releases
+are published unsigned again, as before, with nothing else to change.
+
 
