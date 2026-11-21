@@ -8,7 +8,7 @@
     <property name="default-width">180</property>
     <property name="height-request">180</property>
     <property name="default-height">180</property>
-    <property name="title" translatable="yes">Unauthorized Device</property>
+    <property name="title" translatable="yes">Unauthorized Computer</property>
     <property name="content">
       <object class="GtkBox">
         <property name="orientation">vertical</property>
@@ -30,14 +30,14 @@
             <property name="margin-bottom">30</property>
             <child>
               <object class="GtkLabel">
-                <property name="label">An unauthorized Device is trying to connect. Do you want to authorize this Device?</property>
+                <property name="label">A computer that is not authorized is trying to connect. Do you want to authorize it?</property>
                 <property name="width-request">100</property>
                 <property name="wrap">word-wrap</property>
               </object>
             </child>
             <child>
               <object class="AdwPreferencesGroup">
-                <property name="title">sha256 fingerprint</property>
+                <property name="title" translatable="yes">SHA-256 fingerprint</property>
                 <child>
                   <object class="AdwActionRow">
                     <property name="child">

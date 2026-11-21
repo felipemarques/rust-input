@@ -53,6 +53,18 @@ pub struct Window {
     pub authorized_list: TemplateChild<ListBox>,
     #[template_child]
     pub files_group: TemplateChild<PreferencesGroup>,
+    /// the page of the computers, marked when capture or emulation is off
+    #[template_child]
+    pub computers_page: TemplateChild<adw::ViewStackPage>,
+    #[template_child]
+    pub capture_status_icon: TemplateChild<Image>,
+    #[template_child]
+    pub emulation_status_icon: TemplateChild<Image>,
+    #[template_child]
+    pub logs_row: TemplateChild<ActionRow>,
+    /// the certificate fingerprint of this computer, as copied (the row shows
+    /// it in groups)
+    pub fingerprint: RefCell<String>,
     /// what happens to copied files, as the service has it
     pub file_options: Cell<Option<rustinput_ipc::FileOptions>>,
     /// the switches of the file transfer settings: sending copied files, the
@@ -118,7 +130,7 @@ impl Window {
 
     #[template_callback]
     fn handle_copy_fingerprint(&self, button: &Button) {
-        let fingerprint: String = self.fingerprint_row.property("subtitle");
+        let fingerprint = self.fingerprint.borrow().clone();
         let display = gdk::Display::default().unwrap();
         let clipboard = display.clipboard();
         clipboard.set_text(&fingerprint);
@@ -197,6 +209,30 @@ impl Window {
     #[template_callback]
     fn handle_add_cert_fingerprint(&self, _button: &Button) {
         self.obj().open_fingerprint_dialog(None);
+    }
+
+    #[template_callback]
+    fn handle_open_source(&self) {
+        self.obj()
+            .open_uri("https://github.com/felipemarques/rust-input");
+    }
+
+    #[template_callback]
+    fn handle_open_lan_mouse(&self) {
+        self.obj().open_uri("https://github.com/feschber/lan-mouse");
+    }
+
+    #[template_callback]
+    fn handle_open_license(&self) {
+        self.obj()
+            .open_uri("https://github.com/felipemarques/rust-input/blob/main/LICENSE");
+    }
+
+    #[template_callback]
+    fn handle_open_logs(&self) {
+        if let Some(dir) = rustinput_ipc::log_dir() {
+            self.obj().open_uri(&gio::File::for_path(dir).uri());
+        }
     }
 
     pub fn set_port(&self, port: u16) {

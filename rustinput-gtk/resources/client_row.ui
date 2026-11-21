@@ -7,7 +7,7 @@
 			<object class="GtkSwitch" id="enable_switch">
 				<property name="valign">center</property>
 				<property name="halign">end</property>
-				<property name="tooltip-text" translatable="yes">enable</property>
+				<property name="tooltip-text" translatable="yes">Use this computer</property>
 			</object>
 		</child>
 		<!-- latency, while connected -->
@@ -28,7 +28,7 @@
 				<property name="icon-name">network-wired-symbolic</property>
 				<property name="valign">center</property>
 				<property name="halign">end</property>
-				<property name="tooltip-text" translatable="yes">resolve host</property>
+				<property name="tooltip-text" translatable="yes">Look up its address again</property>
 			</object>
 		</child>
 		<child type="suffix">
@@ -84,8 +84,8 @@
 		<!-- host -->
 		<child>
 			<object class="AdwActionRow">
-				<property name="title">hostname</property>
-				<property name="subtitle">port</property>
+				<property name="title" translatable="yes">Address</property>
+				<property name="subtitle" translatable="yes">Name or IP, and port</property>
 				<!-- hostname -->
 				<child>
 					<object class="GtkEntry" id="hostname">
@@ -113,7 +113,8 @@
 		<!-- position -->
 		<child>
 			<object class="AdwComboRow" id="position">
-				<property name="title" translatable="yes">position</property>
+				<property name="title" translatable="yes">Position</property>
+				<property name="subtitle" translatable="yes">The edge of this screen that leads to it</property>
 				<property name="model">
 					<object class="GtkStringList">
 						<items>
@@ -129,7 +130,7 @@
 		<!-- authorize both computers on each other with a code -->
 		<child>
 			<object class="AdwActionRow" id="pair_row">
-				<property name="title">authorize with a code</property>
+				<property name="title" translatable="yes">Authorize with a code</property>
 				<property name="subtitle">The other computer shows a code when this one tries to connect: entering it here authorizes both computers on each other</property>
 				<child>
 					<object class="GtkButton" id="pair_button">
@@ -142,7 +143,7 @@
 		<!-- delete button -->
 		<child>
 			<object class="AdwActionRow" id="delete_row">
-				<property name="title">delete this client</property>
+				<property name="title" translatable="yes">Remove this computer</property>
 				<child>
 					<object class="GtkButton" id="delete_button">
 						<signal name="activate" handler="handle_client_delete" object="delete_row" swapped="true"/>

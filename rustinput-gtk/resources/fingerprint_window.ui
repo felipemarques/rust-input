@@ -29,12 +29,12 @@
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">You can find it under the `General` section of the device you want to connect</property>
+                    <property name="label">On the other computer, RustInput shows it under “This computer” on the Computers page</property>
                   </object>
                 </child>
                 <child>
                   <object class="AdwPreferencesGroup">
-                    <property name="title">description</property>
+                    <property name="title" translatable="yes">Description</property>
                     <child>
                       <object class="AdwActionRow">
                         <property name="child">
@@ -55,7 +55,7 @@
                 </child>
                 <child>
                   <object class="AdwPreferencesGroup">
-                    <property name="title">sha256 fingerprint</property>
+                    <property name="title" translatable="yes">SHA-256 fingerprint</property>
                     <child>
                       <object class="AdwActionRow">
                         <property name="child">

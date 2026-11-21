@@ -48,11 +48,11 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁸ New in 0.22.0: tested in automated runs on Linux (X11), not yet by hand.
 
 <p align="center">
-  <img src="screenshots/linux-window.png" width="380" alt="RustInput on Linux Mint (Cinnamon)">
-  <img src="screenshots/windows-window.png" width="380" alt="RustInput on Windows 11">
+  <img src="screenshots/main-window.png" width="820" alt="The window of RustInput: this computer on the left, the other computers on the right">
   <br>
-  <em>The same pair of computers seen from each side: Linux Mint 22 (left) and Windows 11 (right), each listing the
-  other under "Connections" and authorized under "Incoming Connections".</em>
+  <em>The Computers page: on the left, what the other computers need to reach this one and whether it sends and
+  receives; on the right, the computers it connects to (one opened, with its address and position) and those allowed
+  to connect. Preferences and About are the other pages.</em>
 </p>
 
 <p align="center">

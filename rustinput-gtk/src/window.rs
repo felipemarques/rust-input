@@ -51,7 +51,17 @@ impl Window {
         let version = crate::APP_VERSION.get().copied().unwrap_or_default();
         window.set_title(Some(&format!("RustInput {version}")));
         window.imp().version_row.set_subtitle(&crate::version_str());
+        if let Some(dir) = rustinput_ipc::log_dir().filter(|dir| dir.is_dir()) {
+            let row = &window.imp().logs_row;
+            row.set_subtitle(&dir.display().to_string());
+            row.set_visible(true);
+        }
         window
+    }
+
+    /// opens a web page or a folder the way the system does
+    pub(super) fn open_uri(&self, uri: &str) {
+        gtk::show_uri(Some(self), uri, gtk::gdk::CURRENT_TIME);
     }
 
     fn clients(&self) -> gio::ListStore {
@@ -626,36 +636,67 @@ impl Window {
         self.update_capture_emulation_status();
     }
 
+    /// Whether this computer captures and emulates: a green row each when it
+    /// does, a warning with a button to try again when it does not, and a
+    /// mark on the page of the computers.
     fn update_capture_emulation_status(&self) {
-        let capture = self.imp().capture_active.get();
-        let emulation = self.imp().emulation_active.get();
+        let imp = self.imp();
+        let capture = imp.capture_active.get();
+        let emulation = imp.emulation_active.get();
 
         #[cfg(target_os = "macos")]
         {
             // On macOS, capture and emulation share the same TCC gate
-            // (Accessibility). Collapse to a single warning row —
-            // emulation_status_row stays hidden and capture_status_row
-            // doubles as the shared status indicator. Its text and
-            // button mutate based on whether we're waiting for AX or
-            // waiting for the user to relaunch the app.
-            let anything_off = !capture || !emulation;
-            self.imp().emulation_status_row.set_visible(false);
-            self.imp().capture_status_row.set_visible(anything_off);
-            self.imp().capture_emulation_group.set_visible(anything_off);
-
-            if anything_off {
+            // (Accessibility). Collapse to a single row — emulation_status_row
+            // stays hidden and capture_status_row doubles as the shared
+            // status indicator. When something is off, its text and button
+            // mutate based on whether we're waiting for AX or waiting for the
+            // user to relaunch the app.
+            let ok = capture && emulation;
+            imp.emulation_status_row.set_visible(false);
+            show_status(
+                &imp.capture_status_row,
+                &imp.capture_status_icon,
+                &imp.input_capture_button,
+                ok,
+                (
+                    "Sharing the mouse and keyboard",
+                    "Capture and emulation are on",
+                ),
+                ("Input capture is off", "Needed for every connection"),
+            );
+            if !ok {
                 self.update_macos_warning_row_text();
             }
         }
 
         #[cfg(not(target_os = "macos"))]
         {
-            self.imp().capture_status_row.set_visible(!capture);
-            self.imp().emulation_status_row.set_visible(!emulation);
-            self.imp()
-                .capture_emulation_group
-                .set_visible(!capture || !emulation);
+            show_status(
+                &imp.capture_status_row,
+                &imp.capture_status_icon,
+                &imp.input_capture_button,
+                capture,
+                (
+                    "Sending",
+                    "Past a screen edge, the mouse and keyboard go to the next computer",
+                ),
+                ("Input capture is off", "Needed for every connection"),
+            );
+            show_status(
+                &imp.emulation_status_row,
+                &imp.emulation_status_icon,
+                &imp.input_emulation_button,
+                emulation,
+                ("Receiving", "The other computers can control this one"),
+                (
+                    "Input emulation is off",
+                    "Needed for the other computers to control this one",
+                ),
+            );
         }
+        imp.computers_page
+            .set_needs_attention(!capture || !emulation);
     }
 
     #[cfg(target_os = "macos")]
@@ -690,8 +731,14 @@ impl Window {
         self.update_auth_placeholder_visibility();
     }
 
+    /// The fingerprint of this computer, shown eight bytes to a line, so it
+    /// fits the column and reads like the one the other computer shows.
     pub(super) fn set_pk_fp(&self, fingerprint: &str) {
-        self.imp().fingerprint_row.set_subtitle(fingerprint);
+        let imp = self.imp();
+        imp.fingerprint.replace(fingerprint.to_owned());
+        let bytes: Vec<&str> = fingerprint.split(':').collect();
+        let shown: Vec<String> = bytes.chunks(8).map(|chunk| chunk.join(":")).collect();
+        imp.fingerprint_row.set_subtitle(&shown.join("\n"));
     }
 
     /// asks for the code another computer shows, to authorize both on each
@@ -831,6 +878,28 @@ impl Window {
 
 /// the themes in the order of the appearance row
 const THEMES: [Theme; 3] = [Theme::System, Theme::Light, Theme::Dark];
+
+/// A row of the status: `ok` and `off` are its title and subtitle each way.
+fn show_status(
+    row: &adw::ActionRow,
+    icon: &gtk::Image,
+    button: &gtk::Button,
+    active: bool,
+    ok: (&str, &str),
+    off: (&str, &str),
+) {
+    let (title, subtitle) = if active { ok } else { off };
+    row.set_title(title);
+    row.set_subtitle(subtitle);
+    icon.set_icon_name(Some(if active {
+        "emblem-ok-symbolic"
+    } else {
+        "dialog-warning-symbolic"
+    }));
+    icon.set_css_classes(if active { &["success"] } else { &["warning"] });
+    button.set_visible(!active);
+    row.set_visible(true);
+}
 
 fn theme_index(theme: Theme) -> u32 {
     THEMES.iter().position(|t| *t == theme).unwrap_or(0) as u32

@@ -10,3 +10,9 @@
 .peer-unknown > box > list .subtitle {
     color: @warning_color;
 }
+
+/* this computer: its certificate fingerprint, eight bytes to a line */
+row.fingerprint .subtitle {
+    font-family: monospace;
+    font-size: 0.85em;
+}
