@@ -1,7 +1,13 @@
 //! Without a console of its own, RustInput logs to the terminal it was started
-//! from, or else into a file in [`rustinput_ipc::log_dir`].
+//! from, or else into a file in [`rustinput_ipc::log_dir`]. The Windows
+//! service logs into `%SystemRoot%\Logs\RustInput`, which every user may read
+//! and only administrators may write: a service writing where a user may
+//! write could be tricked into overwriting other files.
 
-use std::fs::{self, OpenOptions};
+use std::{
+    fs::{self, OpenOptions},
+    path::PathBuf,
+};
 
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 
@@ -12,11 +18,19 @@ pub(super) fn setup(logger: &mut env_logger::Builder) {
     if unsafe { AttachConsole(ATTACH_PARENT_PROCESS) } != 0 {
         return;
     }
-    let Some(dir) = rustinput_ipc::log_dir() else {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let service = args.first().is_some_and(|a| a == "windows-service");
+    let dir = if service {
+        std::env::var_os("SystemRoot").map(|r| PathBuf::from(r).join("Logs").join("RustInput"))
+    } else {
+        rustinput_ipc::log_dir()
+    };
+    let Some(dir) = dir else {
         return;
     };
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    let (name, append) = if args.iter().any(|a| a == "daemon") {
+    let (name, append) = if service {
+        ("service.log", false)
+    } else if args.iter().any(|a| a == "daemon") {
         ("daemon.log", false)
     } else if args.iter().any(|a| a == "send-files") {
         // started once per selected item, the log of every start counts

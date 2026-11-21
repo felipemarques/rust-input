@@ -52,6 +52,17 @@ fn main() {
     windows_log::setup(&mut logger);
     logger.init();
 
+    // the Windows service: before the configuration, which is that of a
+    // user and not of the service
+    #[cfg(windows)]
+    if windows_supervisor::requested() {
+        if let Err(e) = windows_supervisor::run() {
+            log::error!("could not run as the Windows service: {e}");
+            process::exit(1);
+        }
+        return;
+    }
+
     if let Err(e) = run() {
         log::error!("{e}");
         process::exit(1);
@@ -66,6 +77,8 @@ fn run() -> Result<(), RustInputError> {
             Command::TestCapture(args) => run_async(capture_test::run(config, args))?,
             Command::Cli(cli_args) => run_async(rustinput_cli::run(cli_args))?,
             Command::SendFiles { paths } => run_async(rustinput_cli::send_files(paths))?,
+            #[cfg(windows)]
+            Command::WindowsService => windows_supervisor::run().map_err(io::Error::other)?,
             Command::Daemon => {
                 // if daemon is specified we run the service
                 match run_async(run_service(config)) {
@@ -84,6 +97,9 @@ fn run() -> Result<(), RustInputError> {
                 // Only spawn a new daemon if one isn't already running
                 let mut service = if rustinput_ipc::is_service_running() {
                     log::info!("daemon already running, connecting to existing instance");
+                    None
+                } else if daemon_from_windows_service() {
+                    log::info!("the RustInput service starts the daemon");
                     None
                 } else {
                     Some(start_service()?)
@@ -138,6 +154,17 @@ where
     Ok(runtime.block_on(LocalSet::new().run_until(f))?)
 }
 
+/// whether the Windows service starts the daemon, with administrator rights
+#[cfg(all(feature = "gtk", windows))]
+fn daemon_from_windows_service() -> bool {
+    rustinput_ipc::windows_service_runs()
+}
+
+#[cfg(all(feature = "gtk", not(windows)))]
+fn daemon_from_windows_service() -> bool {
+    false
+}
+
 fn start_service() -> Result<Child, io::Error> {
     let child = process::Command::new(std::env::current_exe()?)
         .args(std::env::args().skip(1))
@@ -149,6 +176,16 @@ fn start_service() -> Result<Child, io::Error> {
 async fn run_service(config: Config) -> Result<(), ServiceError> {
     let release_bind = config.release_bind();
     let config_path = config.config_path().to_owned();
+    #[cfg(windows)]
+    log::info!(
+        "RustInput {} daemon, {}",
+        env!("CARGO_PKG_VERSION"),
+        if windows_supervisor::runs_as_administrator() {
+            "with administrator rights"
+        } else {
+            "without administrator rights"
+        }
+    );
     let mut service = Service::new(config).await?;
     log::info!("using config: {config_path:?}");
     log::info!("Press {release_bind:?} to release the mouse");
@@ -159,3 +196,5 @@ async fn run_service(config: Config) -> Result<(), ServiceError> {
 
 #[cfg(windows)]
 mod windows_log;
+#[cfg(windows)]
+mod windows_supervisor;

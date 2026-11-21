@@ -235,6 +235,37 @@ fn setup_menu(app: &adw::Application) {
     app.set_menubar(Some(&menu))
 }
 
+/// The daemon the Windows service starts in this session, with administrator
+/// rights: when the service runs, waits for it (it comes up within seconds
+/// of logging on), `None` if there is no service or it did not come up.
+#[cfg(windows)]
+fn daemon_of_the_windows_service() -> Option<(
+    rustinput_ipc::FrontendEventReader,
+    rustinput_ipc::FrontendRequestWriter,
+)> {
+    use std::{
+        thread,
+        time::{Duration, Instant},
+    };
+    if !rustinput_ipc::windows_service_runs() {
+        return None;
+    }
+    log::info!("waiting for the daemon the RustInput service starts");
+    let deadline = Instant::now() + Duration::from_secs(20);
+    while Instant::now() < deadline {
+        if let Ok(conn) = rustinput_ipc::try_connect() {
+            return Some(conn);
+        }
+        thread::sleep(Duration::from_millis(250));
+    }
+    log::warn!(
+        "the RustInput service did not start the daemon (see {}\\Logs\\RustInput\\service.log), \
+         starting one without administrator rights",
+        env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".to_owned())
+    );
+    None
+}
+
 fn build_ui(app: &Application) {
     // If a window already exists (re-activation), just present it
     if let Some(window) = app.windows().first() {
@@ -243,7 +274,10 @@ fn build_ui(app: &Application) {
     }
 
     log::debug!("connecting to rustinput-socket");
-    let (mut frontend_rx, frontend_tx) = match rustinput_ipc::try_connect() {
+    let connection = rustinput_ipc::try_connect();
+    #[cfg(windows)]
+    let connection = connection.or_else(|e| daemon_of_the_windows_service().ok_or(e));
+    let (mut frontend_rx, frontend_tx) = match connection {
         Ok(conn) => conn,
         Err(e) => {
             log::warn!("could not connect to daemon ({e}), spawning a new one");

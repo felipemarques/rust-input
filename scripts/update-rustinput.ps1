@@ -1,12 +1,19 @@
 ﻿<#
 .SYNOPSIS
-    Installs or updates RustInput on Windows.
+    Installs, updates or removes RustInput on Windows.
 
 .DESCRIPTION
     Finds the newest release of RustInput on GitHub, downloads it with a
     progress bar, checks its SHA-256, closes RustInput, replaces the installed
     copy while keeping the previous one, starts RustInput again and shows
     whether it came up, with the end of its logs.
+
+    RustInput is installed in C:\Program Files\RustInput with the Windows
+    service "RustInput", which starts with Windows and keeps RustInput running
+    in the session of the user at the screen with the administrator rights of
+    that user: Windows keeps programs run as administrator out of reach of
+    programs that run without them. That needs administrator rights once per
+    run of this script, which asks Windows for them.
 
     Everything shown is also written to %LOCALAPPDATA%\rustinput\logs\update.log.
     Messages are in Portuguese when Windows is, in English otherwise.
@@ -21,8 +28,19 @@
 .PARAMETER Restore
     Goes back to the copy the last update kept (running it again undoes it).
 
+.PARAMETER Uninstall
+    Removes RustInput: the service, the program, the Start menu items, the
+    "Copy to RustInput" item of Explorer and the firewall rules. The settings
+    and the logs stay.
+
+.PARAMETER NoService
+    Installs without the Windows service, as before 0.23.0: RustInput then runs
+    without administrator rights and can not reach programs run as
+    administrator. Removes the service if it is installed.
+
 .PARAMETER NoStart
-    Does not start RustInput afterwards.
+    Does not open the window of RustInput afterwards (the service starts
+    anyway).
 
 .PARAMETER NoShortcuts
     Does not create the "RustInput" and "Update RustInput" Start menu items.
@@ -31,7 +49,10 @@
     Does not wait for Enter before the window closes.
 
 .PARAMETER InstallDir
-    Where RustInput is installed, %LOCALAPPDATA%\Programs\RustInput by default.
+    Where RustInput is installed, C:\Program Files\RustInput by default.
+
+.PARAMETER Zip
+    Installs this rustinput-windows-x86_64.zip instead of downloading one.
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File update-rustinput.ps1
@@ -44,23 +65,37 @@ param(
     [string]$Version = 'latest',
     [switch]$Force,
     [switch]$Restore,
+    [switch]$Uninstall,
+    [switch]$NoService,
     [switch]$NoStart,
     [switch]$NoShortcuts,
     [switch]$NoPause,
-    [string]$InstallDir = ''
+    [string]$InstallDir = '',
+    [string]$Zip = ''
 )
 
 $ErrorActionPreference = 'Stop'
 # the progress of the cmdlets slows Windows PowerShell down; the download
 # shows its own
 $ProgressPreference = 'SilentlyContinue'
+# handed on when the script starts itself again as administrator
+$ScriptParameters = $PSBoundParameters
 
 $Repo = 'felipemarques/rust-input'
 $AssetName = 'rustinput-windows-x86_64.zip'
 $ScriptName = 'update-rustinput.ps1'
 $UserAgent = 'rustinput-updater'
+$ServiceName = 'RustInput'
+$FirewallGroup = 'RustInput'
+# the first version with the service
+$FirstServiceVersion = [version]'0.23.0'
+# 64-bit Program Files, also from a 32-bit PowerShell
+$ProgramFilesDir = $env:ProgramW6432
+if (-not $ProgramFilesDir) { $ProgramFilesDir = $env:ProgramFiles }
+# where versions before 0.23.0 were installed
+$OldDefaultDir = Join-Path $env:LOCALAPPDATA 'Programs\RustInput'
 if (-not $InstallDir) {
-    $InstallDir = Join-Path $env:LOCALAPPDATA 'Programs\RustInput'
+    $InstallDir = Join-Path $ProgramFilesDir 'RustInput'
 }
 $InstallDir = $InstallDir.TrimEnd('\')
 $Exe = Join-Path $InstallDir 'rustinput.exe'
@@ -68,6 +103,9 @@ $PreviousDir = "$InstallDir.previous"
 $StagingDir = "$InstallDir.new"
 $LogDir = Join-Path $env:LOCALAPPDATA 'rustinput\logs'
 $UpdateLog = Join-Path $LogDir 'update.log'
+$ServiceLogDir = Join-Path $env:SystemRoot 'Logs\RustInput'
+$ServiceLog = Join-Path $ServiceLogDir 'service.log'
+$MenuKey = 'HKCU:\Software\Classes\AllFilesystemObjects\shell\RustInput.CopyTo'
 
 # this script, kept to be installed next to RustInput: when it runs from the
 # installed copy, that copy is moved away before the end
@@ -121,6 +159,12 @@ function Write-Fail([string]$Text) {
     Write-Host $Text -ForegroundColor Red
 }
 
+function Write-Banner {
+    Write-Host ''
+    Write-Host '  RustInput  ' -ForegroundColor Black -BackgroundColor DarkYellow -NoNewline
+    Write-Host (T '  install and update for Windows' '  instalação e atualização para Windows')
+}
+
 function Format-Size([double]$Bytes) {
     if ($Bytes -ge 1GB) { return '{0:N2} GB' -f ($Bytes / 1GB) }
     if ($Bytes -ge 1MB) { return '{0:N1} MB' -f ($Bytes / 1MB) }
@@ -146,6 +190,61 @@ function Exit-Script([int]$Code) {
 }
 
 # ---------------------------------------------------------------------------
+# administrator rights
+
+function Test-Administrator {
+    $principal = New-Object Security.Principal.WindowsPrincipal ([Security.Principal.WindowsIdentity]::GetCurrent())
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Test-UnderFolder([string]$Path, [string]$Folder) {
+    return $Path.StartsWith($Folder.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
+# the service, and the folders of Program Files, are for administrators only
+function Test-NeedsAdministrator {
+    if (-not $NoService -and -not ($Uninstall -and -not (Test-Path -LiteralPath $Exe))) { return $true }
+    if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) { return $true }
+    return (Test-UnderFolder $InstallDir $ProgramFilesDir)
+}
+
+# Runs this script again as administrator, after Windows asks the user, and
+# ends with its exit code. It shows its output in a window of its own.
+function Invoke-Elevated {
+    Write-Banner
+    if (-not $PSCommandPath) {
+        Write-Fail (T 'Save this script to a file and run that file: it needs to start itself again as administrator.' 'Salve este script num arquivo e rode o arquivo: ele precisa se abrir de novo como administrador.')
+        exit 1
+    }
+    $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f $PSCommandPath))
+    foreach ($entry in $ScriptParameters.GetEnumerator()) {
+        if ($entry.Value -is [System.Management.Automation.SwitchParameter]) {
+            if ($entry.Value.IsPresent) { $arguments += ('-{0}' -f $entry.Key) }
+        } else {
+            $arguments += ('-{0}' -f $entry.Key)
+            $arguments += ('"{0}"' -f $entry.Value)
+        }
+    }
+    Write-Host ''
+    Write-Info (T 'RustInput runs as a Windows service, which needs administrator rights:' 'O RustInput roda como serviço do Windows, o que precisa de direitos de administrador:')
+    Write-Info (T 'confirm in the window Windows shows. The installation goes on in a window of its own.' 'confirme na janela que o Windows mostrar. A instalação continua numa janela própria.')
+    $shell = (Get-Process -Id $PID).Path
+    try {
+        $process = Start-Process -FilePath $shell -ArgumentList $arguments -Verb RunAs -Wait -PassThru
+    } catch {
+        Write-Fail (T 'Windows did not give administrator rights.' 'O Windows não deu direitos de administrador.')
+        Write-Detail ((T 'to install without the service, as before: add  -NoService -InstallDir "{0}"' 'para instalar sem o serviço, como antes: acrescente  -NoService -InstallDir "{0}"') -f $OldDefaultDir)
+        exit 1
+    }
+    if ($process.ExitCode -eq 0) {
+        Write-Ok (T 'done (the administrator window showed the details)' 'pronto (a janela de administrador mostrou os detalhes)')
+    } else {
+        Write-Fail ((T 'it did not work (code {0}), see {1}' 'não deu certo (código {0}), veja {1}') -f $process.ExitCode, $UpdateLog)
+    }
+    exit $process.ExitCode
+}
+
+# ---------------------------------------------------------------------------
 # versions
 
 function ConvertTo-Version([string]$Text) {
@@ -163,6 +262,12 @@ function Get-ExeVersion([string]$Path) {
     $version = (Get-Item -LiteralPath $Path).VersionInfo.ProductVersion
     if ($version) { return $version.Trim() }
     return ''
+}
+
+# whether that version of rustinput.exe can run as the service
+function Test-ServiceVersion($Version) {
+    $parsed = ConvertTo-Version $Version
+    return ($parsed -and $parsed -ge $FirstServiceVersion)
 }
 
 function Get-Release([string]$Wanted) {
@@ -250,15 +355,74 @@ function Save-File([string]$Url, [string]$Path, [long]$ExpectedSize) {
     return New-Object PSObject -Property @{ Bytes = $done; Seconds = $watch.Elapsed.TotalSeconds }
 }
 
+# unpacks a release next to the installed copy, to be put in its place
+function Expand-Release([string]$ZipPath) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    Remove-Folder $StagingDir
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($ZipPath, $StagingDir)
+    $stagedExe = Join-Path $StagingDir 'rustinput.exe'
+    if (-not (Test-Path -LiteralPath $stagedExe)) {
+        Remove-Folder $StagingDir
+        throw ((T '{0} has no rustinput.exe' 'o {0} não tem o rustinput.exe') -f (Split-Path -Leaf $ZipPath))
+    }
+    $files = @(Get-ChildItem -LiteralPath $StagingDir -Recurse -File)
+    $size = ($files | Measure-Object -Property Length -Sum).Sum
+    Write-Ok ((T 'unpacked: {0} files, {1}' 'descompactado: {0} arquivos, {1}') -f $files.Count, (Format-Size $size))
+    return (Get-ExeVersion $stagedExe)
+}
+
 # ---------------------------------------------------------------------------
 # processes
 
+# The rustinput.exe running: the service, the daemon the service or the
+# window started, the window, "Copy to RustInput".
 function Get-RustInputProcess {
-    return @(Get-Process -Name rustinput -ErrorAction SilentlyContinue)
+    $found = @()
+    foreach ($process in @(Get-CimInstance -ClassName Win32_Process -Filter "Name='rustinput.exe'" -ErrorAction SilentlyContinue)) {
+        $line = [string]$process.CommandLine
+        if ($line -match '\swindows-service\s*$') {
+            $role = 'service'
+        } elseif ($line -match '\sdaemon(\s|$)') {
+            $role = 'daemon'
+        } elseif ($line -match '\ssend-files\s') {
+            $role = 'send-files'
+        } else {
+            $role = 'window'
+        }
+        $found += New-Object PSObject -Property @{
+            Id = [int]$process.ProcessId
+            Path = [string]$process.ExecutablePath
+            Role = $role
+            Session = [int]$process.SessionId
+        }
+    }
+    return $found
+}
+
+function Get-RoleText([string]$Role) {
+    switch ($Role) {
+        'service' { return (T 'service' 'serviço') }
+        'daemon' { return 'daemon' }
+        'window' { return (T 'window' 'janela') }
+        default { return $Role }
+    }
+}
+
+function Stop-RustInputService {
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if (-not $service -or $service.Status -eq 'Stopped') { return }
+    try {
+        Stop-Service -Name $ServiceName -Force -ErrorAction Stop -WarningAction SilentlyContinue
+        $service.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(20))
+        Write-Ok (T 'service stopped' 'serviço parado')
+    } catch {
+        Write-Warn ((T 'the service did not stop: {0}' 'o serviço não parou: {0}') -f $_.Exception.Message)
+    }
 }
 
 function Stop-RustInput {
-    $running = Get-RustInputProcess
+    Stop-RustInputService
+    $running = @(Get-RustInputProcess)
     if ($running.Count -eq 0) {
         Write-Info (T 'RustInput is not running.' 'O RustInput não está aberto.')
         return
@@ -266,41 +430,115 @@ function Stop-RustInput {
     foreach ($process in $running) {
         $path = $process.Path
         if (-not $path) { $path = '?' }
-        Write-Detail ('PID {0}  {1}' -f $process.Id, $path)
+        Write-Detail ('PID {0}  {1}  {2}' -f $process.Id, (Get-RoleText $process.Role), $path)
     }
-    $running | Stop-Process -Force -ErrorAction SilentlyContinue
-    $running | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
-    $left = Get-RustInputProcess
+    $ids = @($running | ForEach-Object { $_.Id })
+    Stop-Process -Id $ids -Force -ErrorAction SilentlyContinue
+    Wait-Process -Id $ids -Timeout 15 -ErrorAction SilentlyContinue
+    $left = @(Get-RustInputProcess)
     if ($left.Count -gt 0) {
         throw (T 'RustInput did not close. Close it from the tray icon and run this again.' 'O RustInput não fechou. Feche pelo ícone da bandeja e rode de novo.')
     }
     Write-Ok ((T 'closed ({0} processes)' 'fechado ({0} processos)') -f $running.Count)
 }
 
-# Starts RustInput the way the Start menu would: through Explorer, so it is not
-# tied to this window (closing it would close RustInput) and logs to its files.
+function Test-WindowPort {
+    try {
+        return (@(Get-NetTCPConnection -LocalPort 5252 -State Listen -ErrorAction Stop).Count -gt 0)
+    } catch {
+        return $false
+    }
+}
+
+# what the daemon wrote about its rights since `Since`: $true, $false, or
+# $null when it did not say yet
+function Get-DaemonRights([datetime]$Since) {
+    $log = Join-Path $LogDir 'daemon.log'
+    if (-not (Test-Path -LiteralPath $log)) { return $null }
+    if ((Get-Item -LiteralPath $log).LastWriteTime -lt $Since.AddSeconds(-2)) { return $null }
+    $line = Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Where-Object { $_ -match 'daemon, (with|without) administrator rights' } | Select-Object -Last 1
+    if (-not $line) { return $null }
+    return ($line -match 'daemon, with administrator rights')
+}
+
+# starts the service and waits for the daemon it starts in this session
+function Start-RustInputService([datetime]$Since) {
+    try {
+        Start-Service -Name $ServiceName -ErrorAction Stop -WarningAction SilentlyContinue
+    } catch {
+        Write-Fail ((T 'the service did not start: {0}' 'o serviço não iniciou: {0}') -f $_.Exception.Message)
+        Show-Log $ServiceLog $Since
+        return $false
+    }
+    Write-Ok (T 'service running' 'serviço rodando')
+    $deadline = (Get-Date).AddSeconds(20)
+    $daemon = $null
+    while ((Get-Date) -lt $deadline) {
+        $daemon = Get-RustInputProcess | Where-Object { $_.Role -eq 'daemon' } | Select-Object -First 1
+        if ($daemon -and (Test-WindowPort)) { break }
+        Start-Sleep -Milliseconds 300
+    }
+    if (-not $daemon) {
+        Write-Fail (T 'the service did not start the daemon. Its log:' 'o serviço não abriu o daemon. O log dele:')
+        Show-Log $ServiceLog $Since
+        return $false
+    }
+    Write-Ok ((T 'the service started the daemon (PID {0}, session {1})' 'o serviço abriu o daemon (PID {0}, sessão {1})') -f $daemon.Id, $daemon.Session)
+    $rights = $null
+    $deadline = (Get-Date).AddSeconds(10)
+    while ($null -eq $rights -and (Get-Date) -lt $deadline) {
+        $rights = Get-DaemonRights $Since
+        if ($null -eq $rights) { Start-Sleep -Milliseconds 300 }
+    }
+    if ($rights -eq $true) {
+        Write-Ok (T 'the daemon runs with administrator rights: programs run as administrator are reached too' 'o daemon roda com direitos de administrador: alcança também os programas abertos como administrador')
+    } elseif ($rights -eq $false) {
+        Write-Warn (T 'the daemon runs without administrator rights (is this user an administrator?)' 'o daemon roda sem direitos de administrador (este usuário é administrador?)')
+    }
+    return $true
+}
+
+# Starts RustInput: the service, when it is installed, and the window the way
+# the Start menu would, through Explorer, so it is not tied to this window
+# (closing it would close RustInput) and runs without administrator rights.
 function Start-RustInput {
     $started = Get-Date
-    Start-Process -FilePath (Join-Path $env:SystemRoot 'explorer.exe') -ArgumentList ('"{0}"' -f $Exe)
-    # the window starts the service, a second rustinput.exe
-    $deadline = (Get-Date).AddSeconds(20)
-    while ((Get-Date) -lt $deadline -and (Get-RustInputProcess).Count -lt 2) {
-        Start-Sleep -Milliseconds 300
+    $ok = $true
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($service) {
+        $ok = Start-RustInputService $started
+    }
+    if ($NoStart) {
+        Write-Info (T 'the window is not opened (-NoStart)' 'a janela não foi aberta (-NoStart)')
+    } else {
+        Start-Process -FilePath (Join-Path $env:SystemRoot 'explorer.exe') -ArgumentList ('"{0}"' -f $Exe)
+        $deadline = (Get-Date).AddSeconds(20)
+        while ((Get-Date) -lt $deadline) {
+            $running = @(Get-RustInputProcess)
+            $window = @($running | Where-Object { $_.Role -eq 'window' }).Count -gt 0
+            $daemon = @($running | Where-Object { $_.Role -eq 'daemon' }).Count -gt 0
+            # without the service the window starts the daemon
+            if ($window -and $daemon) { break }
+            Start-Sleep -Milliseconds 300
+        }
     }
     # time to open the ports, or to fail
     Start-Sleep -Seconds 3
-    $running = Get-RustInputProcess
+    $running = @(Get-RustInputProcess)
     if ($running.Count -eq 0) {
         Write-Fail (T 'RustInput did not stay open.' 'O RustInput não ficou aberto.')
+        $ok = $false
     } else {
-        $ids = ($running | ForEach-Object { $_.Id }) -join ', '
-        Write-Ok ((T 'running (PID {0})' 'aberto (PID {0})') -f $ids)
+        $list = ($running | Sort-Object Id | ForEach-Object { '{0} {1}' -f (Get-RoleText $_.Role), $_.Id }) -join ', '
+        Write-Ok ((T 'running: {0}' 'aberto: {0}') -f $list)
         Show-Ports $running
     }
-    foreach ($name in 'daemon.log', 'rustinput.log') {
-        Show-Log (Join-Path $LogDir $name) $started
+    $logs = @((Join-Path $LogDir 'daemon.log'), (Join-Path $LogDir 'rustinput.log'))
+    if ($service) { $logs += $ServiceLog }
+    foreach ($path in $logs) {
+        Show-Log $path $started
     }
-    return ($running.Count -gt 0)
+    return $ok
 }
 
 function Show-Ports($Running) {
@@ -350,6 +588,104 @@ function Show-Log([string]$Path, [datetime]$Since) {
 }
 
 # ---------------------------------------------------------------------------
+# the Windows service
+
+# Installs the service, or brings it up to date: it starts with Windows, and
+# Windows starts it again when it fails.
+function Install-RustInputService {
+    $command = '"{0}" windows-service' -f $Exe
+    $description = T 'Keeps RustInput running in the session of the user at the screen, with administrator rights, so it reaches programs run as administrator too.' 'Mantém o RustInput rodando na sessão de quem está na tela, com direitos de administrador, para alcançar também os programas abertos como administrador.'
+    $existing = Get-CimInstance -ClassName Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
+    if (-not $existing) {
+        New-Service -Name $ServiceName -BinaryPathName $command -DisplayName 'RustInput' -Description $description -StartupType Automatic | Out-Null
+        Write-Ok (T 'Windows service installed: RustInput, starts with Windows' 'serviço do Windows instalado: RustInput, inicia com o Windows')
+    } else {
+        if ($existing.PathName -ne $command) {
+            $result = Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments @{ PathName = $command }
+            if ($result.ReturnValue -ne 0) {
+                throw ((T 'could not change the service (error {0})' 'não deu para mudar o serviço (erro {0})') -f $result.ReturnValue)
+            }
+        }
+        Set-Service -Name $ServiceName -StartupType Automatic -Description $description
+        Write-Ok (T 'Windows service: RustInput, starts with Windows' 'serviço do Windows: RustInput, inicia com o Windows')
+    }
+    & sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/60000 | Out-Null
+    & sc.exe failureflag $ServiceName 1 | Out-Null
+}
+
+# removes the service, $true if there was one
+function Remove-RustInputService {
+    if (-not (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue)) { return $false }
+    Stop-RustInputService
+    & sc.exe delete $ServiceName | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warn ((T 'Windows did not remove the service (sc.exe delete: {0})' 'o Windows não removeu o serviço (sc.exe delete: {0})') -f $LASTEXITCODE)
+        return $false
+    }
+    Write-Ok (T 'Windows service removed' 'serviço do Windows removido')
+    return $true
+}
+
+# the service as asked: installed, unless -NoService or the version installed
+# can not run as one
+function Set-ServiceState([string]$InstalledVersion) {
+    if (-not $NoService -and (Test-ServiceVersion $InstalledVersion)) {
+        Install-RustInputService
+    } elseif (Remove-RustInputService) {
+        if (-not $NoService) {
+            Write-Info ((T 'version {0} runs without the service' 'a versão {0} roda sem o serviço') -f (Get-VersionText $InstalledVersion))
+        }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# firewall
+
+# the network profiles the rules of the firewall Windows made for RustInput
+# allow, when it asked: those the new rules allow too
+function Get-FirewallProfiles {
+    $mask = 0
+    try {
+        $filters = @(Get-NetFirewallApplicationFilter -ErrorAction Stop | Where-Object { $_.Program -like '*\rustinput.exe' })
+        foreach ($rule in @($filters | Get-NetFirewallRule -ErrorAction SilentlyContinue)) {
+            if ([string]$rule.Direction -ne 'Inbound' -or [string]$rule.Action -ne 'Allow' -or [string]$rule.Enabled -ne 'True') { continue }
+            if ($rule.Group -eq $FirewallGroup) { continue }
+            $value = [int]$rule.Profile
+            if ($value -eq 0) { return 'Any' }
+            $mask = $mask -bor $value
+        }
+    } catch { }
+    if ($mask -eq 0) { return 'Domain, Private' }
+    $names = @()
+    if ($mask -band 1) { $names += 'Domain' }
+    if ($mask -band 2) { $names += 'Private' }
+    if ($mask -band 4) { $names += 'Public' }
+    return ($names -join ', ')
+}
+
+# Lets the other computers reach RustInput where it is installed now: Windows
+# would otherwise ask again for the new folder, in a window easy to miss.
+function Install-FirewallRules {
+    if (-not (Test-Administrator)) { return }
+    try {
+        $ours = @(Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue)
+        $current = @($ours | Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue | Where-Object { $_.Program -eq $Exe })
+        if ($ours.Count -gt 0 -and $current.Count -eq $ours.Count) {
+            Write-Ok (T 'Windows firewall: the other computers reach RustInput' 'firewall do Windows: os outros computadores alcançam o RustInput')
+            return
+        }
+        $profiles = Get-FirewallProfiles
+        $ours | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        foreach ($protocol in 'UDP', 'TCP') {
+            New-NetFirewallRule -DisplayName "RustInput ($protocol)" -Group $FirewallGroup -Direction Inbound -Action Allow -Program $Exe -Protocol $protocol -Profile $profiles | Out-Null
+        }
+        Write-Ok ((T 'Windows firewall: the other computers reach RustInput (networks: {0})' 'firewall do Windows: os outros computadores alcançam o RustInput (redes: {0})') -f $profiles)
+    } catch {
+        Write-Warn ((T 'could not set up the Windows firewall: {0}' 'não deu para configurar o firewall do Windows: {0}') -f $_.Exception.Message)
+    }
+}
+
+# ---------------------------------------------------------------------------
 # files
 
 function Remove-Folder([string]$Path) {
@@ -387,6 +723,25 @@ function Install-Staged {
     }
 }
 
+# whether this run moves RustInput from where versions before 0.23.0 were
+# installed (%LOCALAPPDATA%\Programs\RustInput)
+function Test-Moving {
+    if ($InstallDir -eq $OldDefaultDir) { return $false }
+    if (Test-Path -LiteralPath $Exe) { return $false }
+    return (Test-Path -LiteralPath (Join-Path $OldDefaultDir 'rustinput.exe'))
+}
+
+# The copy in the old folder becomes the previous version of the new one,
+# which -Restore goes back to, and the old folder goes away.
+function Move-OldInstall {
+    Remove-Folder $PreviousDir
+    Copy-Item -LiteralPath $OldDefaultDir -Destination $PreviousDir -Recurse -Force
+    foreach ($dir in $OldDefaultDir, "$OldDefaultDir.previous", "$OldDefaultDir.new") {
+        try { Remove-Folder $dir } catch { Write-Warn ((T 'could not remove {0}: {1}' 'não deu para remover {0}: {1}') -f $dir, $_.Exception.Message) }
+    }
+    Write-Ok ((T 'moved here from {0}; that copy is the previous version now' 'mudou de {0} para cá; aquela cópia virou a versão anterior') -f $OldDefaultDir)
+}
+
 # this script next to RustInput, for the Start menu item, when the release
 # does not bring it (versions before 0.20.1)
 function Install-Self {
@@ -404,6 +759,15 @@ function New-Shortcut([string]$Path, [string]$Target, [string]$Arguments, [strin
     $link.IconLocation = "$Exe,0"
     $link.Description = $Description
     $link.Save()
+}
+
+function Get-ShortcutPaths {
+    $programs = [Environment]::GetFolderPath('Programs')
+    return @(
+        (Join-Path $programs 'RustInput.lnk'),
+        (Join-Path $programs 'Update RustInput.lnk'),
+        (Join-Path $programs 'Atualizar o RustInput.lnk')
+    )
 }
 
 function Install-Shortcuts {
@@ -441,11 +805,20 @@ function Show-Summary([string]$Before, [string]$After, [bool]$Running) {
         Write-Info ((T 'before: {0}' 'antes: {0}') -f $Before)
     }
     Write-Info ((T 'folder:            {0}' 'pasta:             {0}') -f $InstallDir)
+    $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if ($service) {
+        Write-Info ((T 'Windows service:   {0} ({1})' 'serviço:           {0} ({1})') -f $ServiceName, $service.Status)
+    } else {
+        Write-Info (T 'Windows service:   none, without administrator rights' 'serviço:           nenhum, sem direitos de administrador')
+    }
     if (Test-Path -LiteralPath $PreviousDir) {
         Write-Info ((T 'previous version:  {0}' 'versão anterior:   {0}') -f $PreviousDir)
         Write-Detail ((T 'to go back to it:  powershell -ExecutionPolicy Bypass -File "{0}" -Restore' 'para voltar a ela: powershell -ExecutionPolicy Bypass -File "{0}" -Restore') -f (Join-Path $InstallDir $ScriptName))
     }
     Write-Info ((T 'RustInput logs:    {0}' 'logs do RustInput: {0}') -f $LogDir)
+    if ($service) {
+        Write-Info ((T 'service log:       {0}' 'log do serviço:    {0}') -f $ServiceLog)
+    }
     Write-Info ((T 'this update:       {0}' 'esta atualização:  {0}') -f $UpdateLog)
     Write-Host ('-' * 72) -ForegroundColor DarkGray
 }
@@ -471,11 +844,48 @@ function Invoke-Restore {
     }
     Install-Self
     Write-Ok ((T 'installed {0}, the other one is now the previous version' 'instalada a {0}; a outra virou a versão anterior') -f (Get-VersionText $back))
-    $running = $false
-    if (-not $NoStart) {
-        $running = Start-RustInput
-    }
+    Set-ServiceState $back
+    Install-FirewallRules
+    $running = Start-RustInput
     Show-Summary (Get-VersionText $before) (Get-VersionText $back) $running
+}
+
+function Invoke-Uninstall {
+    $script:StepCount = 2
+    Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
+    Stop-RustInput
+    Write-Step (T 'Removing RustInput' 'Removendo o RustInput')
+    [void](Remove-RustInputService)
+    foreach ($dir in $InstallDir, $PreviousDir, $StagingDir, "$InstallDir.swap", $OldDefaultDir, "$OldDefaultDir.previous", "$OldDefaultDir.new", $ServiceLogDir) {
+        if (Test-Path -LiteralPath $dir) {
+            try {
+                Remove-Folder $dir
+                Write-Ok ((T 'removed {0}' 'removido {0}') -f $dir)
+            } catch {
+                Write-Warn ((T 'could not remove {0}: {1}' 'não deu para remover {0}: {1}') -f $dir, $_.Exception.Message)
+            }
+        }
+    }
+    $links = @(Get-ShortcutPaths | Where-Object { Test-Path -LiteralPath $_ })
+    foreach ($link in $links) { Remove-Item -LiteralPath $link -Force }
+    if ($links.Count -gt 0) { Write-Ok (T 'Start menu items removed' 'itens do menu Iniciar removidos') }
+    if (Test-Path -LiteralPath $MenuKey) {
+        Remove-Item -LiteralPath $MenuKey -Recurse -Force
+        Write-Ok (T '"Copy to RustInput" removed from Explorer' '"Copiar para o RustInput" removido do Explorer')
+    }
+    if (Test-Administrator) {
+        $rules = @(Get-NetFirewallRule -Group $FirewallGroup -ErrorAction SilentlyContinue)
+        if ($rules.Count -gt 0) {
+            $rules | Remove-NetFirewallRule
+            Write-Ok (T 'Windows firewall rules removed' 'regras do firewall do Windows removidas')
+        }
+    }
+    Write-Host ''
+    Write-Host ('-' * 72) -ForegroundColor DarkGray
+    Write-Host (T '  RustInput is removed.' '  O RustInput foi removido.') -ForegroundColor Green
+    Write-Info ((T 'kept, the settings and logs: {0}' 'ficaram as configurações e os logs: {0}') -f (Join-Path $env:LOCALAPPDATA 'rustinput'))
+    Write-Detail ((T 'to remove them too: Remove-Item -Recurse "{0}"' 'para remover também: Remove-Item -Recurse "{0}"') -f (Join-Path $env:LOCALAPPDATA 'rustinput'))
+    Write-Host ('-' * 72) -ForegroundColor DarkGray
 }
 
 # $null (not installed) and '' (unknown) differ: no [string], which turns
@@ -486,8 +896,53 @@ function Get-VersionText($Version) {
     return $Version
 }
 
-function Invoke-Update {
+# Puts the unpacked release in place, then the service, the firewall and the
+# Start menu, and starts RustInput.
+function Complete-Install([string]$Installed, [string]$Target, [bool]$Moving) {
+    Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
+    Stop-RustInput
+
+    Write-Step ((T 'Installing {0}' 'Instalando a {0}') -f $Target)
+    Install-Staged
+    if ($Moving) { Move-OldInstall }
+    Install-Self
+    $now = Get-ExeVersion $Exe
+    if ($now) {
+        Write-Ok ((T 'installed: rustinput.exe {0}' 'instalado: rustinput.exe {0}') -f $now)
+    } else {
+        Write-Ok ((T 'installed in {0}' 'instalado em {0}') -f $InstallDir)
+    }
+    Set-ServiceState $now
+    Install-FirewallRules
+    Install-Shortcuts
+
+    Write-Step (T 'Starting RustInput' 'Abrindo o RustInput')
+    $running = Start-RustInput
+    if (-not $running -and (Test-Path -LiteralPath $PreviousDir)) {
+        Write-Warn (T 'to go back to the previous version, run this again with -Restore' 'para voltar para a versão anterior, rode de novo com -Restore')
+    }
+    Show-Summary (Get-VersionText $Installed) $Target $running
+}
+
+# installs a zip at hand (-Zip), without GitHub
+function Invoke-ZipInstall {
+    $script:StepCount = 4
+    $moving = Test-Moving
     $installed = Get-ExeVersion $Exe
+    if ($moving) { $installed = Get-ExeVersion (Join-Path $OldDefaultDir 'rustinput.exe') }
+    $zipPath = (Resolve-Path -LiteralPath $Zip).Path
+    Write-Step ((T 'Unpacking {0}' 'Descompactando {0}') -f $zipPath)
+    Write-Info ((T 'installed:  {0}' 'instalada:  {0}') -f (Get-VersionText $installed))
+    $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zipPath).Hash.ToLowerInvariant()
+    Write-Detail ('SHA-256: {0}' -f $hash)
+    $target = Expand-Release $zipPath
+    Complete-Install $installed (Get-VersionText $target) $moving
+}
+
+function Invoke-Update {
+    $moving = Test-Moving
+    $installed = Get-ExeVersion $Exe
+    if ($moving) { $installed = Get-ExeVersion (Join-Path $OldDefaultDir 'rustinput.exe') }
 
     Write-Step (T 'Looking for the version on GitHub' 'Procurando a versão no GitHub')
     $release = Get-Release $Version
@@ -497,12 +952,15 @@ function Invoke-Update {
         throw ((T 'release {0} has no {1}' 'a versão {0} não tem o {1}') -f $target, $AssetName)
     }
     Write-Info ((T 'installed:  {0}' 'instalada:  {0}') -f (Get-VersionText $installed))
+    if ($moving) {
+        Write-Detail ((T 'in {0}, moves to {1}' 'em {0}, muda para {1}') -f $OldDefaultDir, $InstallDir)
+    }
     Write-Info ((T 'on GitHub:  {0}  (published {1}, {2})' 'no GitHub:  {0}  (publicada em {1}, {2})') -f $target, (Format-Date $release.published_at), (Format-Size $asset.size))
     Write-Detail $release.html_url
 
     $installedVersion = ConvertTo-Version $installed
     $targetVersion = ConvertTo-Version $target
-    if (-not $Force -and $installedVersion -and $targetVersion) {
+    if (-not $Force -and -not $moving -and $installedVersion -and $targetVersion) {
         $same = $installedVersion -eq $targetVersion
         $newer = ($Version -eq 'latest') -and ($installedVersion -gt $targetVersion)
         if ($same -or $newer) {
@@ -512,9 +970,13 @@ function Invoke-Update {
                 Write-Ok (T 'the installed version is newer than the published one (-Force installs it anyway)' 'a versão instalada é mais nova que a publicada (-Force instala mesmo assim)')
             }
             Install-Self
+            Set-ServiceState $installed
+            Install-FirewallRules
             Install-Shortcuts
-            $running = (Get-RustInputProcess).Count -gt 0
-            if (-not $running -and -not $NoStart) {
+            $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+            $daemon = @(Get-RustInputProcess | Where-Object { $_.Role -eq 'daemon' }).Count -gt 0
+            $running = $daemon -and (-not $service -or $service.Status -eq 'Running')
+            if (-not $running) {
                 Write-Host ''
                 Write-Info (T 'RustInput is not running, starting it:' 'O RustInput não está aberto, abrindo:')
                 $running = Start-RustInput
@@ -562,47 +1024,17 @@ function Invoke-Update {
     } else {
         Write-Warn ((T 'GitHub does not list the SHA-256 of this file; SHA-256: {0}' 'o GitHub não informa o SHA-256 deste arquivo; SHA-256: {0}') -f $hash)
     }
-    Add-Type -AssemblyName System.IO.Compression.FileSystem
-    Remove-Folder $StagingDir
-    [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $StagingDir)
-    $stagedExe = Join-Path $StagingDir 'rustinput.exe'
-    if (-not (Test-Path -LiteralPath $stagedExe)) {
-        Remove-Folder $StagingDir
-        throw ((T '{0} has no rustinput.exe' 'o {0} não tem o rustinput.exe') -f $AssetName)
-    }
-    $files = @(Get-ChildItem -LiteralPath $StagingDir -Recurse -File)
-    $size = ($files | Measure-Object -Property Length -Sum).Sum
-    Write-Ok ((T 'unpacked: {0} files, {1}' 'descompactado: {0} arquivos, {1}') -f $files.Count, (Format-Size $size))
-
-    Write-Step (T 'Closing RustInput' 'Fechando o RustInput')
-    Stop-RustInput
-
-    Write-Step ((T 'Installing {0}' 'Instalando a {0}') -f $target)
-    Install-Staged
+    [void](Expand-Release $zip)
     Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
-    Install-Self
-    $now = Get-ExeVersion $Exe
-    if ($now) {
-        Write-Ok ((T 'installed: rustinput.exe {0}' 'instalado: rustinput.exe {0}') -f $now)
-    } else {
-        Write-Ok ((T 'installed in {0}' 'instalado em {0}') -f $InstallDir)
-    }
-    Install-Shortcuts
 
-    Write-Step (T 'Starting RustInput' 'Abrindo o RustInput')
-    $running = $false
-    if ($NoStart) {
-        Write-Info (T 'skipped (-NoStart)' 'pulado (-NoStart)')
-    } else {
-        $running = Start-RustInput
-        if (-not $running -and (Test-Path -LiteralPath $PreviousDir)) {
-            Write-Warn (T 'to go back to the previous version, run this again with -Restore' 'para voltar para a versão anterior, rode de novo com -Restore')
-        }
-    }
-    Show-Summary (Get-VersionText $installed) $target $running
+    Complete-Install $installed $target $moving
 }
 
 # ---------------------------------------------------------------------------
+
+if ((Test-NeedsAdministrator) -and -not (Test-Administrator)) {
+    Invoke-Elevated
+}
 
 try {
     New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -615,14 +1047,18 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 } catch { }
 
-Write-Host ''
-Write-Host '  RustInput  ' -ForegroundColor Black -BackgroundColor DarkYellow -NoNewline
-Write-Host (T '  install and update for Windows' '  instalação e atualização para Windows')
-Write-Detail ('PowerShell {0}, {1}' -f $PSVersionTable.PSVersion, (Get-Date).ToString('g'))
+Write-Banner
+$rights = T 'without administrator rights' 'sem direitos de administrador'
+if (Test-Administrator) { $rights = T 'as administrator' 'como administrador' }
+Write-Detail ('PowerShell {0}, {1}, {2}' -f $PSVersionTable.PSVersion, (Get-Date).ToString('g'), $rights)
 
 try {
-    if ($Restore) {
+    if ($Uninstall) {
+        Invoke-Uninstall
+    } elseif ($Restore) {
         Invoke-Restore
+    } elseif ($Zip) {
+        Invoke-ZipInstall
     } else {
         Invoke-Update
     }

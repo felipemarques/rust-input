@@ -511,6 +511,36 @@ pub fn is_service_running() -> bool {
     std::net::TcpStream::connect("127.0.0.1:5252").is_ok()
 }
 
+/// the name of the Windows service (`rustinput windows-service`), installed
+/// by update-rustinput.ps1
+#[cfg(windows)]
+pub const WINDOWS_SERVICE: &str = "RustInput";
+
+/// Whether the Windows service runs, which starts the daemon in the session
+/// of the user at the screen, with the administrator rights of that user:
+/// the window then waits for that daemon instead of starting one of its own,
+/// which would have no such rights and keep the port from the right one.
+#[cfg(windows)]
+pub fn windows_service_runs() -> bool {
+    use windows_service::{
+        service::{ServiceAccess, ServiceState},
+        service_manager::{ServiceManager, ServiceManagerAccess},
+    };
+    let Ok(manager) = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT)
+    else {
+        return false;
+    };
+    let Ok(service) = manager.open_service(WINDOWS_SERVICE, ServiceAccess::QUERY_STATUS) else {
+        return false;
+    };
+    service.query_status().is_ok_and(|status| {
+        matches!(
+            status.current_state,
+            ServiceState::Running | ServiceState::StartPending
+        )
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
