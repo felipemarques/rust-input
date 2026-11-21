@@ -514,13 +514,16 @@ mod tests {
 
     use super::*;
 
+    /// the spans the backend was told, per edge
+    type Told = Arc<Mutex<HashMap<Position, Vec<Span>>>>;
+
     /// a backend that reports the events of `script`, each capture beginning
     /// at the fraction given with it
     #[derive(Default)]
     struct Script {
         events: VecDeque<(Position, CaptureEvent, Option<f64>)>,
         fraction: Option<f64>,
-        spans: Arc<Mutex<HashMap<Position, Vec<Span>>>>,
+        spans: Told,
     }
 
     impl Stream for Script {
@@ -564,9 +567,7 @@ mod tests {
         }
     }
 
-    fn capture(
-        events: Vec<(Position, CaptureEvent, Option<f64>)>,
-    ) -> (InputCapture, Arc<Mutex<HashMap<Position, Vec<Span>>>>) {
+    fn capture(events: Vec<(Position, CaptureEvent, Option<f64>)>) -> (InputCapture, Told) {
         let spans = Arc::default();
         let script = Script {
             events: events.into(),
