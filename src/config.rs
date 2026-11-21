@@ -76,6 +76,12 @@ struct ConfigToml {
     /// "system", "light" or "dark": a string, so a value this version does
     /// not know does not make the whole file unreadable
     theme: Option<String>,
+    /// the language of the windows, menus and the radial menu ("pt-BR"),
+    /// that of the system when missing
+    language: Option<String>,
+    /// whether RustInput asks GitHub for its latest version; not asked yet
+    /// when missing (the window asks)
+    check_updates: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
     /// the arrangement of the computers, the same on all of them (see
@@ -294,8 +300,10 @@ pub struct Config {
     config_dir: PathBuf,
     /// the (optional) toml config and it's path
     config_toml: Option<ConfigToml>,
-    // filesystem watcher
-    watcher: notify::RecommendedWatcher,
+    /// notices changes made to the file by hand; none when the system had
+    /// no watcher to give (the limit of inotify instances reached, say):
+    /// RustInput runs on and reads such changes when it starts again
+    watcher: Option<notify::RecommendedWatcher>,
     // channel for filesystem events
     watch_rx: tokio::sync::mpsc::Receiver<Result<notify::Event, notify::Error>>,
 }
@@ -437,7 +445,14 @@ impl Config {
                 let _ = tx.blocking_send(res);
             },
             notify::Config::default(),
-        )?;
+        )
+        .inspect_err(|e| {
+            log::warn!(
+                "changes made to {config_path:?} by hand are noticed only when RustInput \
+                 starts again: no watcher for it ({e})"
+            )
+        })
+        .ok();
         let mut config = Config {
             args,
             cert_path,
@@ -447,25 +462,42 @@ impl Config {
             watcher,
             watch_rx,
         };
-        config.watch()?;
+        if let Err(e) = config.watch() {
+            log::warn!("changes made to the configuration by hand are not noticed: {e}");
+            config.watcher = None;
+        }
         Ok(config)
     }
 
     fn watch(&mut self) -> Result<(), notify::Error> {
-        self.watcher
-            .watch(&self.config_dir, notify::RecursiveMode::NonRecursive)?;
+        if let Some(watcher) = &mut self.watcher {
+            watcher.watch(&self.config_dir, notify::RecursiveMode::NonRecursive)?;
+        }
         Ok(())
     }
 
     fn unwatch(&mut self) -> Result<(), notify::Error> {
-        self.watcher.unwatch(&self.config_dir)?;
+        if let Some(watcher) = &mut self.watcher {
+            watcher.unwatch(&self.config_dir)?;
+        }
         Ok(())
     }
 
     pub async fn changed(&mut self) -> Result<(), notify::Error> {
+        if self.watcher.is_none() {
+            return std::future::pending().await;
+        }
         loop {
-            let event = self.watch_rx.recv().await.expect("channel closed");
-            let event = event.expect("filesystem event");
+            let Some(event) = self.watch_rx.recv().await else {
+                return std::future::pending().await;
+            };
+            let event = match event {
+                Ok(event) => event,
+                Err(e) => {
+                    log::warn!("watching the configuration: {e}");
+                    continue;
+                }
+            };
             if event.paths.contains(&self.config_path)
                 && matches!(
                     event.kind,
@@ -587,6 +619,31 @@ impl Config {
     pub fn set_theme(&mut self, theme: Theme) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.theme = Some(theme.name().to_owned());
+    }
+
+    /// the language configured (`language`, "pt-BR"), `None` for the one of
+    /// the system
+    pub fn language(&self) -> Option<String> {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.language.clone())
+            .filter(|l| !l.trim().is_empty())
+    }
+
+    pub fn set_language(&mut self, language: Option<String>) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.language = language;
+    }
+
+    /// whether RustInput asks GitHub for its latest version
+    /// (`check_updates`), `None` when the user was not asked yet
+    pub fn check_updates(&self) -> Option<bool> {
+        self.config_toml.as_ref().and_then(|c| c.check_updates)
+    }
+
+    pub fn set_check_updates(&mut self, check: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.check_updates = Some(check);
     }
 
     /// changes what happens to copied files
