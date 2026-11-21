@@ -13,6 +13,7 @@ async-channel = { version = "2.1.1" }
 hostname = "0.4.0"
 log = "0.4.20"
 rustinput-ipc = { path = "../rustinput-ipc", version = "0.3.0" }
+rustinput-i18n = { path = "../rustinput-i18n", version = "0.1.0" }
 thiserror = "2.0.0"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
@@ -27,3 +28,5 @@ png = "0.18.1"
 
 [build-dependencies]
 glib-build-tools = { version = "0.20.0" }
+# the translations go into the windows when they are built
+rustinput-i18n = { path = "../rustinput-i18n", version = "0.1.0" }

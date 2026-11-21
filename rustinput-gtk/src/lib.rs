@@ -3,6 +3,7 @@ mod authorization_window;
 mod client_object;
 mod client_row;
 mod fingerprint_window;
+mod i18n;
 mod key_object;
 mod key_row;
 mod link_stats;
@@ -18,6 +19,8 @@ mod window;
 use std::{env, process, str, sync::OnceLock};
 
 use gtk::CssProvider;
+pub use i18n::restart_requested;
+use i18n::{tr, trf};
 use window::Window;
 
 /// Local build's commit hash, set once by [`run`] before the GTK
@@ -83,10 +86,19 @@ pub enum GtkError {
     NonZeroExitCode(i32),
 }
 
-pub fn run(version: &'static str, local_commit: [u8; 8], theme: Theme) -> Result<(), GtkError> {
+/// Runs the window, the tray icon and what goes with them until RustInput
+/// quits. `language` is the one configured ("pt-BR"), `None` for the one of
+/// the system.
+pub fn run(
+    version: &'static str,
+    local_commit: [u8; 8],
+    theme: Theme,
+    language: Option<String>,
+) -> Result<(), GtkError> {
     log::debug!("running gtk frontend");
     APP_VERSION.set(version).expect("version set once");
     THEME.set(theme).expect("theme set once");
+    i18n::start(language.as_deref());
     LOCAL_COMMIT
         .set(local_commit)
         .expect("local_commit set once");
@@ -116,6 +128,8 @@ fn gtk_main() -> glib::ExitCode {
     }
 
     gio::resources_register_include!("rustinput.gresource").expect("Failed to register resources.");
+    // the windows in the language of the texts
+    i18n::register_windows();
 
     let app = Application::builder()
         .application_id("io.github.felipemarques.RustInput")
@@ -124,6 +138,9 @@ fn gtk_main() -> glib::ExitCode {
     app.connect_startup(|app| {
         // before any window shows, so it does not flash in the other theme
         apply_theme(THEME.get().copied().unwrap_or_default());
+        // right to left in Arabic, left to right in the others, whatever
+        // the language of the system
+        gtk::Widget::set_default_direction(i18n::direction());
         load_css();
         load_icons();
         setup_actions(app);
@@ -221,6 +238,17 @@ fn setup_actions(app: &adw::Application) {
         }
     });
     app.add_action(&quit_action);
+
+    // start again, in the language just picked
+    let restart_action = gio::SimpleAction::new("restart", None);
+    restart_action.connect_activate({
+        let app = app.clone();
+        move |_, _| {
+            i18n::request_restart();
+            app.quit();
+        }
+    });
+    app.add_action(&restart_action);
 }
 
 // Set up a global menu
@@ -230,8 +258,8 @@ fn setup_menu(app: &adw::Application) {
     let menu = gio::Menu::new();
 
     let file_menu = gio::Menu::new();
-    file_menu.append(Some("Quit"), Some("app.quit"));
-    menu.append_submenu(Some("_File"), &file_menu);
+    file_menu.append(Some(tr("Quit")), Some("app.quit"));
+    menu.append_submenu(Some(tr("_File")), &file_menu);
 
     app.set_menubar(Some(&menu))
 }
@@ -416,29 +444,45 @@ fn build_ui(app: &Application) {
                         window.paired(&fingerprint, &name);
                     }
                     FrontendEvent::PairingResult { handle: _, result } => match result {
-                        Ok(name) => window
-                            .show_toast(&format!("{name} and this computer authorized each other")),
-                        Err(e) => window.show_toast(&format!("Not authorized: {e}")),
+                        Ok(name) => window.show_toast(&trf(
+                            "{name} and this computer authorized each other",
+                            &[("name", &name)],
+                        )),
+                        Err(e) => {
+                            window.show_toast(&trf("Not authorized: {error}", &[("error", &e)]))
+                        }
                     },
                     FrontendEvent::DeviceConnected {
                         fingerprint: _,
                         addr,
                     } => {
-                        window.show_toast(format!("device connected: {addr}").as_str());
+                        window.show_toast(&trf("{address} connected", &[("address", &addr)]));
                     }
                     FrontendEvent::DeviceEntered {
                         fingerprint: _,
                         addr,
-                        pos,
+                        pos: _,
                     } => {
-                        window.show_toast(format!("device entered: {addr} ({pos})").as_str());
+                        window.show_toast(&trf(
+                            "The mouse came from {address}",
+                            &[("address", &addr)],
+                        ));
                     }
                     FrontendEvent::IncomingDisconnected(addr) => {
-                        window.show_toast(format!("{addr} disconnected").as_str());
+                        window.show_toast(&trf("{address} disconnected", &[("address", &addr)]));
                     }
                     FrontendEvent::Notice(notice) => window.show_toast(&notice),
                     FrontendEvent::LinkStats(stats) => window.update_link_stats(&stats),
                     FrontendEvent::Theme(theme) => window.set_theme(theme),
+                    FrontendEvent::Updates(state) => {
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(tray) = &tray {
+                            tray.show_update(
+                                state.available.then(|| state.latest.clone()).flatten(),
+                            );
+                        }
+                        window.set_updates(state);
+                    }
                     FrontendEvent::ShowWindow => window.present(),
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {
@@ -460,14 +504,9 @@ fn build_ui(app: &Application) {
                                 && t.state == TransferState::Done
                                 && announced.insert(t.id)
                             {
-                                let files = if t.files == 1 {
-                                    "1 file".to_owned()
-                                } else {
-                                    format!("{} files", t.files)
-                                };
-                                window.show_toast(&format!(
-                                    "{files} received from {}, ready to paste",
-                                    t.peer
+                                window.show_toast(&trf(
+                                    "Files received from {name}: {count}, ready to paste",
+                                    &[("name", &t.peer), ("count", &t.files)],
                                 ));
                             }
                         }

@@ -3,7 +3,9 @@
 
 use std::collections::VecDeque;
 
-use gtk::cairo;
+use gtk::{cairo, glib};
+
+use crate::i18n::{tr, trf, trn};
 use rustinput_ipc::{LinkStats, human_size};
 
 /// seconds of history shown
@@ -70,26 +72,31 @@ impl History {
     pub(crate) fn latency_text(&self) -> String {
         let Some(latest) = self.latest_rtt() else {
             if self.rtts().next().is_none() {
-                return "Latency: measured by the computer that connects, \
-                        once it has this one as a client"
-                    .to_owned();
+                return tr("Latency: measured by the computer that connects, \
+                           once it has this one as a client")
+                .to_owned();
             }
-            return "Latency: no answer to the last pings".to_owned();
+            return tr("Latency: no answer to the last pings").to_owned();
         };
         let count = self.rtts().count() as u64;
         let average = (self.rtts().map(u64::from).sum::<u64>() / count.max(1)) as u32;
         let highest = self.rtts().max().unwrap_or(latest);
-        let mut text = format!(
-            "Latency {} · average {} · highest {}",
-            format_rtt(latest),
-            format_rtt(average),
-            format_rtt(highest)
+        let mut text = trf(
+            "Latency {latest} · average {average} · highest {highest}",
+            &[
+                ("latest", &format_rtt(latest)),
+                ("average", &format_rtt(average)),
+                ("highest", &format_rtt(highest)),
+            ],
         );
         let lost: u32 = self.points.iter().map(|p| p.lost).sum();
         if lost > 0 {
-            text.push_str(&format!(
-                " · {lost} {} lost",
-                if lost == 1 { "ping" } else { "pings" }
+            text.push_str(" · ");
+            text.push_str(&trn(
+                "{count} ping lost",
+                "{count} pings lost",
+                lost.into(),
+                &[],
             ));
         }
         text
@@ -101,14 +108,25 @@ impl History {
         let Some(last) = &self.last else {
             return String::new();
         };
-        format!(
-            "Traffic <span foreground=\"{SENT_HEX}\">↑ {}</span> \
-             <span foreground=\"{RECEIVED_HEX}\">↓ {}</span> · \
-             since connected ↑ {} ↓ {}",
-            format_rate(last.sent_per_s),
-            format_rate(last.received_per_s),
+        let sent = format!(
+            "<span foreground=\"{SENT_HEX}\">↑ {}</span>",
+            format_rate(last.sent_per_s)
+        );
+        let received = format!(
+            "<span foreground=\"{RECEIVED_HEX}\">↓ {}</span>",
+            format_rate(last.received_per_s)
+        );
+        let total = format!(
+            "↑ {} ↓ {}",
             human_size(last.sent_total),
-            human_size(last.received_total),
+            human_size(last.received_total)
+        );
+        // the translation is no markup: only the values are
+        let text =
+            glib::markup_escape_text(tr("Traffic {sent} {received} · since connected {total}"));
+        rustinput_i18n::fill(
+            &text,
+            &[("sent", &sent), ("received", &received), ("total", &total)],
         )
     }
 

@@ -6,7 +6,10 @@ use gtk::glib::{self, Object};
 
 use rustinput_ipc::{DEFAULT_PORT, LinkStats, Position};
 
-use crate::link_stats::format_rtt;
+use crate::{
+    i18n::{tr, trf},
+    link_stats::format_rtt,
+};
 
 use super::ClientObject;
 
@@ -58,7 +61,14 @@ impl ClientRow {
         // bind hostname to title
         let title_binding = client_object
             .bind_property("hostname", self, "title")
-            .transform_to(|_, v: Option<String>| v.or(Some("<span font_style=\"italic\" font_weight=\"light\" foreground=\"darkgrey\">no hostname!</span>".to_string())))
+            .transform_to(|_, v: Option<String>| {
+                v.or_else(|| {
+                    Some(format!(
+                        "<span font_style=\"italic\" font_weight=\"light\" foreground=\"darkgrey\">{}</span>",
+                        glib::markup_escape_text(tr("no name or address"))
+                    ))
+                })
+            })
             .sync_create()
             .build();
 
@@ -108,7 +118,7 @@ impl ClientRow {
             .bind_property("ips", &self.imp().dns_button.get(), "tooltip-text")
             .transform_to(|_, ips: Vec<String>| {
                 if ips.is_empty() {
-                    Some("no ip addresses associated with this client".into())
+                    Some(tr("No IP addresses for this computer yet").into())
                 } else {
                     Some(ips.join("\n"))
                 }
@@ -161,9 +171,9 @@ impl ClientRow {
         let position = &self.imp().position;
         position.set_sensitive(!arranged);
         position.set_subtitle(if arranged {
-            "Set by the arrangement above"
+            tr("Set by the arrangement")
         } else {
-            "The edge of this screen that leads to it"
+            tr("The edge of this screen that leads to it")
         });
     }
 
@@ -191,7 +201,7 @@ impl ClientRow {
             Some(rtt) => {
                 imp.latency_badge.set_label(&format_rtt(rtt));
                 imp.latency_badge
-                    .set_tooltip_text(Some("round trip time of the pings to this computer"));
+                    .set_tooltip_text(Some(tr("Round trip time of the pings to this computer")));
                 imp.latency_badge.set_visible(true);
             }
             None => imp.latency_badge.set_visible(false),
@@ -221,13 +231,17 @@ impl ClientRow {
             .and_then(|co| co.property::<Option<String>>("peer-commit"));
         let local = crate::local_commit_str();
         let markup = match peer.as_deref() {
-            None => format!("Peer version: unknown · Ours: {local}"),
+            None => trf(
+                "Its version: unknown · this one: {local}",
+                &[("local", &local)],
+            ),
             Some(p) if p == local.as_str() => {
-                format!("Peer version: {p} · matched")
+                trf("Its version: {peer} · the same", &[("peer", &p)])
             }
-            Some(p) => {
-                format!("Peer version: {p} · Ours: {local}")
-            }
+            Some(p) => trf(
+                "Its version: {peer} · this one: {local}",
+                &[("peer", &p), ("local", &local)],
+            ),
         };
         self.remove_css_class("peer-mismatch");
         self.remove_css_class("peer-match");

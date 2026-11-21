@@ -6,6 +6,7 @@ members = [
     "rustinput-ipc",
     "rustinput-cli",
     "rustinput-gtk",
+    "rustinput-i18n",
     "rustinput-proto",
 ]
 
@@ -34,6 +35,7 @@ input-capture = { path = "input-capture", version = "0.4.0", default-features = 
 rustinput-cli = { path = "rustinput-cli", version = "0.3.0" }
 rustinput-gtk = { path = "rustinput-gtk", version = "0.3.0", optional = true }
 rustinput-ipc = { path = "rustinput-ipc", version = "0.3.0" }
+rustinput-i18n = { path = "rustinput-i18n", version = "0.1.0" }
 rustinput-proto = { path = "rustinput-proto", version = "0.4.0" }
 shadow-rs = { version = "1.2.0", features = ["metadata"] }
 
@@ -75,13 +77,20 @@ arboard = { version = "3.7.0", features = ["wayland-data-control"] }
 png = "0.18.1"
 # ring like the rest of rustls here: aws-lc-rs needs CMake and NASM on Windows
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring", "tls12", "logging"] }
+# the certificates of the system, to ask GitHub for the latest version (src/update.rs)
+rustls-native-certs = "0.8.1"
 # authorizing two devices on each other with a code (see src/pairing.rs)
 spake2 = { version = "0.4.0", features = ["getrandom"] }
 getrandom = "0.3.4"
 hostname = "0.4.2"
 # drawing the radial menu (see src/radial)
 tiny-skia = { version = "0.11.4", default-features = false, features = ["std", "simd"] }
-fontdue = "0.9.3"
+# the labels of the radial menu: glyphs read when drawn, so fonts with all
+# of Chinese or Japanese cost no time or memory at start
+ab_glyph = "0.2.29"
+# Arabic in the radial menu: its letters joined and from right to left
+ar-reshaper = "1.5.0"
+unicode-bidi = "0.3.18"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.148"

@@ -8,7 +8,7 @@
     <property name="default-width">880</property>
     <property name="height-request">380</property>
     <property name="default-height">380</property>
-    <property name="title" translatable="yes">Add Certificate Fingerprint</property>
+    <property name="title" translatable="yes">Authorize a computer by its fingerprint</property>
     <property name="content">
       <object class="AdwToolbarView">
         <child type="top">
@@ -24,12 +24,12 @@
                 <property name="spacing">18</property>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">The certificate fingerprint serves as a unique identifier for your device.</property>
+                    <property name="label" translatable="yes">The certificate fingerprint serves as a unique identifier for your device.</property>
                   </object>
                 </child>
                 <child>
                   <object class="GtkLabel">
-                    <property name="label">On the other computer, RustInput shows it under “This computer” on the Computers page</property>
+                    <property name="label" translatable="yes">On the other computer, RustInput shows it under “This computer” on the Computers page</property>
                   </object>
                 </child>
                 <child>

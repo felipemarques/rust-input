@@ -1,4 +1,4 @@
-; The installer of RustInput for Windows (rustinput-windows-x86_64-setup.exe),
+﻿; The installer of RustInput for Windows (rustinput-windows-x86_64-setup.exe),
 ; built with Inno Setup 6 by .github/workflows/release.yml, and by
 ; .github/workflows/windows-service.yml for its tests:
 ;
@@ -68,34 +68,158 @@ SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
 SetupLogging=yes
+; asks for the language only when Windows speaks none of them
+ShowLanguageDialog=auto
 
 [Languages]
+; the languages of RustInput; each one that this Inno Setup has (all of them
+; since 6.5), the language of Windows picks it
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
+#if FileExists(CompilerPath + "Languages\Spanish.isl")
+Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\French.isl")
+Name: "french"; MessagesFile: "compiler:Languages\French.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\Italian.isl")
+Name: "italian"; MessagesFile: "compiler:Languages\Italian.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\Russian.isl")
+Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\Arabic.isl")
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\ChineseSimplified.isl")
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+#endif
+#if FileExists(CompilerPath + "Languages\Japanese.isl")
+Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
+#endif
 
 [CustomMessages]
 english.TaskService=Run RustInput as a Windows service (recommended): it starts with Windows, also without its window, and reaches programs run as administrator too
-brazilianportuguese.TaskService=Rodar o RustInput como serviço do Windows (recomendado): inicia com o Windows, mesmo sem a janela, e alcança também os programas abertos como administrador
 english.TaskTray=Show the RustInput icon in the tray when signing in to Windows
-brazilianportuguese.TaskTray=Mostrar o ícone do RustInput na bandeja ao entrar no Windows
 english.UpdateShortcut=Update RustInput
-brazilianportuguese.UpdateShortcut=Atualizar o RustInput
 english.SettingUp=Setting up the Windows service and the firewall...
-brazilianportuguese.SettingUp=Configurando o serviço do Windows e o firewall...
 english.SetupFailed=RustInput is installed, but setting up the Windows service or the firewall failed (code %1).%n%nDetails: %2
-brazilianportuguese.SetupFailed=O RustInput foi instalado, mas a configuração do serviço do Windows ou do firewall falhou (código %1).%n%nDetalhes: %2
 english.ChangesTitle=Changes to Windows:
-brazilianportuguese.ChangesTitle=Mudanças no Windows:
 english.ChangeService=the Windows service "RustInput", which starts with Windows and runs RustInput with the administrator rights of the user at the screen
-brazilianportuguese.ChangeService=o serviço do Windows "RustInput", que inicia com o Windows e roda o RustInput com os direitos de administrador de quem está na tela
 english.ChangeNoService=no Windows service: the window of RustInput starts it, without administrator rights (removes the service if there is one)
-brazilianportuguese.ChangeNoService=nenhum serviço do Windows: a janela do RustInput o inicia, sem direitos de administrador (remove o serviço, se houver)
 english.ChangeFirewall=the rules "RustInput (UDP)" and "RustInput (TCP)" of the Windows firewall, which let the other computers reach rustinput.exe
-brazilianportuguese.ChangeFirewall=as regras "RustInput (UDP)" e "RustInput (TCP)" do firewall do Windows, que deixam os outros computadores alcançar o rustinput.exe
 english.ChangeMenu=the item "Copy to RustInput" in the menu of Explorer, which RustInput adds (it can be turned off in its settings)
-brazilianportuguese.ChangeMenu=o item "Copiar para o RustInput" no menu do Explorer, que o RustInput acrescenta (dá para desligar nas configurações)
 english.ChangeUninstall=Uninstalling (Settings > Apps) undoes all of it and keeps the settings of RustInput.
+
+brazilianportuguese.TaskService=Rodar o RustInput como serviço do Windows (recomendado): inicia com o Windows, mesmo sem a janela, e alcança também os programas abertos como administrador
+brazilianportuguese.TaskTray=Mostrar o ícone do RustInput na bandeja ao entrar no Windows
+brazilianportuguese.UpdateShortcut=Atualizar o RustInput
+brazilianportuguese.SettingUp=Configurando o serviço do Windows e o firewall...
+brazilianportuguese.SetupFailed=O RustInput foi instalado, mas a configuração do serviço do Windows ou do firewall falhou (código %1).%n%nDetalhes: %2
+brazilianportuguese.ChangesTitle=Mudanças no Windows:
+brazilianportuguese.ChangeService=o serviço do Windows "RustInput", que inicia com o Windows e roda o RustInput com os direitos de administrador de quem está na tela
+brazilianportuguese.ChangeNoService=nenhum serviço do Windows: a janela do RustInput o inicia, sem direitos de administrador (remove o serviço, se houver)
+brazilianportuguese.ChangeFirewall=as regras "RustInput (UDP)" e "RustInput (TCP)" do firewall do Windows, que deixam os outros computadores alcançar o rustinput.exe
+brazilianportuguese.ChangeMenu=o item "Copiar para o RustInput" no menu do Explorer, que o RustInput acrescenta (dá para desligar nas configurações)
 brazilianportuguese.ChangeUninstall=Desinstalar (Configurações > Aplicativos) desfaz tudo isso e mantém as configurações do RustInput.
+
+#if FileExists(CompilerPath + "Languages\Spanish.isl")
+spanish.TaskService=Ejecutar RustInput como servicio de Windows (recomendado): se inicia con Windows, también sin su ventana, y llega también a los programas ejecutados como administrador
+spanish.TaskTray=Mostrar el icono de RustInput en la bandeja al iniciar sesión en Windows
+spanish.UpdateShortcut=Actualizar RustInput
+spanish.SettingUp=Configurando el servicio de Windows y el firewall...
+spanish.SetupFailed=RustInput está instalado, pero falló la configuración del servicio de Windows o del firewall (código %1).%n%nDetalles: %2
+spanish.ChangesTitle=Cambios en Windows:
+spanish.ChangeService=el servicio de Windows "RustInput", que se inicia con Windows y ejecuta RustInput con los derechos de administrador del usuario que está frente a la pantalla
+spanish.ChangeNoService=ningún servicio de Windows: la ventana de RustInput lo inicia, sin derechos de administrador (elimina el servicio si existe)
+spanish.ChangeFirewall=las reglas "RustInput (UDP)" y "RustInput (TCP)" del firewall de Windows, que permiten a los otros equipos llegar a rustinput.exe
+spanish.ChangeMenu=el elemento "Copiar a RustInput" en el menú del Explorador, que agrega RustInput (se puede desactivar en sus preferencias)
+spanish.ChangeUninstall=Desinstalar (Configuración > Aplicaciones) deshace todo esto y conserva las preferencias de RustInput.
+#endif
+
+#if FileExists(CompilerPath + "Languages\French.isl")
+french.TaskService=Exécuter RustInput comme service Windows (recommandé) : il démarre avec Windows, même sans sa fenêtre, et atteint aussi les programmes lancés en tant qu’administrateur
+french.TaskTray=Afficher l’icône de RustInput dans la zone de notification à l’ouverture de session
+french.UpdateShortcut=Mettre à jour RustInput
+french.SettingUp=Configuration du service Windows et du pare-feu...
+french.SetupFailed=RustInput est installé, mais la configuration du service Windows ou du pare-feu a échoué (code %1).%n%nDétails : %2
+french.ChangesTitle=Modifications de Windows :
+french.ChangeService=le service Windows « RustInput », qui démarre avec Windows et exécute RustInput avec les droits d’administrateur de l’utilisateur devant l’écran
+french.ChangeNoService=aucun service Windows : la fenêtre de RustInput le démarre, sans droits d’administrateur (supprime le service s’il existe)
+french.ChangeFirewall=les règles « RustInput (UDP) » et « RustInput (TCP) » du pare-feu Windows, qui permettent aux autres ordinateurs d’atteindre rustinput.exe
+french.ChangeMenu=l’élément « Copier vers RustInput » dans le menu de l’Explorateur, ajouté par RustInput (désactivable dans ses préférences)
+french.ChangeUninstall=La désinstallation (Paramètres > Applications) annule tout cela et conserve les préférences de RustInput.
+#endif
+
+#if FileExists(CompilerPath + "Languages\Italian.isl")
+italian.TaskService=Eseguire RustInput come servizio di Windows (consigliato): si avvia con Windows, anche senza la sua finestra, e raggiunge anche i programmi eseguiti come amministratore
+italian.TaskTray=Mostrare l’icona di RustInput nell’area di notifica all’accesso a Windows
+italian.UpdateShortcut=Aggiorna RustInput
+italian.SettingUp=Configurazione del servizio di Windows e del firewall...
+italian.SetupFailed=RustInput è installato, ma la configurazione del servizio di Windows o del firewall non è riuscita (codice %1).%n%nDettagli: %2
+italian.ChangesTitle=Modifiche a Windows:
+italian.ChangeService=il servizio di Windows "RustInput", che si avvia con Windows ed esegue RustInput con i diritti di amministratore dell’utente davanti allo schermo
+italian.ChangeNoService=nessun servizio di Windows: la finestra di RustInput lo avvia, senza diritti di amministratore (rimuove il servizio se esiste)
+italian.ChangeFirewall=le regole "RustInput (UDP)" e "RustInput (TCP)" del firewall di Windows, che permettono agli altri computer di raggiungere rustinput.exe
+italian.ChangeMenu=la voce "Copia in RustInput" nel menu di Esplora file, aggiunta da RustInput (si può disattivare nelle sue preferenze)
+italian.ChangeUninstall=La disinstallazione (Impostazioni > App) annulla tutto questo e mantiene le preferenze di RustInput.
+#endif
+
+#if FileExists(CompilerPath + "Languages\Russian.isl")
+russian.TaskService=Запускать RustInput как службу Windows (рекомендуется): запускается вместе с Windows, даже без окна, и работает и с программами, запущенными от имени администратора
+russian.TaskTray=Показывать значок RustInput в области уведомлений при входе в Windows
+russian.UpdateShortcut=Обновить RustInput
+russian.SettingUp=Настройка службы Windows и брандмауэра...
+russian.SetupFailed=RustInput установлен, но настроить службу Windows или брандмауэр не удалось (код %1).%n%nПодробности: %2
+russian.ChangesTitle=Изменения в Windows:
+russian.ChangeService=служба Windows «RustInput», которая запускается вместе с Windows и выполняет RustInput с правами администратора пользователя за экраном
+russian.ChangeNoService=без службы Windows: RustInput запускается из своего окна без прав администратора (служба удаляется, если она есть)
+russian.ChangeFirewall=правила «RustInput (UDP)» и «RustInput (TCP)» брандмауэра Windows, которые позволяют другим компьютерам связываться с rustinput.exe
+russian.ChangeMenu=пункт «Копировать в RustInput» в меню Проводника, который добавляет RustInput (его можно отключить в параметрах)
+russian.ChangeUninstall=Удаление (Параметры > Приложения) отменяет всё это и сохраняет настройки RustInput.
+#endif
+
+#if FileExists(CompilerPath + "Languages\Arabic.isl")
+arabic.TaskService=تشغيل RustInput كخدمة Windows (موصى به): يبدأ مع Windows حتى دون نافذته، ويصل أيضًا إلى البرامج التي تعمل كمسؤول
+arabic.TaskTray=إظهار أيقونة RustInput في منطقة الإعلامات عند تسجيل الدخول إلى Windows
+arabic.UpdateShortcut=تحديث RustInput
+arabic.SettingUp=جارٍ إعداد خدمة Windows والجدار الناري...
+arabic.SetupFailed=تم تثبيت RustInput، لكن فشل إعداد خدمة Windows أو الجدار الناري (الرمز %1).%n%nالتفاصيل: %2
+arabic.ChangesTitle=التغييرات في Windows:
+arabic.ChangeService=خدمة Windows ‏«RustInput»، التي تبدأ مع Windows وتشغّل RustInput بصلاحيات المسؤول للمستخدم الموجود أمام الشاشة
+arabic.ChangeNoService=بدون خدمة Windows: تبدأ نافذة RustInput تشغيله دون صلاحيات المسؤول (وتُزال الخدمة إن وُجدت)
+arabic.ChangeFirewall=القاعدتان «RustInput (UDP)» و«RustInput (TCP)» في جدار حماية Windows، اللتان تسمحان لأجهزة الكمبيوتر الأخرى بالوصول إلى rustinput.exe
+arabic.ChangeMenu=العنصر «نسخ إلى RustInput» في قائمة المستكشف، الذي يضيفه RustInput (يمكن إيقافه من تفضيلاته)
+arabic.ChangeUninstall=إلغاء التثبيت (الإعدادات > التطبيقات) يتراجع عن كل ذلك ويحتفظ بتفضيلات RustInput.
+#endif
+
+#if FileExists(CompilerPath + "Languages\ChineseSimplified.isl")
+chinesesimplified.TaskService=将 RustInput 作为 Windows 服务运行（推荐）：随 Windows 启动，不打开窗口也能运行，并且也能控制以管理员身份运行的程序
+chinesesimplified.TaskTray=登录 Windows 时在通知区域显示 RustInput 图标
+chinesesimplified.UpdateShortcut=更新 RustInput
+chinesesimplified.SettingUp=正在设置 Windows 服务和防火墙...
+chinesesimplified.SetupFailed=RustInput 已安装，但设置 Windows 服务或防火墙失败（代码 %1）。%n%n详细信息：%2
+chinesesimplified.ChangesTitle=对 Windows 的更改：
+chinesesimplified.ChangeService=Windows 服务“RustInput”：随 Windows 启动，并以屏幕前用户的管理员权限运行 RustInput
+chinesesimplified.ChangeNoService=不使用 Windows 服务：由 RustInput 窗口启动，不具有管理员权限（如已有该服务则将其删除）
+chinesesimplified.ChangeFirewall=Windows 防火墙规则“RustInput (UDP)”和“RustInput (TCP)”：允许其他计算机连接到 rustinput.exe
+chinesesimplified.ChangeMenu=资源管理器菜单中的“复制到 RustInput”项，由 RustInput 添加（可在其首选项中关闭）
+chinesesimplified.ChangeUninstall=卸载（设置 > 应用）会撤销以上所有更改，并保留 RustInput 的设置。
+#endif
+
+#if FileExists(CompilerPath + "Languages\Japanese.isl")
+japanese.TaskService=RustInput を Windows サービスとして実行する（推奨）: Windows と同時に起動し、ウィンドウを開かなくても動作し、管理者として実行されたプログラムも操作できます
+japanese.TaskTray=Windows へのサインイン時に通知領域に RustInput のアイコンを表示する
+japanese.UpdateShortcut=RustInput を更新
+japanese.SettingUp=Windows サービスとファイアウォールを設定しています...
+japanese.SetupFailed=RustInput はインストールされましたが、Windows サービスまたはファイアウォールの設定に失敗しました（コード %1）。%n%n詳細: %2
+japanese.ChangesTitle=Windows への変更:
+japanese.ChangeService=Windows サービス「RustInput」: Windows と同時に起動し、画面の前にいるユーザーの管理者権限で RustInput を実行します
+japanese.ChangeNoService=Windows サービスなし: RustInput のウィンドウから管理者権限なしで起動します（サービスがある場合は削除します）
+japanese.ChangeFirewall=Windows ファイアウォールの規則「RustInput (UDP)」と「RustInput (TCP)」: ほかのコンピューターから rustinput.exe に接続できるようにします
+japanese.ChangeMenu=エクスプローラーのメニューの「RustInput にコピー」項目: RustInput が追加します（設定でオフにできます）
+japanese.ChangeUninstall=アンインストール（設定 > アプリ）でこれらはすべて元に戻り、RustInput の設定は保持されます。
+#endif
 
 [Tasks]
 Name: "service"; Description: "{cm:TaskService}"

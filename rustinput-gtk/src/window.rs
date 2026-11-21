@@ -12,16 +12,20 @@ use gtk::{
 
 use rustinput_ipc::{
     ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FileOptions, FrontendRequest,
-    FrontendRequestWriter, LinkStats, Position, Theme,
+    FrontendRequestWriter, LinkStats, Position, Theme, UpdateState,
 };
 
 use crate::{
-    arrangement::ArrangementArea, authorization_window::AuthorizationWindow,
-    fingerprint_window::FingerprintWindow, key_object::KeyObject, key_row::KeyRow,
+    arrangement::ArrangementArea,
+    authorization_window::AuthorizationWindow,
+    fingerprint_window::FingerprintWindow,
+    i18n::{self, tr, trf},
+    key_object::KeyObject,
+    key_row::KeyRow,
 };
 
-/// the editor of the arrangement, its state line, its buttons and the
-/// computers next to the selected one
+/// the editor of the arrangement, its state line, its buttons and, beside
+/// it, the selected computer: where the mouse leaves it
 pub struct ArrangementParts {
     area: ArrangementArea,
     status: gtk::Label,
@@ -29,6 +33,12 @@ pub struct ArrangementParts {
     undo: gtk::Button,
     links: gtk::ListBox,
     links_title: gtk::Label,
+    /// what to do, while no computer is selected
+    hint: gtk::Label,
+    /// the connection of the selected computer, on the page of the computers
+    details: gtk::Button,
+    /// the client of the selected computer, none for this one
+    selected: std::cell::Cell<Option<ClientHandle>>,
 }
 
 use super::{client_object::ClientObject, client_row::ClientRow};
@@ -74,12 +84,17 @@ impl Window {
         window
     }
 
-    /// The editor of the arrangement in its group: the area, a line on what
-    /// is not applied or not reached, Undo and Apply, and the computers next
-    /// to the selected one, each with whether they meet over the whole edges.
+    /// The page of the arrangement: the editor with a line on what is not
+    /// applied or not reached, Undo and Apply below it, and beside it the
+    /// selected computer: the computers next to it, each with whether they
+    /// meet over the whole edges, and the way to its connection.
     pub(super) fn setup_arrangement(&self) {
         let area = ArrangementArea::default();
-        let frame = gtk::Frame::builder().child(&area).build();
+        let frame = gtk::Frame::builder()
+            .child(&area)
+            .vexpand(true)
+            .hexpand(true)
+            .build();
         frame.add_css_class("view");
         frame.add_css_class("arrangement");
         let status = gtk::Label::builder()
@@ -88,29 +103,68 @@ impl Window {
             .hexpand(true)
             .build();
         status.add_css_class("dim-label");
-        let undo = gtk::Button::with_label("Undo changes");
-        let apply = gtk::Button::with_label("Apply");
+        let undo = gtk::Button::with_label(tr("Undo changes"));
+        let apply = gtk::Button::with_label(tr("Apply"));
         apply.add_css_class("suggested-action");
         let bar = gtk::Box::builder().spacing(8).margin_top(10).build();
         bar.append(&status);
         bar.append(&undo);
         bar.append(&apply);
-        let links_title = gtk::Label::builder()
-            .xalign(0.0)
-            .margin_top(14)
-            .margin_bottom(6)
+        let editor = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .hexpand(true)
+            .vexpand(true)
             .build();
+        editor.append(&frame);
+        editor.append(&bar);
+
+        let links_title = gtk::Label::builder().xalign(0.0).wrap(true).build();
         links_title.add_css_class("heading");
+        let hint = gtk::Label::builder()
+            .label(tr(
+                "Click a computer to see where the mouse leaves it and to choose whole edges.",
+            ))
+            .xalign(0.0)
+            .wrap(true)
+            .build();
+        hint.add_css_class("dim-label");
         let links = gtk::ListBox::builder()
             .selection_mode(gtk::SelectionMode::None)
             .build();
         links.add_css_class("boxed-list");
-        let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
-        content.append(&frame);
-        content.append(&bar);
-        content.append(&links_title);
-        content.append(&links);
-        self.imp().arrangement_group.add(&content);
+        let details = gtk::Button::builder()
+            .child(
+                &adw::ButtonContent::builder()
+                    .icon_name("go-next-symbolic")
+                    .label(tr("Connection settings"))
+                    .build(),
+            )
+            .halign(gtk::Align::Start)
+            .margin_top(6)
+            .build();
+        let panel = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .width_request(300)
+            .hexpand(false)
+            .build();
+        panel.append(&links_title);
+        panel.append(&hint);
+        panel.append(&links);
+        panel.append(&details);
+
+        // a column of its own width: the editor takes the rest
+        let side = adw::Clamp::builder()
+            .maximum_size(340)
+            .tightening_threshold(340)
+            .hexpand(false)
+            .valign(gtk::Align::Start)
+            .child(&panel)
+            .build();
+        let content = gtk::Box::builder().spacing(24).vexpand(true).build();
+        content.append(&editor);
+        content.append(&side);
+        self.imp().arrangement_box.append(&content);
 
         area.connect_changed(clone!(
             #[weak(rename_to = window)]
@@ -120,7 +174,13 @@ impl Window {
         area.connect_selected(clone!(
             #[weak(rename_to = window)]
             self,
-            move |handle| window.open_connection(handle)
+            move |handle| {
+                if let Some(parts) = window.imp().arrangement.borrow().as_ref() {
+                    parts.selected.set(handle);
+                }
+                window.open_connection(handle);
+                window.arrangement_changed_here();
+            }
         ));
         undo.connect_clicked(clone!(
             #[weak]
@@ -132,6 +192,11 @@ impl Window {
             self,
             move |_| window.apply_arrangement()
         ));
+        details.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.show_connection_of_selected()
+        ));
         self.imp().arrangement.replace(Some(ArrangementParts {
             area,
             status,
@@ -139,8 +204,30 @@ impl Window {
             undo,
             links,
             links_title,
+            hint,
+            details,
+            selected: Default::default(),
         }));
         self.arrangement_changed_here();
+    }
+
+    /// the connection of the computer selected in the arrangement, open, on
+    /// the page of the computers
+    fn show_connection_of_selected(&self) {
+        let Some(handle) = self
+            .imp()
+            .arrangement
+            .borrow()
+            .as_ref()
+            .and_then(|p| p.selected.get())
+        else {
+            return;
+        };
+        self.imp().stack.set_visible_child_name("computers");
+        self.open_connection(Some(handle));
+        if let Some(row) = self.row_for_handle(handle) {
+            row.grab_focus();
+        }
     }
 
     /// the service told how the computers are arranged
@@ -198,20 +285,23 @@ impl Window {
         if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
             parts.area.mark_applied();
         }
-        self.show_toast("Arrangement applied");
+        self.show_toast(tr("Arrangement applied"));
     }
 
     /// the arrangement went to `name`, or not
     pub(super) fn arrangement_sent(&self, name: &str, error: Option<&str>) {
         match error {
-            None => self.show_toast(&format!("Arrangement sent to {name}")),
-            Some(e) => self.show_toast(&format!("Arrangement not sent to {name}: {e}")),
+            None => self.show_toast(&trf("Arrangement sent to {name}", &[("name", &name)])),
+            Some(e) => self.show_toast(&trf(
+                "Arrangement not sent to {name}: {error}",
+                &[("name", &name), ("error", &e)],
+            )),
         }
     }
 
     /// another computer changed the arrangement
     pub(super) fn arrangement_received(&self, by: &str) {
-        self.show_toast(&format!("{by} changed the arrangement"));
+        self.show_toast(&trf("{name} changed the arrangement", &[("name", &by)]));
     }
 
     /// what the line under the editor says, the buttons and the rows of the
@@ -225,21 +315,21 @@ impl Window {
         let unreachable = parts.area.unreachable();
         let guessed = parts.area.guessed();
         let text = if !unreachable.is_empty() {
-            format!(
-                "{} does not touch a computer this one reaches: move it next to one",
-                unreachable.join(", ")
+            trf(
+                "{names} does not touch a computer this one reaches: move it next to one",
+                &[("names", &unreachable.join(", "))],
             )
         } else if parts.area.is_proposal() && dirty {
-            "Made from the connections as they are now: arrange and apply".to_owned()
+            tr("Made from the connections as they are now: arrange and apply").to_owned()
         } else if dirty {
-            "Changes not applied yet".to_owned()
+            tr("Changes not applied yet").to_owned()
         } else if !guessed.is_empty() {
-            format!(
-                "{} did not tell its size: update RustInput there to 0.26.0 or newer",
-                guessed.join(", ")
+            trf(
+                "{names} did not tell its size: update RustInput there to 0.26.0 or newer",
+                &[("names", &guessed.join(", "))],
             )
         } else {
-            "Applied on the computers of the arrangement".to_owned()
+            tr("Applied on the computers of the arrangement").to_owned()
         };
         parts.status.set_text(&text);
         parts.apply.set_sensitive(dirty && unreachable.is_empty());
@@ -252,45 +342,54 @@ impl Window {
         let links = parts.area.selected_links();
         parts.links_title.set_visible(selected.is_some());
         parts.links.set_visible(selected.is_some());
+        parts.hint.set_visible(selected.is_none());
+        parts
+            .details
+            .set_visible(selected.is_some() && parts.selected.get().is_some());
         let Some(selected) = selected else {
             return;
         };
-        parts
-            .links_title
-            .set_text(&format!("Where the mouse leaves {selected}"));
+        parts.links_title.set_text(&trf(
+            "Where the mouse leaves {name}",
+            &[("name", &selected)],
+        ));
         if links.is_empty() {
             let row = adw::ActionRow::builder()
-                .title("Nowhere")
-                .subtitle("It touches no other computer")
+                .title(tr("Nowhere"))
+                .subtitle(tr("It touches no other computer"))
                 .build();
             parts.links.append(&row);
         }
         for link in links {
-            let side = match link.pos {
-                Position::Left => "Left",
-                Position::Right => "Right",
-                Position::Top => "Top",
-                Position::Bottom => "Bottom",
+            let name = &link.other_name;
+            let title = match link.pos {
+                Position::Left => trf("Left edge: {name}", &[("name", name)]),
+                Position::Right => trf("Right edge: {name}", &[("name", name)]),
+                Position::Top => trf("Top edge: {name}", &[("name", name)]),
+                Position::Bottom => trf("Bottom edge: {name}", &[("name", name)]),
             };
             let subtitle = if link.whole && link.can_be_whole {
-                "The whole edge of both, the place along it in proportion".to_owned()
+                tr("The whole edge of both, the place along it in proportion").to_owned()
             } else if link.can_be_whole {
-                format!(
-                    "{}, where they touch; switch on for the whole edge of both, in proportion",
-                    link.part
+                trf(
+                    "{part}, where they touch; switch on for the whole edge of both, in proportion",
+                    &[("part", &link.part)],
                 )
             } else {
-                format!("{}, where they touch: the edge is shared", link.part)
+                trf(
+                    "{part}, where they touch: the edge is shared",
+                    &[("part", &link.part)],
+                )
             };
             let row = adw::ActionRow::builder()
-                .title(format!("{side}: {}", link.other_name))
+                .title(title)
                 .subtitle(subtitle)
                 .build();
             let switch = gtk::Switch::builder()
                 .valign(gtk::Align::Center)
                 .active(link.whole && link.can_be_whole)
                 .sensitive(link.can_be_whole)
-                .tooltip_text("Whole edge, in proportion")
+                .tooltip_text(tr("Whole edge, in proportion"))
                 .build();
             let other = link.other.clone();
             switch.connect_active_notify(clone!(
@@ -774,6 +873,180 @@ impl Window {
         crate::apply_theme(theme);
     }
 
+    /// The language row: "As the system" and the languages, each in itself.
+    /// Picking one keeps it in the configuration (the radial menu takes it
+    /// right away) and offers to start RustInput again in it.
+    pub(super) fn setup_language(&self) {
+        let names: Vec<String> = std::iter::once(trf(
+            "As the system ({language})",
+            &[("language", &rustinput_i18n::system().name)],
+        ))
+        .chain(i18n::LANGUAGES.iter().map(|l| l.name.to_owned()))
+        .collect();
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        let row = &self.imp().language_row;
+        row.set_model(Some(&gtk::StringList::new(&names)));
+        row.set_selected(i18n::index_of(i18n::configured()));
+        row.connect_selected_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |row| {
+                let picked = i18n::language_at(row.selected());
+                window.request(FrontendRequest::SetLanguage(
+                    picked.map(|l| l.code.to_owned()),
+                ));
+                let shown = rustinput_i18n::resolve(picked.map(|l| l.code));
+                if shown == i18n::current() {
+                    return;
+                }
+                let toast = adw::Toast::builder()
+                    .title(tr(
+                        "The windows change language when RustInput starts again",
+                    ))
+                    .button_label(tr("Restart now"))
+                    .action_name("app.restart")
+                    .timeout(0)
+                    .build();
+                window.add_toast(toast);
+            }
+        ));
+    }
+
+    /// The preferences of the updates. The service tells what it knows with
+    /// [`Window::set_updates`].
+    pub(super) fn setup_updates(&self) {
+        let imp = self.imp();
+        imp.update_check_switch.connect_active_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |switch| {
+                if window.imp().updating_update_switch.get() {
+                    return;
+                }
+                window.request(FrontendRequest::SetCheckUpdates(switch.is_active()));
+            }
+        ));
+        imp.update_install_button.set_label(install_label());
+        // the question shows once the service told that it was not asked yet
+        imp.updates.borrow_mut().check = Some(false);
+        self.show_updates();
+    }
+
+    /// what the service knows about new versions
+    pub(super) fn set_updates(&self, state: UpdateState) {
+        self.imp().updates.replace(state);
+        self.show_updates();
+    }
+
+    /// the row of the preferences and the line under the header bar, from
+    /// what the service knows
+    fn show_updates(&self) {
+        let imp = self.imp();
+        let state = imp.updates.borrow().clone();
+        imp.updating_update_switch.set(true);
+        imp.update_check_switch
+            .set_active(state.check == Some(true));
+        imp.updating_update_switch.set(false);
+
+        let current = crate::APP_VERSION.get().copied().unwrap_or_default();
+        let latest = state.latest.clone().unwrap_or_default();
+        let status = if state.checking {
+            tr("Asking GitHub…").to_owned()
+        } else if let Some(error) = &state.error {
+            trf("Could not ask GitHub: {error}", &[("error", error)])
+        } else if state.available {
+            trf(
+                "RustInput {version} is out; this computer has {current}",
+                &[("version", &latest), ("current", &current)],
+            )
+        } else if state.latest.is_some() {
+            trf("{version} is the latest version", &[("version", &current)])
+        } else {
+            trf("This computer has {current}", &[("current", &current)])
+        };
+        imp.update_status_row.set_subtitle(&status);
+        imp.update_check_button.set_sensitive(!state.checking);
+        imp.update_install_button.set_visible(state.available);
+
+        let dismissed = imp.update_dismissed.borrow().clone();
+        let banner = match state.check {
+            None => Some((
+                tr(
+                    "Should RustInput look for new versions? It asks GitHub for the number of \
+                    the latest version when it starts and every 12 hours; nothing about you \
+                    or your computers is sent.",
+                )
+                .to_owned(),
+                tr("No"),
+                tr("Yes, look for them"),
+            )),
+            Some(true) if state.available && dismissed.as_deref() != state.latest.as_deref() => {
+                Some((
+                    trf(
+                        "RustInput {version} is out; this computer has {current}.",
+                        &[("version", &latest), ("current", &current)],
+                    ),
+                    tr("Later"),
+                    install_label(),
+                ))
+            }
+            _ => None,
+        };
+        match banner {
+            Some((text, no, yes)) => {
+                imp.update_label.set_text(&text);
+                imp.update_no.set_label(no);
+                imp.update_yes.set_label(yes);
+                imp.update_revealer.set_reveal_child(true);
+            }
+            None => imp.update_revealer.set_reveal_child(false),
+        }
+    }
+
+    /// the answer in the line under the header bar: to the question whether
+    /// to look for new versions, or to the new version
+    pub(super) fn update_answered(&self, yes: bool) {
+        let state = self.imp().updates.borrow().clone();
+        if state.check.is_none() {
+            self.request(FrontendRequest::SetCheckUpdates(yes));
+            self.imp().update_revealer.set_reveal_child(false);
+        } else if yes {
+            self.install_update();
+        } else {
+            // until the next version
+            self.imp().update_dismissed.replace(state.latest);
+            self.show_updates();
+        }
+    }
+
+    /// Gets the new version: on Windows the updater the installer put beside
+    /// RustInput, which asks for administrator rights, closes RustInput and
+    /// installs; elsewhere the page of the release opens.
+    pub(crate) fn install_update(&self) {
+        #[cfg(windows)]
+        if let Some(script) = updater_script() {
+            let powershell = std::env::var_os("SystemRoot")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"))
+                .join(r"System32\WindowsPowerShell\v1.0\powershell.exe");
+            match std::process::Command::new(powershell)
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+                .arg(&script)
+                .spawn()
+            {
+                Ok(_) => {
+                    self.show_toast(tr(
+                        "The update starts: Windows asks for administrator rights",
+                    ));
+                    return;
+                }
+                Err(e) => log::warn!("could not start {}: {e}", script.display()),
+            }
+        }
+        let url = self.imp().updates.borrow().url.clone();
+        self.open_uri(&url);
+    }
+
     pub(super) fn setup_file_settings(&self, open_transfers: impl Fn() + 'static) {
         let switch_row = |title: &str, subtitle: &str| {
             let row = adw::ActionRow::builder()
@@ -786,24 +1059,26 @@ impl Window {
             (row, switch)
         };
         let (send_row, send) = switch_row(
-            "Send copied files automatically",
-            "Files copied in the file manager go along with the pointer. When this \
-             is off, only files chosen with “Copy to RustInput” are sent",
+            tr("Send copied files automatically"),
+            tr(
+                "Files copied in the file manager go along with the pointer. When this \
+                is off, only files chosen with “Copy to RustInput” are sent",
+            ),
         );
         let (menu_row, menu) = switch_row(
-            "“Copy to RustInput” in the file manager",
-            "In the menu of files and folders: Explorer, Nemo and Nautilus",
+            tr("“Copy to RustInput” in the file manager"),
+            tr("In the menu of files and folders: Explorer, Nemo and Nautilus"),
         );
         let (show_row, show) = switch_row(
-            "Show the transfers window",
-            "With the progress, when files are sent or received",
+            tr("Show the transfers window"),
+            tr("With the progress, when files are sent or received"),
         );
         let open_row = adw::ActionRow::builder()
-            .title("File transfers")
-            .subtitle("Progress, history and log")
+            .title(tr("File transfers"))
+            .subtitle(tr("Progress, history and log"))
             .build();
         let open = gtk::Button::builder()
-            .label("Open")
+            .label(tr("Open"))
             .valign(gtk::Align::Center)
             .build();
         open.connect_clicked(move |_| open_transfers());
@@ -920,10 +1195,13 @@ impl Window {
                 &imp.input_capture_button,
                 ok,
                 (
-                    "Sharing the mouse and keyboard",
-                    "Capture and emulation are on",
+                    tr("Sharing the mouse and keyboard"),
+                    tr("Capture and emulation are on"),
                 ),
-                ("Input capture is off", "Needed for every connection"),
+                (
+                    tr("Input capture is off"),
+                    tr("Needed for every connection"),
+                ),
             );
             if !ok {
                 self.update_macos_warning_row_text();
@@ -938,20 +1216,26 @@ impl Window {
                 &imp.input_capture_button,
                 capture,
                 (
-                    "Sending",
-                    "Past a screen edge, the mouse and keyboard go to the next computer",
+                    tr("Sending"),
+                    tr("Past a screen edge, the mouse and keyboard go to the next computer"),
                 ),
-                ("Input capture is off", "Needed for every connection"),
+                (
+                    tr("Input capture is off"),
+                    tr("Needed for every connection"),
+                ),
             );
             show_status(
                 &imp.emulation_status_row,
                 &imp.emulation_status_icon,
                 &imp.input_emulation_button,
                 emulation,
-                ("Receiving", "The other computers can control this one"),
                 (
-                    "Input emulation is off",
-                    "Needed for the other computers to control this one",
+                    tr("Receiving"),
+                    tr("The other computers can control this one"),
+                ),
+                (
+                    tr("Input emulation is off"),
+                    tr("Needed for the other computers to control this one"),
                 ),
             );
         }
@@ -968,14 +1252,16 @@ impl Window {
             // AX granted but capture/emulation still off → the daemon
             // subprocess bailed at startup and needs a fresh process to
             // re-initialize with the new grant in place.
-            row.set_title("relaunch required");
-            row.set_subtitle("Accessibility granted — restart to activate capture and emulation");
-            set_button_content_label(button, "Relaunch");
+            row.set_title(tr("Relaunch required"));
+            row.set_subtitle(tr(
+                "Accessibility granted: restart to turn on capture and emulation",
+            ));
+            set_button_content_label(button, tr("Relaunch"));
         } else {
             // AX missing → send the user to System Settings.
-            row.set_title("input capture is disabled");
-            row.set_subtitle("grant Accessibility permission to enable");
-            set_button_content_label(button, "Grant");
+            row.set_title(tr("Input capture is off"));
+            row.set_subtitle(tr("Grant the Accessibility permission to turn it on"));
+            set_button_content_label(button, tr("Grant"));
         }
     }
 
@@ -1004,7 +1290,6 @@ impl Window {
     /// asks for the code another computer shows, to authorize both on each
     /// other
     fn open_pairing_dialog(&self, handle: ClientHandle, hostname: Option<String>) {
-        let name = hostname.unwrap_or_else(|| "the other computer".into());
         let entry = gtk::Entry::builder()
             .placeholder_text("123 456")
             .input_purpose(gtk::InputPurpose::Digits)
@@ -1015,17 +1300,26 @@ impl Window {
             .css_classes(["title-2"])
             .build();
         let text = gtk::Label::builder()
-            .label(format!(
-                "When this computer tries to connect, {name} asks whether to authorize it and \
-                 shows a code. Enter it here to authorize both computers on each other: for \
-                 control, clipboard and files."
-            ))
+            .label(match &hostname {
+                Some(name) => trf(
+                    "When this computer tries to connect, {name} asks whether to authorize it \
+                     and shows a code. Enter it here to authorize both computers on each \
+                     other: for control, clipboard and files.",
+                    &[("name", name)],
+                ),
+                None => tr(
+                    "When this computer tries to connect, the other computer asks \
+                     whether to authorize it and shows a code. Enter it here to authorize both \
+                     computers on each other: for control, clipboard and files.",
+                )
+                .to_owned(),
+            })
             .wrap(true)
             .max_width_chars(48)
             .build();
-        let cancel = gtk::Button::with_label("Cancel");
+        let cancel = gtk::Button::with_label(tr("Cancel"));
         let authorize = gtk::Button::builder()
-            .label("Authorize")
+            .label(tr("Authorize"))
             .css_classes(["suggested-action"])
             .sensitive(false)
             .build();
@@ -1053,7 +1347,10 @@ impl Window {
         page.append(
             &adw::HeaderBar::builder()
                 .title_widget(&adw::WindowTitle::new(
-                    &format!("Authorize with {name}"),
+                    &match &hostname {
+                        Some(name) => trf("Authorize with {name}", &[("name", name)]),
+                        None => tr("Authorize with the other computer").to_owned(),
+                    },
                     "",
                 ))
                 .build(),
@@ -1089,7 +1386,7 @@ impl Window {
             move |_| {
                 let code: String = entry.text().chars().filter(char::is_ascii_digit).collect();
                 window.request(FrontendRequest::Pair { handle, code });
-                window.show_toast("Authorizing…");
+                window.show_toast(tr("Authorizing…"));
                 dialog.close();
             }
         ));
@@ -1103,7 +1400,10 @@ impl Window {
         if let Some(w) = shown.filter(|w| w.fingerprint() == fingerprint) {
             w.close();
         }
-        self.show_toast(&format!("{name} and this computer authorized each other"));
+        self.show_toast(&trf(
+            "{name} and this computer authorized each other",
+            &[("name", &name)],
+        ));
     }
 
     pub(super) fn request_authorization(&self, fingerprint: &str, code: Option<&str>) {
@@ -1159,6 +1459,24 @@ fn show_status(
     icon.set_css_classes(if active { &["success"] } else { &["warning"] });
     button.set_visible(!active);
     row.set_visible(true);
+}
+
+/// what the button that gets a new version says: on Windows it installs
+/// it, elsewhere it opens the page to download it
+fn install_label() -> &'static str {
+    #[cfg(windows)]
+    if updater_script().is_some() {
+        return tr("Update now");
+    }
+    tr("Download")
+}
+
+/// the updater the Windows installer puts beside RustInput
+#[cfg(windows)]
+fn updater_script() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let script = exe.parent()?.join("update-rustinput.ps1");
+    script.is_file().then_some(script)
 }
 
 fn theme_index(theme: Theme) -> u32 {

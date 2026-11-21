@@ -28,9 +28,9 @@ use x11rb::{
 };
 
 use super::{
-    Action, Menu, Texts, Wheel,
+    Action, Fonts, Menu, Texts, Wheel,
     chord::{Chord, Key, Step},
-    load_font,
+    fonts_now,
 };
 
 const XK_CONTROL_L: u32 = 0xffe3;
@@ -109,7 +109,7 @@ struct State {
     menu: Menu,
     chosen: UnboundedSender<Action>,
     texts: Texts,
-    font: Option<Arc<fontdue::Font>>,
+    font: Option<Arc<Fonts>>,
 }
 
 pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Error> {
@@ -145,7 +145,7 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Err
         menu,
         chosen,
         texts: Texts::new(),
-        font: load_font().map(Arc::new),
+        font: None,
     };
     loop {
         let timeout = if state.overlay.is_some() {
@@ -293,7 +293,7 @@ impl State {
             .map_err(err)?
             .reply()
             .map_err(err)?;
-        let wheel = Wheel::new(items, self.scale(), &self.texts, self.font.clone());
+        let wheel = Wheel::new(items, self.scale(), &self.texts, fonts_now(&mut self.font));
         let size = wheel.size() as i32;
         let (px, py) = (pointer.root_x as i32, pointer.root_y as i32);
         let (mx, my, mw, mh) = self.monitor_at(px, py);

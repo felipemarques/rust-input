@@ -9,6 +9,7 @@ use ksni::{
 };
 
 use super::{Summary, TrayAction, icon};
+use crate::i18n::tr;
 
 struct RustInputTray {
     actions: Sender<TrayAction>,
@@ -44,7 +45,7 @@ impl ksni::Tray for RustInputTray {
             .transfers
             .status
             .clone()
-            .unwrap_or_else(|| "Mouse and keyboard sharing".into());
+            .unwrap_or_else(|| tr("Mouse and keyboard sharing").into());
         ToolTip {
             title: self.label.clone(),
             description,
@@ -66,6 +67,18 @@ impl ksni::Tray for RustInputTray {
             .into(),
             MenuItem::Separator,
         ];
+        if let Some(update) = &self.transfers.update {
+            menu.extend([
+                StandardItem {
+                    label: update.clone(),
+                    icon_name: "software-update-available".into(),
+                    activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Update)),
+                    ..Default::default()
+                }
+                .into(),
+                MenuItem::Separator,
+            ]);
+        }
         if !self.transfers.lines.is_empty() {
             for line in &self.transfers.lines {
                 menu.push(
@@ -80,7 +93,7 @@ impl ksni::Tray for RustInputTray {
             if self.transfers.cancellable {
                 menu.push(
                     StandardItem {
-                        label: "Cancel transfers".into(),
+                        label: tr("Cancel transfers").into(),
                         icon_name: "process-stop".into(),
                         activate: Box::new(|tray: &mut Self| {
                             tray.send(TrayAction::CancelTransfers)
@@ -95,14 +108,14 @@ impl ksni::Tray for RustInputTray {
         if let Some(send_copied) = self.transfers.send_copied {
             menu.extend([
                 CheckmarkItem {
-                    label: "Send copied files automatically".into(),
+                    label: tr("Send copied files automatically").into(),
                     checked: send_copied,
                     activate: Box::new(|tray: &mut Self| tray.send(TrayAction::ToggleSendCopied)),
                     ..Default::default()
                 }
                 .into(),
                 StandardItem {
-                    label: "File transfers…".into(),
+                    label: tr("File transfers…").into(),
                     icon_name: "folder-download".into(),
                     activate: Box::new(|tray: &mut Self| tray.send(TrayAction::ShowTransfers)),
                     ..Default::default()
@@ -113,14 +126,14 @@ impl ksni::Tray for RustInputTray {
         }
         menu.extend([
             StandardItem {
-                label: "Show RustInput".into(),
+                label: tr("Show RustInput").into(),
                 activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Show)),
                 ..Default::default()
             }
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Quit RustInput".into(),
+                label: tr("Quit RustInput").into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Quit)),
                 ..Default::default()

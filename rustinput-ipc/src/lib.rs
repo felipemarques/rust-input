@@ -311,6 +311,25 @@ impl Theme {
     }
 }
 
+/// What RustInput knows about its newer versions, see
+/// [`FrontendEvent::Updates`].
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpdateState {
+    /// whether it asks GitHub for the latest version, `None` when the user
+    /// was not asked yet
+    pub check: Option<bool>,
+    /// asking right now
+    pub checking: bool,
+    /// the latest version on GitHub, once known ("0.27.0")
+    pub latest: Option<String>,
+    /// the latest version is newer than this one
+    pub available: bool,
+    /// the page of the latest release
+    pub url: String,
+    /// why the last question failed
+    pub error: Option<String>,
+}
+
 /// One second of the input channel with a device: what went over the
 /// network and how long the pings took, see [`FrontendEvent::LinkStats`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -415,6 +434,8 @@ pub enum FrontendEvent {
     /// the keyboard and the mouse of this computer control the client, or
     /// this computer itself (`None`)
     PointerAt(Option<ClientHandle>),
+    /// whether there is a newer version of RustInput, and whether to ask
+    Updates(UpdateState),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -473,6 +494,14 @@ pub enum FrontendRequest {
     SetFileOptions(FileOptions),
     /// light or dark windows, kept in the configuration
     SetTheme(Theme),
+    /// the language of the windows, menus and the radial menu ("pt-BR"),
+    /// `None` for that of the system, kept in the configuration
+    SetLanguage(Option<String>),
+    /// whether to ask GitHub for the latest version, kept in the
+    /// configuration ([`FrontendEvent::Updates`])
+    SetCheckUpdates(bool),
+    /// ask GitHub for the latest version now
+    CheckUpdates,
     /// remove the received files that were not pasted
     RemoveReceivedFiles,
     /// authorize this device and the client on each other with the code the

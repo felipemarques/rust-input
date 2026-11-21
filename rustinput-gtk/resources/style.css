@@ -25,3 +25,10 @@ label.version-badge {
     font-size: 0.85em;
     font-weight: bold;
 }
+
+/* the line under the header bar that asks about or tells of a new version */
+.update-banner {
+    padding: 8px 16px;
+    background-color: alpha(@accent_bg_color, 0.15);
+    border-bottom: 1px solid alpha(@accent_bg_color, 0.3);
+}

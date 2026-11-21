@@ -28,7 +28,11 @@ use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState};
 
 pub(crate) use action::{Summary, TrayAction};
 
-use crate::{transfers::Transfers, window::Window};
+use crate::{
+    i18n::{trf, trn},
+    transfers::Transfers,
+    window::Window,
+};
 
 /// transfers listed in the menu at most
 const MAX_LINES: usize = 6;
@@ -41,6 +45,8 @@ pub(crate) struct Tray {
     handle: RefCell<Option<platform::Handle>>,
     transfers: RefCell<Vec<TransferInfo>>,
     options: Cell<Option<FileOptions>>,
+    /// the new version, when there is one
+    update: RefCell<Option<String>>,
 }
 
 impl Tray {
@@ -56,10 +62,22 @@ impl Tray {
         self.refresh();
     }
 
+    /// offers the new version `latest`, none when there is none
+    pub(crate) fn show_update(&self, latest: Option<String>) {
+        self.update.replace(latest);
+        self.refresh();
+    }
+
     fn refresh(&self) {
         if let Some(handle) = self.handle.borrow().as_ref() {
             let now = crate::transfers::now_ms();
-            handle.show(summary(&self.transfers.borrow(), self.options.get(), now));
+            let mut summary = summary(&self.transfers.borrow(), self.options.get(), now);
+            summary.update = self
+                .update
+                .borrow()
+                .as_ref()
+                .map(|version| trf("Update to RustInput {version}…", &[("version", version)]));
+            handle.show(summary);
         }
     }
 }
@@ -84,6 +102,7 @@ pub(crate) fn setup(
         handle: RefCell::new(Some(handle)),
         transfers: Default::default(),
         options: Default::default(),
+        update: Default::default(),
     });
 
     // whether the icon is on screen right now
@@ -134,6 +153,7 @@ pub(crate) fn setup(
                     TrayAction::Quit => app.quit(),
                     TrayAction::CancelTransfers => window.request_cancel_transfers(),
                     TrayAction::ShowTransfers => transfers.present(),
+                    TrayAction::Update => window.install_update(),
                     TrayAction::ToggleSendCopied => {
                         if let Some(options) = window.file_options() {
                             window.request(FrontendRequest::SetFileOptions(FileOptions {
@@ -167,11 +187,7 @@ fn percent(t: &TransferInfo) -> u64 {
 
 /// "1 file", "3 files"
 pub(crate) fn files(n: u32) -> String {
-    if n == 1 {
-        "1 file".to_owned()
-    } else {
-        format!("{n} files")
-    }
+    trn("{count} file", "{count} files", n.into(), &[])
 }
 
 fn shorten(text: &str, max: usize) -> String {
@@ -185,32 +201,79 @@ fn shorten(text: &str, max: usize) -> String {
 
 fn line(t: &TransferInfo) -> String {
     let arrow = if t.sending { "↑" } else { "↓" };
-    let direction = if t.sending { "to" } else { "from" };
-    match &t.state {
-        TransferState::Waiting if t.files == 0 => format!("{arrow} Preparing files for {}", t.peer),
-        TransferState::Waiting => format!("{arrow} {} waiting for {}", files(t.files), t.peer),
+    let name = &t.peer;
+    let files = files(t.files);
+    let percent = percent(t);
+    let text = match &t.state {
+        TransferState::Waiting if t.files == 0 => {
+            trf("Preparing files for {name}", &[("name", name)])
+        }
+        TransferState::Waiting => trf(
+            "{files} waiting for {name}",
+            &[("files", &files), ("name", name)],
+        ),
         TransferState::Running => match &t.current {
-            Some(name) => format!(
-                "{arrow} {} ({}/{}) {direction} {}: {}%",
-                shorten(name, 40),
-                (t.files_done + 1).min(t.files),
-                t.files,
-                t.peer,
-                percent(t)
-            ),
-            None => format!(
-                "{arrow} {} {direction} {}: {}%",
-                files(t.files),
-                t.peer,
-                percent(t)
-            ),
+            Some(file) => {
+                let values: [(&str, &dyn std::fmt::Display); 5] = [
+                    ("file", &shorten(file, 40)),
+                    ("done", &(t.files_done + 1).min(t.files)),
+                    ("total", &t.files),
+                    ("name", name),
+                    ("percent", &percent),
+                ];
+                match t.sending {
+                    true => trf("{file} ({done}/{total}) to {name}: {percent}%", &values),
+                    false => trf("{file} ({done}/{total}) from {name}: {percent}%", &values),
+                }
+            }
+            None => {
+                let values: [(&str, &dyn std::fmt::Display); 3] =
+                    [("files", &files), ("name", name), ("percent", &percent)];
+                match t.sending {
+                    true => trf("{files} to {name}: {percent}%", &values),
+                    false => trf("{files} from {name}: {percent}%", &values),
+                }
+            }
         },
-        TransferState::Done if t.sending => format!("✓ {} sent to {}", files(t.files), t.peer),
-        TransferState::Done => format!("✓ {} from {}, ready to paste", files(t.files), t.peer),
-        TransferState::Pasted => format!("✓ {} from {}, pasted", files(t.files), t.peer),
-        TransferState::Removed => format!("✗ {} from {}, not pasted", files(t.files), t.peer),
-        TransferState::Failed(reason) => format!("✗ {}: {}", t.peer, shorten(reason, 60)),
-    }
+        TransferState::Done if t.sending => {
+            return format!(
+                "✓ {}",
+                trf(
+                    "{files} sent to {name}",
+                    &[("files", &files), ("name", name)]
+                )
+            );
+        }
+        TransferState::Done => {
+            return format!(
+                "✓ {}",
+                trf(
+                    "{files} from {name}, ready to paste",
+                    &[("files", &files), ("name", name)]
+                )
+            );
+        }
+        TransferState::Pasted => {
+            return format!(
+                "✓ {}",
+                trf(
+                    "{files} from {name}, pasted",
+                    &[("files", &files), ("name", name)]
+                )
+            );
+        }
+        TransferState::Removed => {
+            return format!(
+                "✗ {}",
+                trf(
+                    "{files} from {name}, not pasted",
+                    &[("files", &files), ("name", name)]
+                )
+            );
+        }
+        TransferState::Failed(reason) => return format!("✗ {name}: {}", shorten(reason, 60)),
+    };
+    format!("{arrow} {text}")
 }
 
 /// what the tray shows for `transfers`: running ones first, then waiting
@@ -244,6 +307,7 @@ pub(crate) fn summary(
         status: (!running.is_empty()).then(|| running.join("\n")),
         cancellable: sorted.iter().any(|t| rank(t) < 2),
         send_copied: options.filter(|o| o.available).map(|o| o.send_copied),
+        update: None,
     }
 }
 

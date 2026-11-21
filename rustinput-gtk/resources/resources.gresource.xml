@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
+  <!-- the windows (.ui) are in one bundle per language, see build.rs -->
   <gresource prefix="/io/github/felipemarques/RustInput">
-    <file compressed="true" preprocess="xml-stripblanks">window.ui</file>
-    <file compressed="true" preprocess="xml-stripblanks">authorization_window.ui</file>
-    <file compressed="true" preprocess="xml-stripblanks">fingerprint_window.ui</file>
-    <file compressed="true" preprocess="xml-stripblanks">client_row.ui</file>
-    <file compressed="true" preprocess="xml-stripblanks">key_row.ui</file>
     <file compressed="true">style.css</file>
   </gresource>
   <gresource prefix="/io/github/felipemarques/RustInput/icons">
@@ -34,5 +30,6 @@
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/help-about-symbolic.svg">icons/scalable/actions/help-about-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/go-next-symbolic.svg">icons/scalable/actions/go-next-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/status/folder-open-symbolic.svg">icons/scalable/status/folder-open-symbolic.svg</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="scalable/status/software-update-available-symbolic.svg">icons/scalable/status/software-update-available-symbolic.svg</file>
   </gresource>
 </gresources>

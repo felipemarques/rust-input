@@ -64,15 +64,28 @@ mod linux {
             return;
         };
         let exe = shell_quote(&exe.display().to_string());
+        // the name and the comment in every language of RustInput: Nemo
+        // shows those of the language of the desktop
+        let (name, comment) = (
+            rustinput_i18n::mark("Copy to RustInput"),
+            rustinput_i18n::mark("Send to the other computer, ready to be pasted there"),
+        );
+        let mut names = String::new();
+        for language in &rustinput_i18n::LANGUAGES[1..] {
+            let file = language.file;
+            if let Some(text) = rustinput_i18n::translate(*language, None, name) {
+                names.push_str(&format!("Name[{file}]={text}\n"));
+            }
+            if let Some(text) = rustinput_i18n::translate(*language, None, comment) {
+                names.push_str(&format!("Comment[{file}]={text}\n"));
+            }
+        }
         let action = format!(
             "[Nemo Action]\n\
              # added by RustInput, which removes it when its file manager menu is turned off\n\
-             Name=Copy to RustInput\n\
-             Name[pt_BR]=Copiar para o RustInput\n\
-             Name[pt]=Copiar para o RustInput\n\
-             Comment=Send to the other computer, ready to be pasted there\n\
-             Comment[pt_BR]=Envia para o outro computador, pronto para colar lá\n\
-             Comment[pt]=Envia para o outro computador, pronto para colar lá\n\
+             Name={name}\n\
+             Comment={comment}\n\
+             {names}\
              Exec={exe} send-files %F\n\
              Icon-Name=document-send\n\
              Selection=notnone\n\
@@ -136,7 +149,6 @@ mod windows {
 
     use windows_sys::Win32::{
         Foundation::ERROR_SUCCESS,
-        Globalization::GetUserDefaultUILanguage,
         System::Registry::{
             HKEY, HKEY_CURRENT_USER, KEY_SET_VALUE, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
             RegCreateKeyExW, RegDeleteTreeW, RegSetValueExW,
@@ -145,8 +157,6 @@ mod windows {
 
     /// files and folders alike
     const KEY: &str = r"Software\Classes\AllFilesystemObjects\shell\RustInput.CopyTo";
-    /// the primary language id of Portuguese
-    const LANG_PORTUGUESE: u16 = 0x16;
 
     fn wide(text: &str) -> Vec<u16> {
         text.encode_utf16().chain(iter::once(0)).collect()
@@ -161,12 +171,8 @@ mod windows {
             return;
         }
         let exe = exe.display().to_string();
-        let portuguese = unsafe { GetUserDefaultUILanguage() } & 0x3ff == LANG_PORTUGUESE;
-        let label = if portuguese {
-            "Copiar para o RustInput"
-        } else {
-            "Copy to RustInput"
-        };
+        // in the language of RustInput, written again when it changes
+        let label = rustinput_i18n::tr("Copy to RustInput");
         // Explorer starts the command once per selected item, up to 100 items
         // with the "Player" model (15 otherwise): the service puts together
         // what arrives in quick succession.

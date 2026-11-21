@@ -13,6 +13,7 @@ use crate::{
     netstats::{NetStats, Sample},
     pairing::{self, PairError, Paired, Pairing, PairingEvent},
     radial::{self, Action, Item, Menu, Texts},
+    update,
 };
 use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
@@ -20,14 +21,16 @@ use log;
 use rustinput_ipc::{
     AsyncFrontendListener, ClientHandle, DEFAULT_PORT, EdgeLink, FileOptions, FrontendEvent,
     FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span, Status, Theme,
-    TransferInfo,
+    TransferInfo, UpdateState,
     layout::{ArrangementView, Layout, Machine, Monitor, Peer as ArrangedPeer},
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     io,
     net::{IpAddr, SocketAddr},
+    pin::Pin,
     sync::{Arc, RwLock},
+    time::Duration,
 };
 use thiserror::Error;
 use tokio::{process::Command, signal, sync::Notify};
@@ -119,7 +122,22 @@ pub struct Service {
     arrange_results_tx: Sender<ArrangeResult>,
     /// the clients as they described themselves: fingerprint and description
     descriptions: HashMap<ClientHandle, Result<(String, Description), String>>,
+    /// whether there is a newer version, and whether to ask GitHub
+    updates: UpdateState,
+    /// when to ask GitHub next, while asking is on
+    update_due: Pin<Box<tokio::time::Sleep>>,
+    /// the latest version, or why it is not known
+    update_results: Receiver<Result<String, String>>,
+    update_results_tx: Sender<Result<String, String>>,
 }
+
+/// the first question for the latest version, after the start: the network
+/// may come up only after RustInput at login
+const UPDATE_FIRST: Duration = Duration::from_secs(120);
+/// the next questions
+const UPDATE_PERIOD: Duration = Duration::from_secs(12 * 60 * 60);
+/// again after a failed one
+const UPDATE_RETRY: Duration = Duration::from_secs(60 * 60);
 
 /// how describing or arranging another device went
 enum ArrangeResult {
@@ -138,6 +156,8 @@ struct Incoming {
 
 impl Service {
     pub async fn new(config: Config) -> Result<Self, ServiceError> {
+        // the texts of the radial menu
+        rustinput_i18n::set(rustinput_i18n::resolve(config.language().as_deref()));
         let client_manager = ClientManager::default();
         for client in config.clients() {
             client_manager.add_with_config(client);
@@ -220,6 +240,12 @@ impl Service {
         let resolver = DnsResolver::new()?;
 
         let port = config.port();
+        let updates = UpdateState {
+            check: config.check_updates(),
+            url: update::RELEASES_PAGE.to_owned(),
+            ..Default::default()
+        };
+        let (update_results_tx, update_results) = channel();
         let service = Self {
             config,
             capture,
@@ -261,6 +287,10 @@ impl Service {
             arrange_results,
             arrange_results_tx,
             descriptions: HashMap::new(),
+            updates,
+            update_due: Box::pin(tokio::time::sleep(UPDATE_FIRST)),
+            update_results,
+            update_results_tx,
         };
         Ok(service)
     }
@@ -306,6 +336,10 @@ impl Service {
                 Some((handle, result)) = self.pair_results.recv() => self.pairing_done(handle, result),
                 Some(event) = self.arrangement_events.recv() => self.handle_arrangement_event(event),
                 Some(result) = self.arrange_results.recv() => self.arrange_done(result),
+                () = self.update_due.as_mut(), if self.updates.check == Some(true) => {
+                    self.check_updates();
+                }
+                Some(result) = self.update_results.recv() => self.updates_checked(result),
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
         }
@@ -389,6 +423,32 @@ impl Service {
                 self.save_config();
                 self.notify_frontend(FrontendEvent::Theme(theme));
             }
+            FrontendRequest::SetLanguage(language) => {
+                rustinput_i18n::set(rustinput_i18n::resolve(language.as_deref()));
+                self.config.set_language(language);
+                self.save_config();
+                self.update_radial();
+                // the item of Explorer in the new language
+                let options = self.file_options;
+                files::menu::install(options.available && options.file_manager_menu);
+            }
+            FrontendRequest::SetCheckUpdates(check) => {
+                self.config.set_check_updates(check);
+                self.save_config();
+                self.updates.check = Some(check);
+                if check {
+                    self.check_updates();
+                } else {
+                    // what it found is no longer looked after
+                    self.updates = UpdateState {
+                        check: Some(false),
+                        url: update::RELEASES_PAGE.to_owned(),
+                        ..Default::default()
+                    };
+                }
+                self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+            }
+            FrontendRequest::CheckUpdates => self.check_updates(),
             FrontendRequest::SendFiles(paths) => match &self.files {
                 Some(files) => files.send_now(paths),
                 None => log::warn!("file transfers are turned off (clipboard_files = false)"),
@@ -670,6 +730,49 @@ impl Service {
         self.notify_frontend(FrontendEvent::AuthorizedUpdated(keys));
         self.notify_frontend(FrontendEvent::FileOptions(self.file_options));
         self.notify_frontend(FrontendEvent::Theme(self.theme));
+        self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+    }
+
+    /// asks GitHub for the latest version, unless it is asking already
+    fn check_updates(&mut self) {
+        // the next question in any case, also when this one never ends
+        self.update_due
+            .as_mut()
+            .reset(tokio::time::Instant::now() + UPDATE_PERIOD);
+        if self.updates.checking {
+            return;
+        }
+        self.updates.checking = true;
+        self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+        let results = self.update_results_tx.clone();
+        tokio::task::spawn_local(async move {
+            let _ = results.send(update::latest().await);
+        });
+    }
+
+    fn updates_checked(&mut self, result: Result<String, String>) {
+        self.updates.checking = false;
+        match result {
+            Ok(latest) => {
+                let current = env!("CARGO_PKG_VERSION");
+                self.updates.available = update::newer(&latest, current);
+                if self.updates.available {
+                    log::info!("RustInput {latest} is out, this is {current}");
+                } else {
+                    log::debug!("RustInput {current} is the latest version");
+                }
+                self.updates.latest = Some(latest);
+                self.updates.error = None;
+            }
+            Err(e) => {
+                log::warn!("could not ask GitHub for the latest version: {e}");
+                self.updates.error = Some(e);
+                self.update_due
+                    .as_mut()
+                    .reset(tokio::time::Instant::now() + UPDATE_RETRY);
+            }
+        }
+        self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
     }
 
     const ENTER_HANDLE_BEGIN: u64 = u64::MAX / 2 + 1;

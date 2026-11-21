@@ -404,6 +404,64 @@ client for A, the upper half of the edge of A is a wall, the lower half leads
 to B at the same height in the arrangement, and back from B only through its
 part of the edge.
 
+## Languages
+
+The texts are written in English in the code and translated through
+`rustinput-i18n`, which the service and the GTK frontend share:
+
+- In Rust, `tr("…")` gives a text in the current language and `trf("…", &[("name", &value)])`
+  one with values: a value is a name in braces in the text (`"Arrangement sent to {name}"`),
+  so a translation can put it wherever the language needs it. `trn(one, other, n, …)` gives
+  the form for a number (`{count}`): two forms in English, one in Chinese and Japanese, three
+  in Russian, six in Arabic, as the `Plural-Forms` of gettext. `mark("…")` only marks a text
+  whose translations are looked up in every language (the Nemo action).
+- In the `.ui` files, the elements with `translatable="yes"`.
+
+The translations are gettext PO files, `rustinput-i18n/po/<language>.po`, with the template
+`rustinput.pot`. Nothing of gettext runs: the build script of `rustinput-i18n` reads the PO
+files (`src/po.rs`) and compiles one sorted table per language into the program, looked up by
+binary search. The build script of the GTK frontend puts the translations into the `.ui`
+files and compiles one resource bundle of windows per language; the frontend registers the
+one of its language before the first window is made, so the composite templates come out
+translated. A single executable therefore has every language and needs no files beside it,
+on Windows and in the binary for Linux alike.
+
+`cargo run -p rustinput-i18n --example update-po` extracts the texts from the code
+(`src/extract.rs`: the calls above with a string literal, the translatable elements outside
+comments), writes the template, and keeps in each PO file the translations of the texts still
+used, adding new texts untranslated. The tests of `rustinput-i18n` fail while the template
+does not match the code, or a language lacks a text, has it fuzzy, misses forms for numbers
+or has other names in braces than the English text.
+
+The language is `language` in `config.toml`, else the first of the languages the system
+prefers that RustInput speaks (`sys-locale`, and `LANGUAGE` on Linux): any Portuguese is
+Brazilian Portuguese, any Chinese simplified Chinese, the rest English. The frontend takes it
+when it starts and RustInput starts again (`app.restart`, `exec` on Linux and macOS) to show
+another one; the service takes a new one at once, for the radial menu and the item of
+Explorer. In Arabic GTK lays the windows out from right to left; the arrangement draws the
+computers where they are and only mirrors the inside of each box.
+
+The radial menu draws its labels itself. Its fonts follow the language (fontconfig with
+`:lang=`, or the fonts of Windows for Chinese and Japanese), with a second one for what the
+first lacks, read with ab_glyph only for the glyphs drawn: a font with all of Chinese costs
+no time and no memory at start. Arabic is joined (`ar-reshaper`) and put in the order it is
+drawn (`unicode-bidi`) before its glyphs are placed one after the other.
+
+## Looking for new versions
+
+The service asks only when `check_updates = true`, which the window sets when the user
+answers its question (or the switch of the preferences): `src/update.rs` sends one HEAD
+request for `https://github.com/felipemarques/rust-input/releases/latest` over TLS with the
+certificates of the system (`rustls-native-certs`) and reads the version from the redirect
+to `/releases/tag/vX.Y.Z`. No API, no JSON, no limit of requests. First 2 minutes after the
+start (the network may come up after RustInput at login), then every 12 hours, every hour
+after a failure, and at once for **Check now**. `FrontendEvent::Updates` tells the windows:
+whether to ask, asking, the latest version, whether it is newer, the error. A newer one shows
+in a line under the header bar (until "Later", for that version) and in the tray menu.
+**Update now** on Windows starts `update-rustinput.ps1` from the folder of `rustinput.exe`
+(the installer puts it there), which asks for administrator rights and installs; elsewhere
+**Download** opens the page of the release.
+
 ## Capture on Windows
 
 The Windows backend watches the input with low level hooks on a thread of
@@ -502,7 +560,10 @@ and installs it per machine in `C:\Program Files\RustInput`, where
 installation over. Its `AppId` (`{8C7A4E2B-3F1D-4B6A-9E5C-2D7F1A0B6C34}`)
 must never change: Windows lists the installation in Settings > Apps under
 `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1`, and
-`update-rustinput.ps1` finds it there.
+`update-rustinput.ps1` finds it there. It speaks the languages of RustInput
+(those its Inno Setup has: all of them since 6.5) and picks the one of
+Windows, asking only when Windows speaks none of them; the script is UTF-8
+with a BOM, so Inno Setup reads it as such.
 
 Before it replaces files it stops the service (`net stop`, which waits) and
 ends every `rustinput.exe` (`taskkill /F`): the daemon, the windows of every

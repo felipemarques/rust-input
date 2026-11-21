@@ -112,6 +112,7 @@ fn run() -> Result<(), RustInputError> {
                     env!("CARGO_PKG_VERSION"),
                     config::local_commit(),
                     config.theme(),
+                    config.language(),
                 );
                 if let Some(ref mut service) = service {
                     #[cfg(unix)]
@@ -126,6 +127,9 @@ fn run() -> Result<(), RustInputError> {
                     service.kill()?;
                 }
                 res?;
+                if rustinput_gtk::restart_requested() {
+                    restart()?;
+                }
             }
             #[cfg(not(feature = "gtk"))]
             {
@@ -141,6 +145,34 @@ fn run() -> Result<(), RustInputError> {
     }
 
     Ok(())
+}
+
+/// Starts RustInput again, with the same arguments: the window was asked
+/// to, to show itself in the language just picked.
+#[cfg(feature = "gtk")]
+fn restart() -> Result<(), RustInputError> {
+    let exe = std::env::current_exe()?;
+    let args: Vec<_> = std::env::args_os().skip(1).collect();
+    log::info!("starting again");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // in this very process: the name of the window on the session bus
+        // is free again before the new one asks for it
+        let error = process::Command::new(exe)
+            .args(args)
+            .env_remove("RUSTINPUT_HIDDEN")
+            .exec();
+        Err(error.into())
+    }
+    #[cfg(not(unix))]
+    {
+        process::Command::new(exe)
+            .args(args)
+            .env_remove("RUSTINPUT_HIDDEN")
+            .spawn()?;
+        Ok(())
+    }
 }
 
 fn run_async<F, E>(f: F) -> Result<(), RustInputError>

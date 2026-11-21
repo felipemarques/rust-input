@@ -11,6 +11,8 @@ pub(crate) enum TrayAction {
     ShowTransfers,
     /// turn sending copied files along with the pointer on or off
     ToggleSendCopied,
+    /// get the new version of RustInput
+    Update,
     /// The tray icon disappeared or came back, for example because the
     /// panel showing it restarted. While it is gone, closing the window
     /// quits RustInput as there would be no way to get the window back.
@@ -30,4 +32,6 @@ pub(crate) struct Summary {
     /// whether copied files go along with the pointer, `None` without file
     /// transfers
     pub(crate) send_copied: Option<bool>,
+    /// the item that gets a new version of RustInput, when there is one
+    pub(crate) update: Option<String>,
 }

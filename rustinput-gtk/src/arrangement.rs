@@ -15,6 +15,8 @@ use rustinput_ipc::{
     layout::{ArrangementView, Layout, Machine},
 };
 
+use crate::i18n::{tr, trf};
+
 /// the size given to a computer that did not tell its own
 const GUESSED: (i32, i32) = (1920, 1080);
 /// room around the computers, on screen
@@ -579,18 +581,21 @@ impl ArrangementArea {
                 let other = layout.machine(&n.id);
                 let whole = layout.whole(me, &n.id);
                 let can_be_whole = count(me, n.pos) == 1 && count(&n.id, n.pos.opposite()) == 1;
-                let along = match n.pos {
-                    Position::Left | Position::Right => "height",
-                    Position::Top | Position::Bottom => "width",
-                };
                 let part = if n.link.own.is_full() && n.link.peer.is_full() {
-                    "the whole edge".to_owned()
+                    tr("The whole edge").to_owned()
                 } else {
-                    format!(
-                        "from {:.0}% to {:.0}% of the {along}",
-                        n.link.own.lo * 100.0,
-                        n.link.own.hi * 100.0
-                    )
+                    let from = format!("{:.0}", n.link.own.lo * 100.0);
+                    let to = format!("{:.0}", n.link.own.hi * 100.0);
+                    let values: [(&str, &dyn std::fmt::Display); 2] =
+                        [("from", &from), ("to", &to)];
+                    match n.pos {
+                        Position::Left | Position::Right => {
+                            trf("From {from}% to {to}% of the height", &values)
+                        }
+                        Position::Top | Position::Bottom => {
+                            trf("From {from}% to {to}% of the width", &values)
+                        }
+                    }
                 };
                 LinkInfo {
                     other: n.id.clone(),
@@ -818,7 +823,7 @@ impl ArrangementArea {
             let size = if item.described {
                 format!("{} × {}", m.width, m.height)
             } else {
-                "size unknown".to_owned()
+                tr("size unknown").to_owned()
             };
             lines.push(match system(&m.os) {
                 Some(os) => format!("{os} · {size}"),
@@ -826,25 +831,39 @@ impl ArrangementArea {
             });
             lines.push(
                 if item.own {
-                    "this computer"
+                    tr("this computer")
                 } else if unreachable.contains(&m.id) {
-                    "not reached"
+                    tr("not reached")
                 } else if !item.active {
-                    "switched off"
+                    tr("switched off")
                 } else if item.alive {
-                    "connected"
+                    tr("connected")
                 } else {
-                    "not connected"
+                    tr("not connected")
                 }
                 .into(),
             );
+            // Right to left (Arabic) the inside of a box is mirrored: its
+            // lines on the right, the dot on the left, the pill on the
+            // right. The boxes themselves stay where the computers are.
+            let rtl = self.direction() == gtk::TextDirection::Rtl;
+            // the dot of the connection takes room at the top
+            let dotted = !item.own && item.active;
+            let dot_room = if dotted { 14.0 } else { 0.0 };
             let text = self.create_pango_layout(None);
+            // all lines in the direction of the language, names in Latin
+            // letters too, so they line up
+            text.set_auto_dir(false);
+            if rtl {
+                text.set_alignment(pango::Alignment::Right);
+            }
             text.set_markup(&lines.join("\n"));
-            text.set_width(((mw - 16.0).max(10.0) * pango::SCALE as f64) as i32);
+            text.set_width(((mw - 16.0 - dot_room).max(10.0) * pango::SCALE as f64) as i32);
             text.set_ellipsize(pango::EllipsizeMode::End);
+            let text_x = if rtl { x + 10.0 + dot_room } else { x + 10.0 };
             snapshot.save();
             snapshot.push_clip(&rect);
-            snapshot.translate(&graphene::Point::new((x + 10.0) as f32, (y + 8.0) as f32));
+            snapshot.translate(&graphene::Point::new(text_x as f32, (y + 8.0) as f32));
             snapshot.append_layout(&text, &if item.own { fg } else { dim });
             snapshot.pop();
             snapshot.restore();
@@ -856,10 +875,15 @@ impl ArrangementArea {
                 item.handle.is_some() && model.pointer_at == item.handle
             };
             if here && mh > 60.0 {
-                let pill = self.create_pango_layout(Some("mouse here"));
+                let pill = self.create_pango_layout(Some(tr("mouse here")));
                 let (pw, ph) = pill.pixel_size();
+                let pill_x = if rtl {
+                    x + mw - (pw + 16) as f64 - 8.0
+                } else {
+                    x + 8.0
+                };
                 let r = graphene::Rect::new(
-                    (x + 8.0) as f32,
+                    pill_x as f32,
                     (y + mh - ph as f64 - 14.0) as f32,
                     (pw + 16) as f32,
                     (ph + 6) as f32,
@@ -874,8 +898,9 @@ impl ArrangementArea {
             }
 
             // whether its connection answers: a dot at the top right
-            if !item.own && item.active {
-                let dot = graphene::Rect::new((x + mw - 16.0) as f32, (y + 10.0) as f32, 8.0, 8.0);
+            if dotted {
+                let dot_x = if rtl { x + 8.0 } else { x + mw - 16.0 };
+                let dot = graphene::Rect::new(dot_x as f32, (y + 10.0) as f32, 8.0, 8.0);
                 let color = if item.alive { success } else { dim };
                 snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(dot, 4.0));
                 snapshot.append_color(&color, &dot);

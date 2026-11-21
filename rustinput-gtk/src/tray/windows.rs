@@ -23,6 +23,7 @@ use windows_sys::Win32::{
 };
 
 use super::{Summary, TrayAction, icon};
+use crate::i18n::tr;
 
 /// size of the icon handed to Windows, which scales it to the notification
 /// area (16 px at 100 %, 32 px at 200 % display scaling)
@@ -39,6 +40,7 @@ const QUIT: &str = "quit";
 const CANCEL: &str = "cancel";
 const SEND_COPIED: &str = "send-copied";
 const TRANSFERS: &str = "transfers";
+const UPDATE: &str = "update";
 
 /// state handed from GTK to the tray thread
 #[derive(Default)]
@@ -121,29 +123,43 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
     let add = |item: &dyn tray_icon::menu::IsMenuItem| menu.append(item).map_err(|e| e.to_string());
     add(&MenuItem::new(label, false, None))?;
     add(&PredefinedMenuItem::separator())?;
+    if let Some(update) = &transfers.update {
+        add(&MenuItem::with_id(UPDATE, update, true, None))?;
+        add(&PredefinedMenuItem::separator())?;
+    }
     if !transfers.lines.is_empty() {
         for line in &transfers.lines {
             add(&MenuItem::new(line, false, None))?;
         }
         if transfers.cancellable {
-            add(&MenuItem::with_id(CANCEL, "Cancel transfers", true, None))?;
+            add(&MenuItem::with_id(
+                CANCEL,
+                tr("Cancel transfers"),
+                true,
+                None,
+            ))?;
         }
         add(&PredefinedMenuItem::separator())?;
     }
     if let Some(send_copied) = transfers.send_copied {
         add(&CheckMenuItem::with_id(
             SEND_COPIED,
-            "Send copied files automatically",
+            tr("Send copied files automatically"),
             true,
             send_copied,
             None,
         ))?;
-        add(&MenuItem::with_id(TRANSFERS, "File transfers…", true, None))?;
+        add(&MenuItem::with_id(
+            TRANSFERS,
+            tr("File transfers…"),
+            true,
+            None,
+        ))?;
         add(&PredefinedMenuItem::separator())?;
     }
-    add(&MenuItem::with_id(SHOW, "Show RustInput", true, None))?;
+    add(&MenuItem::with_id(SHOW, tr("Show RustInput"), true, None))?;
     add(&PredefinedMenuItem::separator())?;
-    add(&MenuItem::with_id(QUIT, "Quit RustInput", true, None))?;
+    add(&MenuItem::with_id(QUIT, tr("Quit RustInput"), true, None))?;
     Ok(menu)
 }
 
@@ -169,6 +185,7 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
             CANCEL => TrayAction::CancelTransfers,
             SEND_COPIED => TrayAction::ToggleSendCopied,
             TRANSFERS => TrayAction::ShowTransfers,
+            UPDATE => TrayAction::Update,
             _ => return,
         };
         let _ = menu_actions.try_send(action);

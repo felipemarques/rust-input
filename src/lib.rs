@@ -15,3 +15,4 @@ mod netstats;
 mod pairing;
 mod radial;
 pub mod service;
+mod update;

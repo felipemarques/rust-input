@@ -65,8 +65,37 @@ pub struct Window {
     /// the version next to the name, always in sight
     #[template_child]
     pub version_label: TemplateChild<Label>,
+    /// the pages: computers, arrangement, preferences, about
     #[template_child]
-    pub arrangement_group: TemplateChild<PreferencesGroup>,
+    pub stack: TemplateChild<adw::ViewStack>,
+    /// the page of the arrangement, filled in by `setup_arrangement`
+    #[template_child]
+    pub arrangement_box: TemplateChild<gtk::Box>,
+    #[template_child]
+    pub language_row: TemplateChild<adw::ComboRow>,
+    /// the line under the header bar about new versions
+    #[template_child]
+    pub update_revealer: TemplateChild<gtk::Revealer>,
+    #[template_child]
+    pub update_label: TemplateChild<Label>,
+    #[template_child]
+    pub update_no: TemplateChild<Button>,
+    #[template_child]
+    pub update_yes: TemplateChild<Button>,
+    #[template_child]
+    pub update_check_switch: TemplateChild<gtk::Switch>,
+    #[template_child]
+    pub update_status_row: TemplateChild<ActionRow>,
+    #[template_child]
+    pub update_check_button: TemplateChild<Button>,
+    #[template_child]
+    pub update_install_button: TemplateChild<Button>,
+    /// what the service knows about new versions
+    pub updates: RefCell<rustinput_ipc::UpdateState>,
+    /// the switch is being set to what the service has
+    pub updating_update_switch: Cell<bool>,
+    /// the new version whose line was closed with "Later"
+    pub update_dismissed: RefCell<Option<String>>,
     /// the editor of the arrangement and what goes with it
     pub arrangement: RefCell<Option<crate::window::ArrangementParts>>,
     /// the certificate fingerprint of this computer, as copied (the row shows
@@ -195,14 +224,16 @@ impl Window {
                 log::info!("capture row clicked in relaunch-required state");
                 let Some(app) = self.obj().application() else {
                     log::error!("failed to relaunch: window has no application");
-                    self.obj().show_toast("Failed to relaunch RustInput");
+                    self.obj()
+                        .show_toast(crate::i18n::tr("Failed to relaunch RustInput"));
                     return;
                 };
                 match macos_privacy::relaunch_bundle() {
                     Ok(()) => app.quit(),
                     Err(error) => {
                         log::error!("failed to schedule app relaunch: {error}");
-                        self.obj().show_toast("Failed to relaunch RustInput");
+                        self.obj()
+                            .show_toast(crate::i18n::tr("Failed to relaunch RustInput"));
                     }
                 }
                 return;
@@ -211,6 +242,27 @@ impl Window {
             macos_privacy::open_accessibility_settings();
         }
         self.obj().request_capture();
+    }
+
+    #[template_callback]
+    fn handle_update_no(&self) {
+        self.obj().update_answered(false);
+    }
+
+    #[template_callback]
+    fn handle_update_yes(&self) {
+        self.obj().update_answered(true);
+    }
+
+    #[template_callback]
+    fn handle_check_updates(&self) {
+        self.obj()
+            .request(rustinput_ipc::FrontendRequest::CheckUpdates);
+    }
+
+    #[template_callback]
+    fn handle_install_update(&self) {
+        self.obj().install_update();
     }
 
     #[template_callback]
@@ -267,6 +319,8 @@ impl ObjectImpl for Window {
         obj.setup_clients();
         obj.setup_authorized();
         obj.setup_arrangement();
+        obj.setup_language();
+        obj.setup_updates();
     }
 }
 

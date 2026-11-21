@@ -10,6 +10,7 @@ on:
     paths:
       - 'src/**'
       - 'rustinput-ipc/**'
+      - 'rustinput-i18n/**'
       - 'scripts/update-rustinput.ps1'
       - 'build-aux/windows/**'
       - 'Cargo.toml'

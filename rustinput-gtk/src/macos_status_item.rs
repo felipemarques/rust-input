@@ -53,9 +53,9 @@ pub fn setup(app: &adw::Application, window: &Window) {
 
             let delegate = new_delegate();
             let menu = menu(&[
-                menu_item(c"Open RustInput", c"showRustInput:"),
+                menu_item(&text(crate::i18n::tr("Open RustInput")), c"showRustInput:"),
                 separator_item(),
-                menu_item(c"Quit RustInput", c"quitRustInput:"),
+                menu_item(&text(crate::i18n::tr("Quit RustInput")), c"quitRustInput:"),
             ]);
 
             let status_bar = msg_send_id(class(c"NSStatusBar"), sel(c"systemStatusBar"));
@@ -163,6 +163,11 @@ unsafe fn menu_item(title: &CStr, action: &CStr) -> Id {
         sel(action),
         nsstring(c""),
     )
+}
+
+/// a text for AppKit, which takes no NUL inside
+fn text(value: &str) -> std::ffi::CString {
+    std::ffi::CString::new(value.replace('\0', "")).unwrap_or_default()
 }
 
 unsafe fn separator_item() -> Id {

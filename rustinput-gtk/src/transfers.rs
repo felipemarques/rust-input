@@ -16,7 +16,10 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState, human_size};
 
-use crate::window::Window;
+use crate::{
+    i18n::{tr, trf, trn},
+    window::Window,
+};
 
 /// the window opens on its own for transfers running longer than this
 const SHOW_AFTER: Duration = Duration::from_secs(1);
@@ -29,39 +32,41 @@ pub(crate) fn now_ms() -> u64 {
 
 /// "1 file", "3 files"
 fn files(n: u32) -> String {
-    if n == 1 {
-        "1 file".to_owned()
-    } else {
-        format!("{n} files")
-    }
+    trn("{count} file", "{count} files", n.into(), &[])
 }
 
 /// "45 s", "3 min 20 s", "1 h 5 min"
 fn duration(seconds: u64) -> String {
     match seconds {
-        s if s < 60 => format!("{s} s"),
-        s if s < 3600 => format!("{} min {} s", s / 60, s % 60),
-        s => format!("{} h {} min", s / 3600, (s % 3600) / 60),
+        s if s < 60 => trf("{s} s", &[("s", &s)]),
+        s if s < 3600 => trf("{m} min {s} s", &[("m", &(s / 60)), ("s", &(s % 60))]),
+        s => trf(
+            "{h} h {m} min",
+            &[("h", &(s / 3600)), ("m", &((s % 3600) / 60))],
+        ),
     }
 }
 
 /// what the title of a transfer says
 pub(crate) fn title(t: &TransferInfo) -> String {
-    let n = files(t.files);
+    let files = files(t.files);
+    let values: [(&str, &dyn std::fmt::Display); 2] = [("files", &files), ("name", &t.peer)];
     match (&t.state, t.sending) {
-        (TransferState::Waiting, true) if t.files == 0 => format!("Preparing files for {}", t.peer),
+        (TransferState::Waiting, true) if t.files == 0 => {
+            trf("Preparing files for {name}", &values)
+        }
         (TransferState::Waiting | TransferState::Running, true) => {
-            format!("Sending {n} to {}", t.peer)
+            trf("Sending {files} to {name}", &values)
         }
         (TransferState::Waiting | TransferState::Running, false) => {
-            format!("Receiving {n} from {}", t.peer)
+            trf("Receiving {files} from {name}", &values)
         }
-        (TransferState::Done, true) => format!("{n} sent to {}", t.peer),
-        (TransferState::Done, false) => format!("{n} from {}: ready to paste", t.peer),
-        (TransferState::Pasted, _) => format!("{n} from {}: pasted", t.peer),
-        (TransferState::Removed, _) => format!("{n} from {}: not pasted", t.peer),
-        (TransferState::Failed(_), true) => format!("Sending {n} to {} failed", t.peer),
-        (TransferState::Failed(_), false) => format!("Receiving {n} from {} failed", t.peer),
+        (TransferState::Done, true) => trf("{files} sent to {name}", &values),
+        (TransferState::Done, false) => trf("{files} from {name}: ready to paste", &values),
+        (TransferState::Pasted, _) => trf("{files} from {name}: pasted", &values),
+        (TransferState::Removed, _) => trf("{files} from {name}: not pasted", &values),
+        (TransferState::Failed(_), true) => trf("Sending {files} to {name} failed", &values),
+        (TransferState::Failed(_), false) => trf("Receiving {files} from {name} failed", &values),
     }
 }
 
@@ -71,24 +76,28 @@ pub(crate) fn details(t: &TransferInfo, now_ms: u64) -> String {
     let seconds = end.saturating_sub(t.started_ms) as f64 / 1000.0;
     let speed = t.bytes_done as f64 / seconds.max(0.001);
     let took = || {
-        format!(
-            "{} in {} ({}/s)",
-            human_size(t.bytes),
-            duration(seconds.round() as u64),
-            human_size(speed as u64)
+        trf(
+            "{size} in {time} ({speed}/s)",
+            &[
+                ("size", &human_size(t.bytes)),
+                ("time", &duration(seconds.round() as u64)),
+                ("speed", &human_size(speed as u64)),
+            ],
         )
     };
     match &t.state {
-        TransferState::Waiting if t.files == 0 => "Listing the files…".to_owned(),
-        TransferState::Waiting => format!(
-            "{}, waiting for the transfer before it",
-            human_size(t.bytes)
+        TransferState::Waiting if t.files == 0 => tr("Listing the files…").to_owned(),
+        TransferState::Waiting => trf(
+            "{size}, waiting for the transfer before it",
+            &[("size", &human_size(t.bytes))],
         ),
         TransferState::Running => {
-            let mut parts = vec![format!(
-                "{} of {}",
-                human_size(t.bytes_done),
-                human_size(t.bytes)
+            let mut parts = vec![trf(
+                "{done} of {size}",
+                &[
+                    ("done", &human_size(t.bytes_done)),
+                    ("size", &human_size(t.bytes)),
+                ],
             )];
             if let Some(current) = &t.current {
                 parts.insert(
@@ -100,23 +109,31 @@ pub(crate) fn details(t: &TransferInfo, now_ms: u64) -> String {
             if seconds >= 1.0 && speed >= 1.0 {
                 parts.push(format!("{}/s", human_size(speed as u64)));
                 let left = t.bytes.saturating_sub(t.bytes_done) as f64 / speed;
-                parts.push(format!("{} left", duration(left.round() as u64)));
+                parts.push(trf(
+                    "{time} left",
+                    &[("time", &duration(left.round() as u64))],
+                ));
             }
             parts.join(" · ")
         }
         TransferState::Done if t.sending => took(),
-        TransferState::Done => format!(
-            "{}. On the clipboard: paste them in a folder to move them there",
-            took()
+        TransferState::Done => trf(
+            "{took}. On the clipboard: paste them in a folder to move them there",
+            &[("took", &took())],
         ),
-        TransferState::Pasted => format!(
-            "{}, moved to where they were pasted. Nothing is left in the temporary folder",
-            human_size(t.bytes)
+        TransferState::Pasted => trf(
+            "{size}, moved to where they were pasted. Nothing is left in the temporary folder",
+            &[("size", &human_size(t.bytes))],
         ),
-        TransferState::Removed => "Removed from the temporary folder without being pasted".into(),
-        TransferState::Failed(reason) => {
-            format!("{reason}, after {} of {} files", t.files_done, t.files)
+        TransferState::Removed => {
+            tr("Removed from the temporary folder without being pasted").into()
         }
+        TransferState::Failed(reason) => trn(
+            "{reason}, after {done} of {count} file",
+            "{reason}, after {done} of {count} files",
+            t.files.into(),
+            &[("reason", reason), ("done", &t.files_done)],
+        ),
     }
 }
 
@@ -210,18 +227,18 @@ impl Transfers {
             .build();
 
         let log = gtk::Button::builder()
-            .label("Open log")
-            .tooltip_text("Everything sent and received, with every file")
+            .label(tr("Open log"))
+            .tooltip_text(tr("Everything sent and received, with every file"))
             .build();
         log.connect_clicked(|_| match rustinput_ipc::transfer_log() {
             Some(path) if path.exists() => open(&path),
             _ => log::info!("no file transfers logged yet"),
         });
         let remove = gtk::Button::builder()
-            .label("Remove unpasted files")
-            .tooltip_text(
+            .label(tr("Remove unpasted files"))
+            .tooltip_text(tr(
                 "Removes the received files that were not pasted from the temporary folder",
-            )
+            ))
             .sensitive(false)
             .build();
         let actions = gtk::Box::builder()
@@ -242,7 +259,7 @@ impl Transfers {
             .build();
         content.append(
             &adw::HeaderBar::builder()
-                .title_widget(&adw::WindowTitle::new("File Transfers", ""))
+                .title_widget(&adw::WindowTitle::new(tr("File transfers"), ""))
                 .build(),
         );
         content.append(&scrolled);
@@ -252,7 +269,7 @@ impl Transfers {
         // Not added to the application: a hidden window of it would keep
         // RustInput running after the main window closed without a tray.
         let window = adw::Window::builder()
-            .title(format!("RustInput {version}: File Transfers"))
+            .title(format!("RustInput {version}: {}", tr("File transfers")))
             .default_width(560)
             .default_height(440)
             .hide_on_close(true)
@@ -373,13 +390,13 @@ impl Transfers {
         text.append(&bar);
         let cancel = gtk::Button::builder()
             .icon_name("process-stop-symbolic")
-            .tooltip_text("Cancel")
+            .tooltip_text(tr("Cancel"))
             .valign(gtk::Align::Center)
             .css_classes(["flat"])
             .build();
         let folder = gtk::Button::builder()
             .icon_name("folder-open-symbolic")
-            .tooltip_text("Open the temporary folder with the received files")
+            .tooltip_text(tr("Open the temporary folder with the received files"))
             .valign(gtk::Align::Center)
             .css_classes(["flat"])
             .build();

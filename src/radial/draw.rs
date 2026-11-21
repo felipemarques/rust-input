@@ -3,7 +3,7 @@
 
 use std::f32::consts::PI;
 
-use fontdue::Font;
+use super::fonts::{Fonts, visual};
 use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 
 /// diameter of the wheel at 100 % display scaling
@@ -40,7 +40,7 @@ pub(super) fn render(
     labels: &[String],
     selected: Option<usize>,
     hint: &str,
-    font: Option<&Font>,
+    font: Option<&Fonts>,
     scale: f32,
 ) -> Pixmap {
     let scale = scale.clamp(1.0, 4.0);
@@ -166,26 +166,57 @@ fn fill_sector(
     }
 }
 
-fn text_width(font: &Font, text: &str, px: f32) -> f32 {
-    text.chars()
-        .map(|c| font.metrics(c, px).advance_width)
-        .sum()
+fn text_width(font: &Fonts, text: &str, px: f32) -> f32 {
+    font.width(text, px)
+}
+
+/// a letter of Chinese or Japanese (or Korean): lines may break after any
+fn is_cjk(c: char) -> bool {
+    matches!(c, '\u{3000}'..='\u{9FFF}' | '\u{AC00}'..='\u{D7AF}' | '\u{F900}'..='\u{FAFF}' | '\u{FF00}'..='\u{FFEF}')
+}
+
+/// what a line may break between, each with whether a space goes before it:
+/// the words, and every letter of Chinese and Japanese, which have no spaces
+fn pieces(text: &str) -> Vec<(String, bool)> {
+    let mut pieces = Vec::new();
+    for word in text.split_whitespace() {
+        let mut spaced = true;
+        let mut run = String::new();
+        for c in word.chars() {
+            if is_cjk(c) {
+                if !run.is_empty() {
+                    pieces.push((std::mem::take(&mut run), spaced));
+                    spaced = false;
+                }
+                pieces.push((c.to_string(), spaced));
+                spaced = false;
+            } else {
+                run.push(c);
+            }
+        }
+        if !run.is_empty() {
+            pieces.push((run, spaced));
+        }
+    }
+    pieces
 }
 
 /// `text` broken into lines of at most `width`, at most `max_lines` of them
-fn wrap(font: &Font, text: &str, px: f32, width: f32, max_lines: usize) -> Vec<String> {
+fn wrap(font: &Fonts, text: &str, px: f32, width: f32, max_lines: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     let mut line = String::new();
-    for word in text.split_whitespace() {
+    for (piece, spaced) in pieces(text) {
         let candidate = if line.is_empty() {
-            word.to_owned()
+            piece.clone()
+        } else if spaced {
+            format!("{line} {piece}")
         } else {
-            format!("{line} {word}")
+            format!("{line}{piece}")
         };
         if text_width(font, &candidate, px) <= width || line.is_empty() {
             line = candidate;
         } else {
-            lines.push(std::mem::replace(&mut line, word.to_owned()));
+            lines.push(std::mem::replace(&mut line, piece));
         }
     }
     if !line.is_empty() {
@@ -212,7 +243,7 @@ fn wrap(font: &Font, text: &str, px: f32, width: f32, max_lines: usize) -> Vec<S
 #[allow(clippy::too_many_arguments)]
 fn draw_text(
     pixmap: &mut Pixmap,
-    font: &Font,
+    font: &Fonts,
     text: &str,
     px: f32,
     center: (f32, f32),
@@ -221,52 +252,38 @@ fn draw_text(
     color: (u8, u8, u8),
 ) {
     let lines = wrap(font, text, px, width, max_lines);
-    let Some(metrics) = font.horizontal_line_metrics(px) else {
-        return;
-    };
-    let line_height = metrics.new_line_size;
+    let (ascent, line_height) = font.line(px);
     let top = center.1 - line_height * lines.len() as f32 / 2.0;
     for (n, line) in lines.iter().enumerate() {
-        let baseline = top + n as f32 * line_height + metrics.ascent;
-        let mut x = center.0 - text_width(font, line, px) / 2.0;
-        for ch in line.chars() {
-            let (glyph, coverage) = font.rasterize(ch, px);
-            let left = (x + glyph.xmin as f32).round() as i32;
-            let top = (baseline - glyph.height as f32 - glyph.ymin as f32).round() as i32;
-            blend(pixmap, left, top, glyph.width, &coverage, color);
-            x += glyph.advance_width;
+        let baseline = top + n as f32 * line_height + ascent;
+        // as drawn: Arabic joined and from right to left
+        let shown = visual(line);
+        let mut x = center.0 - text_width(font, &shown, px) / 2.0;
+        for ch in shown.chars() {
+            let glyph = font.place(ch, px);
+            font.draw(&glyph, px, x, baseline, |x, y, coverage| {
+                blend(pixmap, x, y, coverage, color)
+            });
+            x += glyph.advance;
         }
     }
 }
 
-/// draws a glyph coverage bitmap of `width` columns at `(left, top)`
-fn blend(
-    pixmap: &mut Pixmap,
-    left: i32,
-    top: i32,
-    width: usize,
-    coverage: &[u8],
-    color: (u8, u8, u8),
-) {
+/// draws `color` at `(x, y)`, `coverage` (0 to 1) of it
+fn blend(pixmap: &mut Pixmap, x: i32, y: i32, coverage: f32, color: (u8, u8, u8)) {
     let (pw, ph) = (pixmap.width() as i32, pixmap.height() as i32);
-    let data = pixmap.data_mut();
-    for (i, &alpha) in coverage.iter().enumerate() {
-        if alpha == 0 || width == 0 {
-            continue;
-        }
-        let (x, y) = (left + (i % width) as i32, top + (i / width) as i32);
-        if x < 0 || y < 0 || x >= pw || y >= ph {
-            continue;
-        }
-        let at = ((y * pw + x) * 4) as usize;
-        let a = alpha as u32;
-        // premultiplied: source over destination
-        for (k, channel) in [color.0, color.1, color.2].into_iter().enumerate() {
-            let src = channel as u32 * a / 255;
-            data[at + k] = (src + data[at + k] as u32 * (255 - a) / 255) as u8;
-        }
-        data[at + 3] = (a + data[at + 3] as u32 * (255 - a) / 255) as u8;
+    if coverage <= 0.0 || x < 0 || y < 0 || x >= pw || y >= ph {
+        return;
     }
+    let data = pixmap.data_mut();
+    let at = ((y * pw + x) * 4) as usize;
+    let a = (coverage.min(1.0) * 255.0).round() as u32;
+    // premultiplied: source over destination
+    for (k, channel) in [color.0, color.1, color.2].into_iter().enumerate() {
+        let src = channel as u32 * a / 255;
+        data[at + k] = (src + data[at + k] as u32 * (255 - a) / 255) as u8;
+    }
+    data[at + 3] = (a + data[at + 3] as u32 * (255 - a) / 255) as u8;
 }
 
 /// the pixels as premultiplied BGRA, what X11 (32 bit visuals) and Windows
@@ -296,6 +313,20 @@ mod tests {
         // the middle picks nothing
         assert_eq!(slice_at(4, 3.0, 3.0, 10.0), None);
         assert_eq!(slice_at(0, 0.0, -100.0, 10.0), None);
+    }
+
+    #[test]
+    fn chinese_and_japanese_break_between_letters() {
+        let joined = |text: &str| {
+            pieces(text)
+                .into_iter()
+                .map(|(p, spaced)| if spaced { format!(" {p}") } else { p })
+                .collect::<String>()
+        };
+        assert_eq!(pieces("instancia-b に移動").len(), 4);
+        assert_eq!(joined("instancia-b に移動"), " instancia-b に移動");
+        assert_eq!(joined("Go to xeon"), " Go to xeon");
+        assert_eq!(pieces("Go to xeon").len(), 3);
     }
 
     #[test]

@@ -1,0 +1,942 @@
+# RustInput in Italiano.
+# This file is distributed under the same license as RustInput (GPL-3.0-or-later).
+# Made by `cargo run -p rustinput-i18n --example update-po`: translate the msgstr
+# lines, keep every {name} of the English text, and do not change the msgid lines.
+msgid ""
+msgstr ""
+"Project-Id-Version: RustInput\n"
+"Language: it\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: rustinput-gtk/resources/authorization_window.ui:11
+msgid "Computer not authorized"
+msgstr "Computer non autorizzato"
+
+#: rustinput-gtk/resources/authorization_window.ui:33
+msgid "A computer that is not authorized is trying to connect. Do you want to authorize it?"
+msgstr "Un computer non autorizzato sta cercando di connettersi. Vuoi autorizzarlo?"
+
+#: rustinput-gtk/resources/authorization_window.ui:40
+msgid "SHA-256 fingerprint"
+msgstr "Impronta digitale SHA-256"
+
+#: rustinput-gtk/resources/authorization_window.ui:70
+msgid "Or, on the computer that is trying to connect, open RustInput, click “Enter code…” next to this computer and enter:"
+msgstr "Oppure, sul computer che sta cercando di connettersi, apri RustInput, fai clic su «Inserisci codice…» accanto a questo computer e inserisci:"
+
+#: rustinput-gtk/resources/authorization_window.ui:85
+msgid "That authorizes both computers on each other."
+msgstr "In questo modo i due computer si autorizzano a vicenda."
+
+#: rustinput-gtk/resources/authorization_window.ui:110
+msgid "Cancel"
+msgstr "Annulla"
+
+#: rustinput-gtk/resources/authorization_window.ui:119
+msgid "Authorize"
+msgstr "Autorizza"
+
+#: rustinput-gtk/resources/client_row.ui:10
+msgid "Use this computer"
+msgstr "Usa questo computer"
+
+#: rustinput-gtk/resources/client_row.ui:31
+msgid "Look up its address again"
+msgstr "Cerca di nuovo il suo indirizzo"
+
+#: rustinput-gtk/resources/client_row.ui:87
+msgid "Address"
+msgstr "Indirizzo"
+
+#: rustinput-gtk/resources/client_row.ui:88
+msgid "Name or IP, and port"
+msgstr "Nome o IP, e porta"
+
+#: rustinput-gtk/resources/client_row.ui:95
+msgid "Name or address"
+msgstr "Nome o indirizzo"
+
+#: rustinput-gtk/resources/client_row.ui:116
+msgid "Position"
+msgstr "Posizione"
+
+#: rustinput-gtk/resources/client_row.ui:117
+msgid "The edge of this screen that leads to it"
+msgstr "Il bordo di questo schermo che porta a quel computer"
+
+#: rustinput-gtk/resources/client_row.ui:133
+msgid "Authorize with a code"
+msgstr "Autorizza con un codice"
+
+#: rustinput-gtk/resources/client_row.ui:134
+msgid "The other computer shows a code when this one tries to connect: entering it here authorizes both computers on each other"
+msgstr "L'altro computer mostra un codice quando questo cerca di connettersi: inserendolo qui i due computer si autorizzano a vicenda"
+
+#: rustinput-gtk/resources/client_row.ui:137
+msgid "Enter code…"
+msgstr "Inserisci codice…"
+
+#: rustinput-gtk/resources/client_row.ui:146
+msgid "Remove this computer"
+msgstr "Rimuovi questo computer"
+
+#: rustinput-gtk/resources/fingerprint_window.ui:11
+msgid "Authorize a computer by its fingerprint"
+msgstr "Autorizza un computer tramite la sua impronta digitale"
+
+#: rustinput-gtk/resources/fingerprint_window.ui:27
+msgid "The certificate fingerprint serves as a unique identifier for your device."
+msgstr "L'impronta digitale del certificato serve da identificativo univoco del dispositivo."
+
+#: rustinput-gtk/resources/fingerprint_window.ui:32
+msgid "On the other computer, RustInput shows it under “This computer” on the Computers page"
+msgstr "Sull'altro computer, RustInput la mostra sotto «Questo computer» nella pagina Computer"
+
+#: rustinput-gtk/resources/fingerprint_window.ui:37
+msgid "Description"
+msgstr "Descrizione"
+
+#: rustinput-gtk/resources/fingerprint_window.ui:84
+msgid "Confirm"
+msgstr "Conferma"
+
+#: rustinput-gtk/resources/key_row.ui:8
+msgid "Revoke the authorization"
+msgstr "Revoca l'autorizzazione"
+
+#: rustinput-gtk/resources/window.ui:22
+msgid "_Close window"
+msgstr "_Chiudi finestra"
+
+#: rustinput-gtk/resources/window.ui:26
+msgid "_Quit RustInput"
+msgstr "_Esci da RustInput"
+
+#: rustinput-gtk/resources/window.ui:68
+msgid "Version and commit"
+msgstr "Versione e commit"
+
+#: rustinput-gtk/resources/window.ui:78
+msgid "Menu"
+msgstr "Menu"
+
+#: rustinput-gtk/resources/window.ui:132
+msgid "Computers"
+msgstr "Computer"
+
+#: rustinput-gtk/resources/window.ui:163
+msgid "This computer"
+msgstr "Questo computer"
+
+#: rustinput-gtk/resources/window.ui:164
+msgid "What the other computers need to reach this one"
+msgstr "Ciò che serve agli altri computer per raggiungere questo"
+
+#: rustinput-gtk/resources/window.ui:167
+msgid "Name"
+msgstr "Nome"
+
+#: rustinput-gtk/resources/window.ui:176
+msgid "Copy the name"
+msgstr "Copia il nome"
+
+#: rustinput-gtk/resources/window.ui:183
+msgid "The name of this computer is not known"
+msgstr "Il nome di questo computer non è noto"
+
+#: rustinput-gtk/resources/window.ui:203
+msgid "Port"
+msgstr "Porta"
+
+#: rustinput-gtk/resources/window.ui:204
+msgid "UDP and TCP"
+msgstr "UDP e TCP"
+
+#: rustinput-gtk/resources/window.ui:220
+msgid "Port, 4242 when empty"
+msgstr "Porta, 4242 se vuota"
+
+#: rustinput-gtk/resources/window.ui:230
+msgid "Use this port"
+msgstr "Usa questa porta"
+
+#: rustinput-gtk/resources/window.ui:241
+msgid "Keep the port"
+msgstr "Mantieni la porta"
+
+#: rustinput-gtk/resources/window.ui:249
+msgid "Certificate fingerprint"
+msgstr "Impronta digitale del certificato"
+
+#: rustinput-gtk/resources/window.ui:259
+msgid "Copy the fingerprint"
+msgstr "Copia l'impronta digitale"
+
+#: rustinput-gtk/resources/window.ui:271
+msgid "Status"
+msgstr "Stato"
+
+#: rustinput-gtk/resources/window.ui:286
+msgid "Reenable"
+msgstr "Riattiva"
+
+#: rustinput-gtk/resources/window.ui:339
+msgid "Connections"
+msgstr "Connessioni"
+
+#: rustinput-gtk/resources/window.ui:340
+msgid "Switch one on to use it; open it for its address and the code to authorize it."
+msgstr "Attivane una per usarla; aprila per vederne l'indirizzo e il codice di autorizzazione."
+
+#: rustinput-gtk/resources/window.ui:345
+msgid "Add a computer by its name or address"
+msgstr "Aggiungi un computer tramite nome o indirizzo"
+
+#: rustinput-gtk/resources/window.ui:349
+msgid "Add computer"
+msgstr "Aggiungi computer"
+
+#: rustinput-gtk/resources/window.ui:360
+msgid "No computers yet"
+msgstr "Ancora nessun computer"
+
+#: rustinput-gtk/resources/window.ui:361
+msgid "Add one with “Add computer”, by its name or address"
+msgstr "Aggiungine uno con «Aggiungi computer», tramite nome o indirizzo"
+
+#: rustinput-gtk/resources/window.ui:384
+msgid "Arrangement"
+msgstr "Disposizione"
+
+#: rustinput-gtk/resources/window.ui:404
+msgid "Drag a computer next to another one, like monitors: the mouse crosses where they touch. Applying it sets up the other computers too."
+msgstr "Trascina un computer accanto a un altro, come i monitor: il mouse passa dove si toccano. Applicando la disposizione si configurano anche gli altri computer."
+
+#: rustinput-gtk/resources/window.ui:423
+msgid "Preferences"
+msgstr "Preferenze"
+
+#: rustinput-gtk/resources/window.ui:429
+msgid "Appearance"
+msgstr "Aspetto"
+
+#: rustinput-gtk/resources/window.ui:432
+msgid "Style"
+msgstr "Stile"
+
+#: rustinput-gtk/resources/window.ui:433
+msgid "Light or dark windows, on this computer"
+msgstr "Finestre chiare o scure, su questo computer"
+
+#: rustinput-gtk/resources/window.ui:437
+msgid "As the system"
+msgstr "Come il sistema"
+
+#: rustinput-gtk/resources/window.ui:438
+msgid "Light"
+msgstr "Chiaro"
+
+#: rustinput-gtk/resources/window.ui:439
+msgid "Dark"
+msgstr "Scuro"
+
+#: rustinput-gtk/resources/window.ui:447
+msgid "Language"
+msgstr "Lingua"
+
+#: rustinput-gtk/resources/window.ui:448
+msgid "Of the windows, the menus and the radial menu, on this computer"
+msgstr "Delle finestre, dei menu e del menu radiale, su questo computer"
+
+#: rustinput-gtk/resources/window.ui:455
+msgid "Updates"
+msgstr "Aggiornamenti"
+
+#: rustinput-gtk/resources/window.ui:458
+msgid "Look for new versions"
+msgstr "Cerca nuove versioni"
+
+#: rustinput-gtk/resources/window.ui:459
+msgid "Asks GitHub for the number of the latest version when RustInput starts and every 12 hours. Nothing about you or your computers is sent."
+msgstr "Chiede a GitHub il numero dell'ultima versione all'avvio di RustInput e ogni 12 ore. Non viene inviato nulla su di te o sui tuoi computer."
+
+#: rustinput-gtk/resources/window.ui:470
+msgid "Latest version"
+msgstr "Ultima versione"
+
+#: rustinput-gtk/resources/window.ui:482
+msgid "Check now"
+msgstr "Controlla ora"
+
+#: rustinput-gtk/resources/window.ui:492
+msgid "File transfers"
+msgstr "Trasferimenti di file"
+
+#: rustinput-gtk/resources/window.ui:493
+msgid "Copy files on one computer and paste them on another"
+msgstr "Copia file su un computer e incollali su un altro"
+
+#: rustinput-gtk/resources/window.ui:499
+msgid "Allowed to connect"
+msgstr "Autorizzati a connettersi"
+
+#: rustinput-gtk/resources/window.ui:500
+msgid "The computers whose certificate this one accepts. A computer that is not here asks first, with a code."
+msgstr "I computer di cui questo accetta il certificato. Un computer che non è qui chiede prima, con un codice."
+
+#: rustinput-gtk/resources/window.ui:519
+msgid "No computers allowed yet"
+msgstr "Ancora nessun computer autorizzato"
+
+#: rustinput-gtk/resources/window.ui:520
+msgid "Authorize one with “Authorize”, or accept its request"
+msgstr "Autorizzane uno con «Autorizza» o accetta la sua richiesta"
+
+#: rustinput-gtk/resources/window.ui:537
+msgid "About"
+msgstr "Informazioni"
+
+#: rustinput-gtk/resources/window.ui:542
+msgid "Easily use your mouse and keyboard on multiple computers"
+msgstr "Usa facilmente mouse e tastiera su più computer"
+
+#: rustinput-gtk/resources/window.ui:551
+msgid "Version"
+msgstr "Versione"
+
+#: rustinput-gtk/resources/window.ui:556
+msgid "Source code"
+msgstr "Codice sorgente"
+
+#: rustinput-gtk/resources/window.ui:569
+msgid "Based on Lan Mouse"
+msgstr "Basato su Lan Mouse"
+
+#: rustinput-gtk/resources/window.ui:570
+msgid "by Ferdinand Schober and contributors"
+msgstr "di Ferdinand Schober e collaboratori"
+
+#: rustinput-gtk/resources/window.ui:582
+msgid "License"
+msgstr "Licenza"
+
+#: rustinput-gtk/resources/window.ui:595
+msgid "Logs"
+msgstr "Registri"
+
+#: rustinput-gtk/src/arrangement.rs:585
+msgid "The whole edge"
+msgstr "L'intero bordo"
+
+#: rustinput-gtk/src/arrangement.rs:593
+msgid "From {from}% to {to}% of the height"
+msgstr "Da {from}% a {to}% dell'altezza"
+
+#: rustinput-gtk/src/arrangement.rs:596
+msgid "From {from}% to {to}% of the width"
+msgstr "Da {from}% a {to}% della larghezza"
+
+#: rustinput-gtk/src/arrangement.rs:826
+msgid "size unknown"
+msgstr "dimensioni ignote"
+
+#: rustinput-gtk/src/arrangement.rs:834
+msgid "this computer"
+msgstr "questo computer"
+
+#: rustinput-gtk/src/arrangement.rs:836
+msgid "not reached"
+msgstr "non raggiunto"
+
+#: rustinput-gtk/src/arrangement.rs:838
+msgid "switched off"
+msgstr "disattivato"
+
+#: rustinput-gtk/src/arrangement.rs:840
+msgid "connected"
+msgstr "connesso"
+
+#: rustinput-gtk/src/arrangement.rs:842
+msgid "not connected"
+msgstr "non connesso"
+
+#: rustinput-gtk/src/arrangement.rs:878
+msgid "mouse here"
+msgstr "mouse qui"
+
+#: rustinput-gtk/src/client_row.rs:68
+msgid "no name or address"
+msgstr "nessun nome o indirizzo"
+
+#: rustinput-gtk/src/client_row.rs:121
+msgid "No IP addresses for this computer yet"
+msgstr "Ancora nessun indirizzo IP per questo computer"
+
+#: rustinput-gtk/src/client_row.rs:174
+msgid "Set by the arrangement"
+msgstr "Impostata dalla disposizione"
+
+#: rustinput-gtk/src/client_row.rs:204
+msgid "Round trip time of the pings to this computer"
+msgstr "Tempo di andata e ritorno dei ping verso questo computer"
+
+#: rustinput-gtk/src/client_row.rs:234
+msgid "Its version: unknown · this one: {local}"
+msgstr "Versione remota: sconosciuta · locale: {local}"
+
+#: rustinput-gtk/src/client_row.rs:239
+msgid "Its version: {peer} · the same"
+msgstr "Versione remota: {peer} · la stessa"
+
+#: rustinput-gtk/src/client_row.rs:241
+msgid "Its version: {peer} · this one: {local}"
+msgstr "Versione remota: {peer} · locale: {local}"
+
+#: rustinput-gtk/src/lib.rs:261
+msgid "Quit"
+msgstr "Esci"
+
+#: rustinput-gtk/src/lib.rs:262
+msgid "_File"
+msgstr "_File"
+
+#: rustinput-gtk/src/lib.rs:447
+msgid "{name} and this computer authorized each other"
+msgstr "{name} e questo computer si sono autorizzati a vicenda"
+
+#: rustinput-gtk/src/lib.rs:452
+msgid "Not authorized: {error}"
+msgstr "Non autorizzato: {error}"
+
+#: rustinput-gtk/src/lib.rs:459
+msgid "{address} connected"
+msgstr "{address} connesso"
+
+#: rustinput-gtk/src/lib.rs:466
+msgid "The mouse came from {address}"
+msgstr "Il mouse è arrivato da {address}"
+
+#: rustinput-gtk/src/lib.rs:472
+msgid "{address} disconnected"
+msgstr "{address} disconnesso"
+
+#: rustinput-gtk/src/lib.rs:507
+msgid "Files received from {name}: {count}, ready to paste"
+msgstr "File ricevuti da {name}: {count}, pronti da incollare"
+
+#: rustinput-gtk/src/link_stats.rs:75
+msgid "Latency: measured by the computer that connects, once it has this one as a client"
+msgstr "Latenza: misurata dal computer che si connette, quando ha questo come client"
+
+#: rustinput-gtk/src/link_stats.rs:79
+msgid "Latency: no answer to the last pings"
+msgstr "Latenza: nessuna risposta agli ultimi ping"
+
+#: rustinput-gtk/src/link_stats.rs:84
+msgid "Latency {latest} · average {average} · highest {highest}"
+msgstr "Latenza {latest} · media {average} · massima {highest}"
+
+#: rustinput-gtk/src/link_stats.rs:95
+msgid "{count} ping lost"
+msgid_plural "{count} pings lost"
+msgstr[0] "{count} ping perso"
+msgstr[1] "{count} ping persi"
+
+#: rustinput-gtk/src/link_stats.rs:126
+msgid "Traffic {sent} {received} · since connected {total}"
+msgstr "Traffico {sent} {received} · dalla connessione {total}"
+
+#: rustinput-gtk/src/macos_status_item.rs:56
+msgid "Open RustInput"
+msgstr "Apri RustInput"
+
+#: rustinput-gtk/src/macos_status_item.rs:58
+msgid "Quit RustInput"
+msgstr "Esci da RustInput"
+
+#: rustinput-gtk/src/transfers.rs:35
+msgid "{count} file"
+msgid_plural "{count} files"
+msgstr[0] "{count} file"
+msgstr[1] "{count} file"
+
+#: rustinput-gtk/src/transfers.rs:41
+msgid "{s} s"
+msgstr "{s} s"
+
+#: rustinput-gtk/src/transfers.rs:42
+msgid "{m} min {s} s"
+msgstr "{m} min {s} s"
+
+#: rustinput-gtk/src/transfers.rs:43
+msgid "{h} h {m} min"
+msgstr "{h} h {m} min"
+
+#: rustinput-gtk/src/transfers.rs:56
+msgid "Preparing files for {name}"
+msgstr "Preparazione dei file per {name}"
+
+#: rustinput-gtk/src/transfers.rs:59
+msgid "Sending {files} to {name}"
+msgstr "Invio di {files} a {name}"
+
+#: rustinput-gtk/src/transfers.rs:62
+msgid "Receiving {files} from {name}"
+msgstr "Ricezione di {files} da {name}"
+
+#: rustinput-gtk/src/transfers.rs:64
+msgid "{files} sent to {name}"
+msgstr "Invio di {files} a {name} completato"
+
+#: rustinput-gtk/src/transfers.rs:65
+msgid "{files} from {name}: ready to paste"
+msgstr "{files} da {name}: da incollare"
+
+#: rustinput-gtk/src/transfers.rs:66
+msgid "{files} from {name}: pasted"
+msgstr "Hai incollato {files} da {name}"
+
+#: rustinput-gtk/src/transfers.rs:67
+msgid "{files} from {name}: not pasted"
+msgstr "Non hai incollato {files} da {name}"
+
+#: rustinput-gtk/src/transfers.rs:68
+msgid "Sending {files} to {name} failed"
+msgstr "Invio di {files} a {name} non riuscito"
+
+#: rustinput-gtk/src/transfers.rs:69
+msgid "Receiving {files} from {name} failed"
+msgstr "Ricezione di {files} da {name} non riuscita"
+
+#: rustinput-gtk/src/transfers.rs:79
+msgid "{size} in {time} ({speed}/s)"
+msgstr "{size} in {time} ({speed}/s)"
+
+#: rustinput-gtk/src/transfers.rs:89
+msgid "Listing the files…"
+msgstr "Preparazione dell'elenco dei file…"
+
+#: rustinput-gtk/src/transfers.rs:90
+msgid "{size}, waiting for the transfer before it"
+msgstr "{size}, in attesa del trasferimento precedente"
+
+#: rustinput-gtk/src/transfers.rs:95
+msgid "{done} of {size}"
+msgstr "{done} di {size}"
+
+#: rustinput-gtk/src/transfers.rs:112
+msgid "{time} left"
+msgstr "Tempo rimanente: {time}"
+
+#: rustinput-gtk/src/transfers.rs:120
+msgid "{took}. On the clipboard: paste them in a folder to move them there"
+msgstr "{took}. Negli appunti: incollali in una cartella per spostarli lì"
+
+#: rustinput-gtk/src/transfers.rs:124
+msgid "{size}, moved to where they were pasted. Nothing is left in the temporary folder"
+msgstr "{size}, spostati dove sono stati incollati. Nella cartella temporanea non resta nulla"
+
+#: rustinput-gtk/src/transfers.rs:129
+msgid "Removed from the temporary folder without being pasted"
+msgstr "Rimossi dalla cartella temporanea senza essere stati incollati"
+
+#: rustinput-gtk/src/transfers.rs:131
+msgid "{reason}, after {done} of {count} file"
+msgid_plural "{reason}, after {done} of {count} files"
+msgstr[0] "{reason}, dopo {done} file su {count}"
+msgstr[1] "{reason}, dopo {done} file su {count}"
+
+#: rustinput-gtk/src/transfers.rs:230
+msgid "Open log"
+msgstr "Apri registro"
+
+#: rustinput-gtk/src/transfers.rs:231
+msgid "Everything sent and received, with every file"
+msgstr "Tutto ciò che è stato inviato e ricevuto, file per file"
+
+#: rustinput-gtk/src/transfers.rs:238
+msgid "Remove unpasted files"
+msgstr "Rimuovi i file non incollati"
+
+#: rustinput-gtk/src/transfers.rs:239
+msgid "Removes the received files that were not pasted from the temporary folder"
+msgstr "Rimuove dalla cartella temporanea i file ricevuti che non sono stati incollati"
+
+#: rustinput-gtk/src/transfers.rs:399
+msgid "Open the temporary folder with the received files"
+msgstr "Apri la cartella temporanea con i file ricevuti"
+
+#: rustinput-gtk/src/tray/linux.rs:48
+msgid "Mouse and keyboard sharing"
+msgstr "Condivisione di mouse e tastiera"
+
+#: rustinput-gtk/src/tray/linux.rs:96
+msgid "Cancel transfers"
+msgstr "Annulla trasferimenti"
+
+#: rustinput-gtk/src/tray/linux.rs:111
+msgid "Send copied files automatically"
+msgstr "Invia automaticamente i file copiati"
+
+#: rustinput-gtk/src/tray/linux.rs:118
+msgid "File transfers…"
+msgstr "Trasferimenti di file…"
+
+#: rustinput-gtk/src/tray/linux.rs:129
+msgid "Show RustInput"
+msgstr "Mostra RustInput"
+
+#: rustinput-gtk/src/tray/mod.rs:79
+msgid "Update to RustInput {version}…"
+msgstr "Aggiorna a RustInput {version}…"
+
+#: rustinput-gtk/src/tray/mod.rs:211
+msgid "{files} waiting for {name}"
+msgstr "{files} in attesa di {name}"
+
+#: rustinput-gtk/src/tray/mod.rs:225
+msgid "{file} ({done}/{total}) to {name}: {percent}%"
+msgstr "{file} ({done}/{total}) a {name}: {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:226
+msgid "{file} ({done}/{total}) from {name}: {percent}%"
+msgstr "{file} ({done}/{total}) da {name}: {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:233
+msgid "{files} to {name}: {percent}%"
+msgstr "{files} a {name}: {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:234
+msgid "{files} from {name}: {percent}%"
+msgstr "{files} da {name}: {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:250
+msgid "{files} from {name}, ready to paste"
+msgstr "{files} da {name}, da incollare"
+
+#: rustinput-gtk/src/tray/mod.rs:259
+msgid "{files} from {name}, pasted"
+msgstr "Hai incollato {files} da {name}"
+
+#: rustinput-gtk/src/tray/mod.rs:268
+msgid "{files} from {name}, not pasted"
+msgstr "Non hai incollato {files} da {name}"
+
+#: rustinput-gtk/src/window/imp.rs:228
+msgid "Failed to relaunch RustInput"
+msgstr "Impossibile riavviare RustInput"
+
+#: rustinput-gtk/src/window.rs:106
+msgid "Undo changes"
+msgstr "Annulla modifiche"
+
+#: rustinput-gtk/src/window.rs:107
+msgid "Apply"
+msgstr "Applica"
+
+#: rustinput-gtk/src/window.rs:124
+msgid "Click a computer to see where the mouse leaves it and to choose whole edges."
+msgstr "Fai clic su un computer per vedere dove il mouse ne esce e per scegliere i bordi interi."
+
+#: rustinput-gtk/src/window.rs:139
+msgid "Connection settings"
+msgstr "Impostazioni della connessione"
+
+#: rustinput-gtk/src/window.rs:288
+msgid "Arrangement applied"
+msgstr "Disposizione applicata"
+
+#: rustinput-gtk/src/window.rs:294
+msgid "Arrangement sent to {name}"
+msgstr "Disposizione inviata a {name}"
+
+#: rustinput-gtk/src/window.rs:295
+msgid "Arrangement not sent to {name}: {error}"
+msgstr "Disposizione non inviata a {name}: {error}"
+
+#: rustinput-gtk/src/window.rs:304
+msgid "{name} changed the arrangement"
+msgstr "{name} ha cambiato la disposizione"
+
+#: rustinput-gtk/src/window.rs:318
+msgid "{names} does not touch a computer this one reaches: move it next to one"
+msgstr "{names} non tocca nessun computer raggiunto da questo: spostalo accanto a uno"
+
+#: rustinput-gtk/src/window.rs:323
+msgid "Made from the connections as they are now: arrange and apply"
+msgstr "Creata dalle connessioni attuali: disponi e applica"
+
+#: rustinput-gtk/src/window.rs:325
+msgid "Changes not applied yet"
+msgstr "Modifiche non ancora applicate"
+
+#: rustinput-gtk/src/window.rs:327
+msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
+msgstr "{names} non ha comunicato le sue dimensioni: aggiorna RustInput su quel computer alla 0.26.0 o successiva"
+
+#: rustinput-gtk/src/window.rs:332
+msgid "Applied on the computers of the arrangement"
+msgstr "Applicata ai computer della disposizione"
+
+#: rustinput-gtk/src/window.rs:352
+msgid "Where the mouse leaves {name}"
+msgstr "Dove il mouse esce da {name}"
+
+#: rustinput-gtk/src/window.rs:358
+msgid "Nowhere"
+msgstr "Da nessuna parte"
+
+#: rustinput-gtk/src/window.rs:359
+msgid "It touches no other computer"
+msgstr "Non tocca nessun altro computer"
+
+#: rustinput-gtk/src/window.rs:366
+msgid "Left edge: {name}"
+msgstr "Bordo sinistro: {name}"
+
+#: rustinput-gtk/src/window.rs:367
+msgid "Right edge: {name}"
+msgstr "Bordo destro: {name}"
+
+#: rustinput-gtk/src/window.rs:368
+msgid "Top edge: {name}"
+msgstr "Bordo superiore: {name}"
+
+#: rustinput-gtk/src/window.rs:369
+msgid "Bottom edge: {name}"
+msgstr "Bordo inferiore: {name}"
+
+#: rustinput-gtk/src/window.rs:372
+msgid "The whole edge of both, the place along it in proportion"
+msgstr "L'intero bordo di entrambi, con la posizione lungo il bordo in proporzione"
+
+#: rustinput-gtk/src/window.rs:374
+msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
+msgstr "{part}, dove si toccano; attiva per l'intero bordo di entrambi, in proporzione"
+
+#: rustinput-gtk/src/window.rs:379
+msgid "{part}, where they touch: the edge is shared"
+msgstr "{part}, dove si toccano: il bordo è condiviso"
+
+#: rustinput-gtk/src/window.rs:392
+msgid "Whole edge, in proportion"
+msgstr "Intero bordo, in proporzione"
+
+#: rustinput-gtk/src/window.rs:880
+msgid "As the system ({language})"
+msgstr "Come il sistema ({language})"
+
+#: rustinput-gtk/src/window.rs:903
+msgid "The windows change language when RustInput starts again"
+msgstr "Le finestre cambiano lingua al prossimo avvio di RustInput"
+
+#: rustinput-gtk/src/window.rs:906
+msgid "Restart now"
+msgstr "Riavvia ora"
+
+#: rustinput-gtk/src/window.rs:954
+msgid "Asking GitHub…"
+msgstr "Richiesta a GitHub…"
+
+#: rustinput-gtk/src/window.rs:956
+msgid "Could not ask GitHub: {error}"
+msgstr "Impossibile contattare GitHub: {error}"
+
+#: rustinput-gtk/src/window.rs:958
+msgid "RustInput {version} is out; this computer has {current}"
+msgstr "È disponibile RustInput {version}; questo computer ha la {current}"
+
+#: rustinput-gtk/src/window.rs:963
+msgid "{version} is the latest version"
+msgstr "{version} è l'ultima versione"
+
+#: rustinput-gtk/src/window.rs:965
+msgid "This computer has {current}"
+msgstr "Questo computer ha la {current}"
+
+#: rustinput-gtk/src/window.rs:974
+msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
+msgstr "RustInput deve cercare nuove versioni? Chiede a GitHub il numero dell'ultima versione all'avvio e ogni 12 ore; non viene inviato nulla su di te o sui tuoi computer."
+
+#: rustinput-gtk/src/window.rs:980
+msgid "No"
+msgstr "No"
+
+#: rustinput-gtk/src/window.rs:981
+msgid "Yes, look for them"
+msgstr "Sì, cercale"
+
+#: rustinput-gtk/src/window.rs:985
+msgid "RustInput {version} is out; this computer has {current}."
+msgstr "È disponibile RustInput {version}; questo computer ha la {current}."
+
+#: rustinput-gtk/src/window.rs:989
+msgid "Later"
+msgstr "Più tardi"
+
+#: rustinput-gtk/src/window.rs:1038
+msgid "The update starts: Windows asks for administrator rights"
+msgstr "L'aggiornamento sta per iniziare: Windows chiederà i privilegi di amministratore"
+
+#: rustinput-gtk/src/window.rs:1063
+msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
+msgstr "I file copiati nel gestore file seguono il puntatore. Se disattivato, vengono inviati solo i file scelti con «Copia in RustInput»"
+
+#: rustinput-gtk/src/window.rs:1069
+msgid "“Copy to RustInput” in the file manager"
+msgstr "«Copia in RustInput» nel gestore file"
+
+#: rustinput-gtk/src/window.rs:1070
+msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
+msgstr "Nel menu di file e cartelle: Explorer, Nemo e Nautilus"
+
+#: rustinput-gtk/src/window.rs:1073
+msgid "Show the transfers window"
+msgstr "Mostra la finestra dei trasferimenti"
+
+#: rustinput-gtk/src/window.rs:1074
+msgid "With the progress, when files are sent or received"
+msgstr "Con l'avanzamento, quando si inviano o ricevono file"
+
+#: rustinput-gtk/src/window.rs:1078
+msgid "Progress, history and log"
+msgstr "Avanzamento, cronologia e registro"
+
+#: rustinput-gtk/src/window.rs:1081
+msgid "Open"
+msgstr "Apri"
+
+#: rustinput-gtk/src/window.rs:1198
+msgid "Sharing the mouse and keyboard"
+msgstr "Condivisione del mouse e della tastiera"
+
+#: rustinput-gtk/src/window.rs:1199
+msgid "Capture and emulation are on"
+msgstr "Cattura ed emulazione attive"
+
+#: rustinput-gtk/src/window.rs:1202
+msgid "Input capture is off"
+msgstr "Cattura dell'input disattivata"
+
+#: rustinput-gtk/src/window.rs:1203
+msgid "Needed for every connection"
+msgstr "Necessaria per ogni connessione"
+
+#: rustinput-gtk/src/window.rs:1219
+msgid "Sending"
+msgstr "Invio"
+
+#: rustinput-gtk/src/window.rs:1220
+msgid "Past a screen edge, the mouse and keyboard go to the next computer"
+msgstr "Oltre un bordo dello schermo, mouse e tastiera passano al computer successivo"
+
+#: rustinput-gtk/src/window.rs:1233
+msgid "Receiving"
+msgstr "Ricezione"
+
+#: rustinput-gtk/src/window.rs:1234
+msgid "The other computers can control this one"
+msgstr "Gli altri computer possono controllare questo"
+
+#: rustinput-gtk/src/window.rs:1237
+msgid "Input emulation is off"
+msgstr "Emulazione dell'input disattivata"
+
+#: rustinput-gtk/src/window.rs:1238
+msgid "Needed for the other computers to control this one"
+msgstr "Necessaria perché gli altri computer possano controllare questo"
+
+#: rustinput-gtk/src/window.rs:1255
+msgid "Relaunch required"
+msgstr "Riavvio necessario"
+
+#: rustinput-gtk/src/window.rs:1256
+msgid "Accessibility granted: restart to turn on capture and emulation"
+msgstr "Accessibilità concessa: riavvia per attivare cattura ed emulazione"
+
+#: rustinput-gtk/src/window.rs:1259
+msgid "Relaunch"
+msgstr "Riavvia"
+
+#: rustinput-gtk/src/window.rs:1263
+msgid "Grant the Accessibility permission to turn it on"
+msgstr "Concedi il permesso Accessibilità per attivarla"
+
+#: rustinput-gtk/src/window.rs:1264
+msgid "Grant"
+msgstr "Concedi"
+
+#: rustinput-gtk/src/window.rs:1304
+msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
+msgstr "Quando questo computer cerca di connettersi, {name} chiede se autorizzarlo e mostra un codice. Inseriscilo qui perché i due computer si autorizzino a vicenda: per controllo, appunti e file."
+
+#: rustinput-gtk/src/window.rs:1310
+msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
+msgstr "Quando questo computer cerca di connettersi, l'altro computer chiede se autorizzarlo e mostra un codice. Inseriscilo qui perché i due computer si autorizzino a vicenda: per controllo, appunti e file."
+
+#: rustinput-gtk/src/window.rs:1351
+msgid "Authorize with {name}"
+msgstr "Autorizza con {name}"
+
+#: rustinput-gtk/src/window.rs:1352
+msgid "Authorize with the other computer"
+msgstr "Autorizza con l'altro computer"
+
+#: rustinput-gtk/src/window.rs:1389
+msgid "Authorizing…"
+msgstr "Autorizzazione in corso…"
+
+#: rustinput-gtk/src/window.rs:1469
+msgid "Update now"
+msgstr "Aggiorna ora"
+
+#: rustinput-gtk/src/window.rs:1471
+msgid "Download"
+msgstr "Scarica"
+
+#: src/files/menu.rs:70
+msgid "Copy to RustInput"
+msgstr "Copia in RustInput"
+
+#: src/files/menu.rs:71
+msgid "Send to the other computer, ready to be pasted there"
+msgstr "Invia all’altro computer, pronto per essere incollato lì"
+
+#: src/radial/mod.rs:94
+msgid "Go to {name}"
+msgstr "Vai a {name}"
+
+#: src/radial/mod.rs:98
+msgid "Send the clipboard"
+msgstr "Invia gli appunti"
+
+#: src/radial/mod.rs:102
+msgid "Send copied files"
+msgstr "Invia i file copiati"
+
+#: src/radial/mod.rs:107
+msgid "Free the pointer"
+msgstr "Libera il puntatore"
+
+#: src/radial/mod.rs:108
+msgid "Keep the pointer here"
+msgstr "Tieni il puntatore qui"
+
+#: src/radial/mod.rs:115
+msgid "Turn auto-send off"
+msgstr "Disattiva l'invio automatico"
+
+#: src/radial/mod.rs:116
+msgid "Turn auto-send on"
+msgstr "Attiva l'invio automatico"
+
+#: src/radial/mod.rs:130
+msgid "No files copied: copy files in the file manager first"
+msgstr "Nessun file copiato: prima copia dei file nel gestore file"
+
+#: src/radial/mod.rs:134
+msgid "Point at an action and let go"
+msgstr "Punta un'azione e rilascia"

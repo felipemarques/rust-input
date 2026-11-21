@@ -1,0 +1,11 @@
+[package]
+name = "rustinput-i18n"
+description = "The languages of RustInput: its translations, compiled into the program"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/felipemarques/rust-input"
+
+[dependencies]
+# the languages the system prefers, also on macOS and Windows
+sys-locale = "0.3.2"

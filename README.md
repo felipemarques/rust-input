@@ -31,6 +31,8 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
+| 🌍 In English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文 and 日本語 | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
+| ⬆️ Tells of new versions, if you want it to; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
@@ -49,12 +51,13 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁸ New in 0.22.0: tested in automated runs on Linux (X11), not yet by hand.
 ⁹ New in 0.26.0: tested in automated runs between two Linux (X11) computers, not yet by hand. On other systems than
 Windows and Linux (X11), the parts of an edge that lead nowhere are not a wall yet (see [Arrangement](#arrangement)).
+¹⁰ New in 0.27.0: tested in automated runs on Linux (X11), not yet by hand on Windows.
 
 <p align="center">
-  <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput, with the arrangement of two computers">
+  <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
   <br>
-  <em>The Computers page: the arrangement on top (see <a href="#arrangement">Arrangement</a>), this computer and the
-  connections below. Preferences and About are the other pages.</em>
+  <em>The Computers page: what the other computers need to reach this one, whether it sends and receives, and the
+  computers it connects to. The <a href="#arrangement">Arrangement</a>, the Preferences and About are the other pages.</em>
 </p>
 
 <p align="center">
@@ -207,15 +210,23 @@ the pointer keeps the previous behavior.
 
 ## Arrangement
 
-The Computers page shows the computers like the monitors in the display settings of a desktop: each one at the size of
+<p align="center">
+  <img src="screenshots/arrangement.png" width="820" alt="The Arrangement page: two computers side by side, the laptop selected">
+  <br>
+  <em>The Arrangement page: the laptop right of the office computer, where they touch drawn in the accent color, and
+  beside it where the mouse leaves the laptop.</em>
+</p>
+
+The Arrangement page shows the computers like the monitors in the display settings of a desktop: each one at the size of
 its desktop, with its monitors, its system, whether it is connected and which one the mouse is on. Drag a computer next
 to another one and it sticks to the nearest free edge, aligned with the ends, the middle and the monitors it comes
 close to (the arrow keys move the selected one, Space selects the next). The parts of the edges where two computers
 touch are drawn in the accent color: the mouse crosses there, keeps its place along the way, and the rest of the edge
 is a wall. Two computers can share an edge, each on its part of it (two laptops right of a tall monitor). A pair whose
 edges are not shared can also meet over the whole of both edges, the place along them in proportion, as RustInput did
-before arrangements: the switch next to that neighbor, under the arrangement. Clicking a computer opens its connection
-below, with its address and the code to authorize it.
+before arrangements: the switch next to that neighbor, beside the arrangement. Clicking a computer shows there where the
+mouse leaves it; **Connection settings** opens its connection on the Computers page, with its address and the code to
+authorize it.
 
 **Apply** sets up this computer and sends the arrangement to the others, over the encrypted TCP connection, to the
 computers that authorized this one only. Each finds itself in it and sets up its connections: the edge and the part of
@@ -230,6 +241,41 @@ computers describe themselves to each other (name, system, monitors) when the wi
 The part of an edge that leads nowhere is a wall on Windows and Linux (X11). With the other capture backends the pointer
 is let go there at once, which works but may flicker when pushed against it. Both computers need RustInput 0.26.0 or newer
 for the parts of the edges and for sending the arrangement; with an older one, the edges are whole on its side.
+
+## Languages
+
+<p align="center">
+  <img src="screenshots/languages.png" width="820" alt="RustInput in Brazilian Portuguese, Japanese, Arabic and Russian">
+  <br>
+  <em>The same window in Brazilian Portuguese, Japanese, Arabic (right to left) and Russian.</em>
+</p>
+
+RustInput speaks English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文（简体） and 日本語:
+the windows, the tray menu, the radial menu and "Copy to RustInput" in the file managers. It takes the language of the
+system, or the one picked in **Preferences > Language** (`language` in `config.toml`), which applies after **Restart now**.
+In Arabic the windows are laid out from right to left; the arrangement keeps the computers where they are.
+
+The translations are in [rustinput-i18n/po](rustinput-i18n/po), one gettext PO file per language, and are built into the
+program: a single executable has all of them. To correct one, edit its `msgstr` lines. After a text of the program
+changes, `cargo run -p rustinput-i18n --example update-po` brings the files up to date, and the tests fail until every
+language has every text (see [DOC.md](DOC.md#languages)). A new language is one more PO file and one line in
+[rustinput-i18n/src/lib.rs](rustinput-i18n/src/lib.rs).
+
+## Updates
+
+<p align="center">
+  <img src="screenshots/preferences.png" width="820" alt="The Preferences page: style, language, updates and file transfers">
+  <br>
+  <em>The Preferences page: style and language, whether to look for new versions, and the file transfers.</em>
+</p>
+
+The first time the window opens, it asks whether RustInput should look for new versions. If so, it asks GitHub for the
+number of the latest release when it starts and every 12 hours, and nothing else (see the
+[privacy policy](#privacy-policy)). When there is a newer one, a line under the header bar and an item of the tray menu
+say so. On Windows, **Update now** runs the updater the installer put next to RustInput (`update-rustinput.ps1`, the
+Start menu's "Update RustInput"), which asks for administrator rights once. Elsewhere, **Download** opens the release
+page. **Preferences > Updates** switches it on or off (`check_updates` in `config.toml`) and asks right away with
+**Check now**.
 
 ## Authorizing computers
 
@@ -499,7 +545,10 @@ or the person installing or operating it.
 
 RustInput sends keyboard, mouse, clipboard and file data only to the computers its user adds and authorizes, over
 encrypted connections on the local network. The installer and `update-rustinput.ps1` connect only to GitHub, to find
-and download releases of RustInput. RustInput collects no usage data and sends nothing anywhere else.
+and download releases of RustInput. If its user says yes when the window first asks (or switches it on in
+Preferences), RustInput asks GitHub for the number of its latest release when it starts and every 12 hours: one request
+for `github.com/felipemarques/rust-input/releases/latest`, which carries nothing about the user or the computers. It can
+be switched off at any time. RustInput collects no usage data and sends nothing anywhere else.
 
 ## Development
 
@@ -753,6 +802,14 @@ radial_menu = true
 # light or dark windows: "system" (as the system, the default), "light" or "dark";
 # also chosen in the window, under "appearance"
 theme = "system"
+
+# the language of the windows and menus: "en", "es", "fr", "it", "pt-BR", "ru",
+# "ar", "zh-CN" or "ja"; that of the system when missing
+language = "pt-BR"
+
+# ask GitHub for the latest version when starting and every 12 hours (the window
+# asks the first time when this is missing)
+check_updates = true
 
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic

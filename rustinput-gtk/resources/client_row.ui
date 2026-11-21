@@ -92,7 +92,7 @@
 						<!-- <property name="title" translatable="yes">hostname</property> -->
 						<property name="xalign">0.5</property>
 						<property name="valign">center</property>
-						<property name="placeholder-text">hostname</property>
+						<property name="placeholder-text" translatable="yes">Name or address</property>
 						<property name="width-chars">-1</property>
 					</object>
 				</child>
@@ -131,10 +131,10 @@
 		<child>
 			<object class="AdwActionRow" id="pair_row">
 				<property name="title" translatable="yes">Authorize with a code</property>
-				<property name="subtitle">The other computer shows a code when this one tries to connect: entering it here authorizes both computers on each other</property>
+				<property name="subtitle" translatable="yes">The other computer shows a code when this one tries to connect: entering it here authorizes both computers on each other</property>
 				<child>
 					<object class="GtkButton" id="pair_button">
-						<property name="label">Enter code…</property>
+						<property name="label" translatable="yes">Enter code…</property>
 						<property name="valign">center</property>
 					</object>
 				</child>

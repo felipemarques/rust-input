@@ -13,19 +13,19 @@
 
 mod chord;
 mod draw;
+mod fonts;
 #[cfg(windows)]
 mod windows;
 #[cfg(all(unix, not(target_os = "macos")))]
 mod x11;
 
-use std::{
-    path::PathBuf,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 
+use fonts::Fonts;
+use rustinput_i18n::{tr, trf};
 use rustinput_ipc::ClientHandle;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -80,143 +80,69 @@ impl Menu {
     }
 }
 
-/// The texts of the wheel, in Portuguese when the system speaks it and in
-/// English otherwise.
-pub(crate) struct Texts {
-    portuguese: bool,
-}
+/// The texts of the wheel, in the language of RustInput (`language`, else
+/// that of the system), see `rustinput-i18n`.
+#[derive(Default)]
+pub(crate) struct Texts;
 
 impl Texts {
     pub(crate) fn new() -> Self {
-        Self {
-            portuguese: system_language().starts_with("pt"),
-        }
-    }
-
-    fn pick(&self, en: &str, pt: &str) -> String {
-        if self.portuguese { pt } else { en }.to_owned()
+        Self
     }
 
     pub(crate) fn go_to(&self, name: &str) -> String {
-        if self.portuguese {
-            format!("Ir para {name}")
-        } else {
-            format!("Go to {name}")
-        }
+        trf("Go to {name}", &[("name", &name)])
     }
 
     pub(crate) fn send_clipboard(&self) -> String {
-        self.pick("Send the clipboard", "Enviar o clipboard")
+        tr("Send the clipboard").to_owned()
     }
 
     pub(crate) fn send_files(&self) -> String {
-        self.pick("Send copied files", "Enviar arquivos copiados")
+        tr("Send copied files").to_owned()
     }
 
     pub(crate) fn lock(&self, locked: bool) -> String {
         match locked {
-            true => self.pick("Free the pointer", "Soltar o cursor"),
-            false => self.pick("Keep the pointer here", "Prender o cursor aqui"),
+            true => tr("Free the pointer"),
+            false => tr("Keep the pointer here"),
         }
+        .to_owned()
     }
 
     pub(crate) fn send_copied(&self, on: bool) -> String {
         match on {
-            true => self.pick("Turn auto-send off", "Desligar envio automático"),
-            false => self.pick("Turn auto-send on", "Ligar envio automático"),
+            true => tr("Turn auto-send off"),
+            false => tr("Turn auto-send on"),
         }
+        .to_owned()
     }
 
     pub(crate) fn transfers(&self) -> String {
-        self.pick("File transfers", "Transferências")
+        tr("File transfers").to_owned()
     }
 
     pub(crate) fn window(&self) -> String {
-        self.pick("Open RustInput", "Abrir o RustInput")
+        tr("Open RustInput").to_owned()
     }
 
     pub(crate) fn no_files(&self) -> String {
-        self.pick(
-            "No files copied: copy files in the file manager first",
-            "Nenhum arquivo copiado: copie arquivos no gerenciador primeiro",
-        )
+        tr("No files copied: copy files in the file manager first").to_owned()
     }
 
     fn hint(&self) -> String {
-        self.pick("Point at an action and let go", "Aponte e solte as teclas")
+        tr("Point at an action and let go").to_owned()
     }
 }
 
-/// the language of the user interface, "pt_BR", "en", ...
-fn system_language() -> String {
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::Globalization::GetUserDefaultUILanguage;
-        // the primary language id of Portuguese
-        if unsafe { GetUserDefaultUILanguage() } & 0x3ff == 0x16 {
-            return "pt".into();
-        }
-        "en".into()
+/// The fonts for the labels in the language of RustInput, those of `cache`
+/// while it does not change: loaded again after it changed.
+fn fonts_now(cache: &mut Option<Arc<Fonts>>) -> Option<Arc<Fonts>> {
+    let language = rustinput_i18n::current();
+    if cache.as_ref().is_none_or(|f| f.language != language) {
+        *cache = Fonts::load(language).map(Arc::new);
     }
-    #[cfg(not(windows))]
-    {
-        ["LC_ALL", "LC_MESSAGES", "LANG"]
-            .iter()
-            .filter_map(|v| std::env::var(v).ok())
-            .find(|v| !v.is_empty())
-            .unwrap_or_default()
-    }
-}
-
-/// a font of the system for the labels, `None` if none was found
-fn load_font() -> Option<fontdue::Font> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    #[cfg(windows)]
-    {
-        let fonts = std::env::var_os("WINDIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(r"C:\Windows"))
-            .join("Fonts");
-        for name in ["segoeuib.ttf", "segoeui.ttf", "arialbd.ttf", "arial.ttf"] {
-            candidates.push(fonts.join(name));
-        }
-    }
-    #[cfg(not(windows))]
-    {
-        // the font the desktop uses
-        if let Ok(out) = std::process::Command::new("fc-match")
-            .args(["-f", "%{file}", "sans:bold"])
-            .output()
-        {
-            if let Ok(path) = String::from_utf8(out.stdout) {
-                candidates.push(PathBuf::from(path));
-            }
-        }
-        for path in [
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/ubuntu/Ubuntu-B.ttf",
-            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-            "/System/Library/Fonts/Helvetica.ttc",
-        ] {
-            candidates.push(PathBuf::from(path));
-        }
-    }
-    for path in candidates {
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
-        match fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()) {
-            Ok(font) => {
-                log::debug!("radial menu: font {path:?}");
-                return Some(font);
-            }
-            Err(e) => log::debug!("radial menu: font {path:?}: {e}"),
-        }
-    }
-    log::warn!("radial menu: no font found, the actions show without names");
-    None
+    cache.clone()
 }
 
 /// An open wheel: what it shows and where, shared by the platforms.
@@ -226,11 +152,11 @@ struct Wheel {
     selected: Option<usize>,
     scale: f32,
     hint: String,
-    font: Option<Arc<fontdue::Font>>,
+    font: Option<Arc<Fonts>>,
 }
 
 impl Wheel {
-    fn new(items: Vec<Item>, scale: f32, texts: &Texts, font: Option<Arc<fontdue::Font>>) -> Self {
+    fn new(items: Vec<Item>, scale: f32, texts: &Texts, font: Option<Arc<Fonts>>) -> Self {
         let labels = items.iter().map(|i| i.label.clone()).collect();
         Self {
             items,
@@ -331,7 +257,7 @@ mod tests {
                 action: Action::SendClipboard,
             },
         ];
-        let texts = Texts { portuguese: true };
+        let texts = Texts;
         let mut wheel = Wheel::new(items, 1.0, &texts, None);
         assert!(!wheel.point(1.0, 1.0), "the middle picks nothing");
         assert_eq!(wheel.chosen(), None);
@@ -347,12 +273,9 @@ mod tests {
     }
 
     #[test]
-    fn texts_in_both_languages() {
-        let pt = Texts { portuguese: true };
-        let en = Texts { portuguese: false };
-        assert_eq!(pt.go_to("xeon"), "Ir para xeon");
-        assert_eq!(en.go_to("xeon"), "Go to xeon");
-        assert_eq!(pt.lock(false), "Prender o cursor aqui");
-        assert_eq!(en.lock(true), "Free the pointer");
+    fn texts_in_english() {
+        let texts = Texts;
+        assert_eq!(texts.go_to("xeon"), "Go to xeon");
+        assert_eq!(texts.lock(true), "Free the pointer");
     }
 }

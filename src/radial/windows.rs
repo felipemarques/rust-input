@@ -46,9 +46,9 @@ use windows_sys::Win32::{
 };
 
 use super::{
-    Action, Menu, Texts, Wheel,
+    Action, Fonts, Menu, Texts, Wheel,
     chord::{Chord, Key, Step},
-    load_font,
+    fonts_now,
 };
 
 /// posted by the hook: keys are waiting in [`KEYS`]
@@ -75,7 +75,7 @@ struct State {
     menu: Menu,
     chosen: UnboundedSender<Action>,
     texts: Texts,
-    font: Option<Arc<fontdue::Font>>,
+    font: Option<Arc<Fonts>>,
     /// the interval the timer runs at, if it runs
     timer: Option<u32>,
 }
@@ -140,7 +140,7 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Str
                 menu,
                 chosen,
                 texts: Texts::new(),
-                font: load_font().map(Arc::new),
+                font: None,
                 timer: None,
             })
         });
@@ -272,7 +272,12 @@ impl State {
             GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y);
             (info.rcMonitor, dpi_x)
         };
-        let wheel = Wheel::new(items, dpi as f32 / 96.0, &self.texts, self.font.clone());
+        let wheel = Wheel::new(
+            items,
+            dpi as f32 / 96.0,
+            &self.texts,
+            fonts_now(&mut self.font),
+        );
         let size = wheel.size() as i32;
         // centered on the pointer, within its monitor
         let x = (start.x - size / 2).clamp(area.left, (area.right - size).max(area.left));
