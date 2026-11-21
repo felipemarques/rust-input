@@ -16,3 +16,12 @@ row.fingerprint .subtitle {
     font-family: monospace;
     font-size: 0.85em;
 }
+
+/* the version next to the name on the page of the computers */
+label.version-badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background-color: alpha(currentColor, 0.1);
+    font-size: 0.85em;
+    font-weight: bold;
+}

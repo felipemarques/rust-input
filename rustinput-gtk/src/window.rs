@@ -51,6 +51,10 @@ impl Window {
         let version = crate::APP_VERSION.get().copied().unwrap_or_default();
         window.set_title(Some(&format!("RustInput {version}")));
         window.imp().version_row.set_subtitle(&crate::version_str());
+        let imp = window.imp();
+        imp.version_label.set_text(version);
+        imp.version_label
+            .set_tooltip_text(Some(&format!("Version {}", crate::version_str())));
         if let Some(dir) = rustinput_ipc::log_dir().filter(|dir| dir.is_dir()) {
             let row = &window.imp().logs_row;
             row.set_subtitle(&dir.display().to_string());

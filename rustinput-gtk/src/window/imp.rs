@@ -62,6 +62,9 @@ pub struct Window {
     pub emulation_status_icon: TemplateChild<Image>,
     #[template_child]
     pub logs_row: TemplateChild<ActionRow>,
+    /// the version next to the name, always in sight
+    #[template_child]
+    pub version_label: TemplateChild<Label>,
     /// the certificate fingerprint of this computer, as copied (the row shows
     /// it in groups)
     pub fingerprint: RefCell<String>,
