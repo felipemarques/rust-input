@@ -9,17 +9,23 @@ use std::thread;
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::mpsc::error::TrySendError;
-use windows::Win32::Foundation::{FALSE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM};
+use windows::Win32::Foundation::{
+    FALSE, GENERIC_ALL, HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::{
     DEVMODEW, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICEW, ENUM_CURRENT_SETTINGS,
     EnumDisplayDevicesW, EnumDisplaySettingsW,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::StationsAndDesktops::{
+    CloseDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS, GetThreadDesktop,
+    GetUserObjectInformationW, HDESK, OpenInputDesktop, SetThreadDesktop, UOI_NAME,
+};
 use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
     GetCurrentThread, GetCurrentThreadId, SetThreadPriority, THREAD_PRIORITY_HIGHEST,
 };
-use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook};
+use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
 };
@@ -27,15 +33,15 @@ use windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
 use windows::core::{PCWSTR, w};
 
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, CreateWindowExW, DispatchMessageW, EDD_GET_DEVICE_INTERFACE_NAME,
-    EVENT_SYSTEM_FOREGROUND, GetCursorPos, GetForegroundWindow, GetMessageW, HHOOK, HOOKPROC,
-    KBDLLHOOKSTRUCT, LLKHF_EXTENDED, MSG, MSLLHOOKSTRUCT, PostThreadMessageW, RegisterClassW,
-    SetCursorPos, SetTimer, SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOW_STYLE, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-    WM_DISPLAYCHANGE, WM_KEYDOWN, WM_KEYUP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN,
-    WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE, WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP,
-    WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_USER, WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
-    WNDPROC,
+    CallNextHookEx, CreateWindowExW, DestroyWindow, DispatchMessageW,
+    EDD_GET_DEVICE_INTERFACE_NAME, EVENT_SYSTEM_FOREGROUND, GetCursorPos, GetForegroundWindow,
+    GetMessageW, HHOOK, HOOKPROC, KBDLLHOOKSTRUCT, KillTimer, LLKHF_EXTENDED, MSG, MSLLHOOKSTRUCT,
+    PostThreadMessageW, RegisterClassW, SetCursorPos, SetTimer, SetWindowsHookExW,
+    TranslateMessage, UnhookWindowsHookEx, WH_KEYBOARD_LL, WH_MOUSE_LL, WINDOW_STYLE,
+    WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_DISPLAYCHANGE, WM_KEYDOWN, WM_KEYUP,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MBUTTONDOWN, WM_MBUTTONUP, WM_MOUSEHWHEEL, WM_MOUSEMOVE,
+    WM_MOUSEWHEEL, WM_RBUTTONDOWN, WM_RBUTTONUP, WM_SYSKEYDOWN, WM_SYSKEYUP, WM_TIMER, WM_USER,
+    WM_XBUTTONDOWN, WM_XBUTTONUP, WNDCLASSW,
 };
 
 use input_event::{
@@ -135,6 +141,8 @@ enum RequestType {
     /// start capturing without crossing, the position of the client travels
     /// in the LPARAM (see [`position_code`])
     Enter = 4,
+    /// another desktop gets the input: move there (see [`follow_desktop`])
+    FollowDesktop = 5,
 }
 
 fn position_code(pos: Position) -> isize {
@@ -317,6 +325,15 @@ thread_local! {
     static LOGGED: RefCell<HashMap<String, Instant>> = RefCell::new(HashMap::new());
     /// events that did not fit into the channel since the last report
     static DROPPED: Cell<u64> = const { Cell::new(0) };
+    /// the window of the timer and of the display changes, and the hook of
+    /// the window in front, on the desktop of the thread
+    static ATTACHED: Cell<Option<(HWND, HWINEVENTHOOK)>> = const { Cell::new(None) };
+    /// the desktop the thread moved to, closed when it moves on
+    static DESKTOP: Cell<Option<HDESK>> = const { Cell::new(None) };
+    /// the name of the desktop of the thread
+    static DESKTOP_NAME: RefCell<String> = RefCell::new("Default".to_owned());
+    /// a move to another desktop was asked for and not done yet
+    static FOLLOWING: Cell<bool> = const { Cell::new(false) };
 }
 
 /// What the watchdog saw at its previous look, see [`watchdog`].
@@ -400,7 +417,13 @@ fn start_routine(
         cnd.notify_one();
     }
 
-    let window_proc: WNDPROC = Some(window_proc);
+    // the desktop the thread starts on, the one of the process
+    if let Some(name) = unsafe { GetThreadDesktop(GetCurrentThreadId()) }
+        .ok()
+        .and_then(desktop_name)
+    {
+        DESKTOP_NAME.replace(name);
+    }
 
     unsafe {
         // the pointer, the displays and the hooks in physical pixels
@@ -413,79 +436,18 @@ fn start_routine(
     }
     process::keep_full_speed();
 
-    /* register hooks */
-    install_hooks().expect("could not watch the keyboard and the mouse");
+    attach();
     log::info!(
-        "watching the keyboard and the mouse, RustInput {} as administrator",
-        if process::runs_as_administrator() {
-            "runs"
+        "watching the keyboard and the mouse, RustInput {}",
+        if process::runs_as_system() {
+            "runs as SYSTEM: also on the lock screen, the screen to log on and the prompts \
+             of User Account Control"
+        } else if process::runs_as_administrator() {
+            "runs as administrator"
         } else {
-            "does not run"
+            "does not run as administrator"
         }
     );
-
-    let instance = unsafe { GetModuleHandleW(None).unwrap() };
-    let instance = instance.into();
-    let window_class: WNDCLASSW = WNDCLASSW {
-        lpfnWndProc: window_proc,
-        hInstance: instance,
-        lpszClassName: w!("rustinput-message-window-class"),
-        ..Default::default()
-    };
-
-    static WINDOW_CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
-    if WINDOW_CLASS_REGISTERED
-        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        .is_ok()
-    {
-        /* register window class if not yet done so */
-        unsafe {
-            let ret = RegisterClassW(&window_class);
-            if ret == 0 {
-                panic!("RegisterClassW");
-            }
-        }
-    }
-
-    /* window is used ro receive WM_DISPLAYCHANGE messages, and the timer of
-     * the watchdog */
-    let window = unsafe {
-        CreateWindowExW(
-            Default::default(),
-            w!("rustinput-message-window-class"),
-            w!("rustinput-msg-window"),
-            WINDOW_STYLE::default(),
-            0,
-            0,
-            0,
-            0,
-            None,
-            None,
-            Some(instance),
-            None,
-        )
-        .expect("CreateWindowExW")
-    };
-    unsafe {
-        if SetTimer(Some(window), WATCHDOG_TIMER, WATCHDOG_PERIOD, None) == 0 {
-            log::warn!("could not start the watchdog of the hooks");
-        }
-        // which program is in front: Windows keeps the keyboard going to
-        // one run as administrator from the hooks
-        let hook = SetWinEventHook(
-            EVENT_SYSTEM_FOREGROUND,
-            EVENT_SYSTEM_FOREGROUND,
-            None,
-            Some(foreground_changed),
-            0,
-            0,
-            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
-        );
-        if hook.is_invalid() {
-            log::warn!("could not follow the window in front");
-        }
-        in_front(GetForegroundWindow());
-    }
 
     /* run message loop */
     while let Some(msg) = get_msg() {
@@ -505,6 +467,7 @@ fn start_routine(
                         enter(pos);
                     }
                 }
+                x if x == RequestType::FollowDesktop as usize => follow_desktop(),
                 x if x == RequestType::ClientUpdate as usize => {
                     let requests = {
                         let mut res = vec![];
@@ -747,6 +710,172 @@ unsafe extern "system" fn window_proc(
     LRESULT(1)
 }
 
+/// The window of the timer and of the display changes, the hook of the
+/// window in front and the hooks of the keyboard and the mouse, on the
+/// desktop of the thread.
+fn attach() {
+    let instance = unsafe { GetModuleHandleW(None).unwrap() };
+    let instance = instance.into();
+    let window_class: WNDCLASSW = WNDCLASSW {
+        lpfnWndProc: Some(window_proc),
+        hInstance: instance,
+        lpszClassName: w!("rustinput-message-window-class"),
+        ..Default::default()
+    };
+
+    static WINDOW_CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
+    if WINDOW_CLASS_REGISTERED
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_ok()
+    {
+        /* register window class if not yet done so */
+        unsafe {
+            let ret = RegisterClassW(&window_class);
+            if ret == 0 {
+                panic!("RegisterClassW");
+            }
+        }
+    }
+
+    /* window is used ro receive WM_DISPLAYCHANGE messages, and the timer of
+     * the watchdog */
+    let window = unsafe {
+        CreateWindowExW(
+            Default::default(),
+            w!("rustinput-message-window-class"),
+            w!("rustinput-msg-window"),
+            WINDOW_STYLE::default(),
+            0,
+            0,
+            0,
+            0,
+            None,
+            None,
+            Some(instance),
+            None,
+        )
+        .expect("CreateWindowExW")
+    };
+    let hook = unsafe {
+        if SetTimer(Some(window), WATCHDOG_TIMER, WATCHDOG_PERIOD, None) == 0 {
+            log::warn!("could not start the watchdog of the hooks");
+        }
+        // which program is in front: Windows keeps the keyboard going to
+        // one run as administrator from the hooks
+        let hook = SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,
+            EVENT_SYSTEM_FOREGROUND,
+            None,
+            Some(foreground_changed),
+            0,
+            0,
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        );
+        if hook.is_invalid() {
+            log::warn!("could not follow the window in front");
+        }
+        in_front(GetForegroundWindow());
+        hook
+    };
+    ATTACHED.set(Some((window, hook)));
+    if let Err(e) = install_hooks() {
+        log::error!("could not watch the keyboard and the mouse: {e}");
+    }
+}
+
+/// undoes [`attach`]: a thread can only move to another desktop without
+/// windows and hooks
+fn detach() {
+    if let Some((mouse, keyboard)) = HOOKS.take() {
+        unsafe {
+            let _ = UnhookWindowsHookEx(mouse);
+            let _ = UnhookWindowsHookEx(keyboard);
+        }
+    }
+    if let Some((window, hook)) = ATTACHED.take() {
+        unsafe {
+            let _ = KillTimer(Some(window), WATCHDOG_TIMER);
+            if !hook.is_invalid() {
+                let _ = UnhookWinEvent(hook);
+            }
+            let _ = DestroyWindow(window);
+        }
+    }
+}
+
+/// the name of a desktop: "Default", or "Winlogon" for the lock screen
+fn desktop_name(desktop: HDESK) -> Option<String> {
+    let mut name = [0u16; 64];
+    let mut needed = 0;
+    unsafe {
+        GetUserObjectInformationW(
+            HANDLE(desktop.0),
+            UOI_NAME,
+            Some(name.as_mut_ptr().cast()),
+            (name.len() * 2) as u32,
+            Some(&mut needed),
+        )
+    }
+    .ok()?;
+    let end = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+    Some(String::from_utf16_lossy(&name[..end]))
+}
+
+/// The desktop that gets the input, with its name, when that is not the one
+/// of this thread. Opening the desktop of the lock screen takes SYSTEM.
+fn other_input_desktop() -> Option<(HDESK, String)> {
+    let input = unsafe {
+        OpenInputDesktop(
+            DESKTOP_CONTROL_FLAGS(0),
+            false,
+            DESKTOP_ACCESS_FLAGS(GENERIC_ALL.0),
+        )
+    }
+    .ok()?;
+    match desktop_name(input) {
+        Some(name) if DESKTOP_NAME.with_borrow(|current| *current != name) => Some((input, name)),
+        _ => {
+            let _ = unsafe { CloseDesktop(input) };
+            None
+        }
+    }
+}
+
+/// Moves the thread to the desktop that gets the input: the lock screen,
+/// the screen to log on or a prompt of User Account Control (Winlogon), and
+/// back. Only RustInput started as SYSTEM by its service may open them.
+/// Capturing stops: the keyboard and the mouse of this computer do not go
+/// to another one from the lock screen.
+fn follow_desktop() {
+    FOLLOWING.set(false);
+    let Some((input, name)) = other_input_desktop() else {
+        return;
+    };
+    if let Some(pos) = ACTIVE_CLIENT.get() {
+        give_back(pos, &format!("the desktop {name} of Windows shows now"));
+    }
+    detach();
+    match unsafe { SetThreadDesktop(input) } {
+        Ok(()) => {
+            if let Some(left) = DESKTOP.replace(Some(input)) {
+                let _ = unsafe { CloseDesktop(left) };
+            }
+            let pointer =
+                cursor_pos().map_or("unknown".to_owned(), |(x, y)| format!("at ({x}, {y})"));
+            log::info!(
+                "following the input to the desktop {name} of Windows, the pointer {pointer}"
+            );
+            DESKTOP_NAME.replace(name);
+        }
+        Err(e) => {
+            log::warn!("could not follow the input to the desktop {name} of Windows: {e}");
+            let _ = unsafe { CloseDesktop(input) };
+        }
+    }
+    WATCH.replace(Watch::default());
+    attach();
+}
+
 fn install_hooks() -> windows::core::Result<()> {
     let mouse_proc: HOOKPROC = Some(mouse_proc);
     let kybrd_proc: HOOKPROC = Some(kybrd_proc);
@@ -797,6 +926,17 @@ fn cursor_pos() -> Option<(i32, i32)> {
 /// Interface Privilege Isolation); otherwise the hooks were removed and are
 /// installed again.
 fn watchdog() {
+    if !FOLLOWING.get() {
+        if let Some((input, _)) = other_input_desktop() {
+            let _ = unsafe { CloseDesktop(input) };
+            // outside of the procedure of the window, which goes away
+            FOLLOWING.set(true);
+            let request = WPARAM(RequestType::FollowDesktop as usize);
+            let _ =
+                unsafe { PostThreadMessageW(GetCurrentThreadId(), WM_USER, request, LPARAM(0)) };
+            return;
+        }
+    }
     if let Some(pos) = WATCH.with_borrow(|w| w.release_pending) {
         if try_send_event(pos, CaptureEvent::Released).is_ok() {
             WATCH.with_borrow_mut(|w| w.release_pending = None);

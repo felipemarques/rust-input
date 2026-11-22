@@ -9,7 +9,10 @@
 #   4. update-rustinput.ps1 -Version 0.23.1: back to the zip
 #   5. update-rustinput.ps1 -Setup: forward with the installer
 #   6. update-rustinput.ps1 -Restore: back to the copy kept of 0.23.1
-#   7. forward again, then the uninstaller of Settings > Apps
+#   7. forward again, then the uninstaller of Settings > Apps; before it,
+#      the lock screen (0.31.0): the daemon runs as SYSTEM for the
+#      administrator at the screen, as that user with login_screen = false,
+#      and follows the input to the lock screen once it is locked
 #   8. update-rustinput.ps1 -Uninstall with nothing installed
 param(
     [Parameter(Mandatory = $true)][string]$Setup
@@ -37,6 +40,10 @@ $userPrograms = [Environment]::GetFolderPath('Programs')
 $commonPrograms = [Environment]::GetFolderPath('CommonPrograms')
 $commonStartup = [Environment]::GetFolderPath('CommonStartup')
 $logs = Join-Path $env:SystemRoot 'Logs\RustInput'
+# the runner is the user at the screen: the daemon uses its folders
+$config = Join-Path $env:LOCALAPPDATA 'rustinput\config.toml'
+$daemonLog = Join-Path $env:LOCALAPPDATA 'rustinput\logs\daemon.log'
+$remembered = 'HKLM:\SOFTWARE\RustInput'
 
 Write-Host "this build: $version, from $setupPath"
 whoami
@@ -116,7 +123,10 @@ function Test-Daemon([string]$Label, [string]$Expected) {
     $owner = Invoke-CimMethod -InputObject $daemon[0] -MethodName GetOwner
     Write-Host ('daemon: PID {0}, session {1}, user {2}\{3}, {4}' -f $daemon[0].ProcessId, $daemon[0].SessionId, $owner.Domain, $owner.User, $daemon[0].ExecutablePath)
     if ($daemon[0].ExecutablePath -ne $exe) { Fail "${Label}: the daemon runs $($daemon[0].ExecutablePath)" }
-    $log = "C:\Users\$($owner.User)\AppData\Local\rustinput\logs\daemon.log"
+    # for an administrator, as SYSTEM since 0.31.0, with the folders of the user
+    $user = if ([version]$Expected -ge [version]'0.31.0') { 'SYSTEM' } else { $env:USERNAME }
+    if ($owner.User -ne $user) { Fail "${Label}: the daemon runs as $($owner.User), not $user" }
+    $log = $daemonLog
     $line = "RustInput $Expected daemon, with administrator rights"
     $deadline = (Get-Date).AddSeconds(15)
     $found = $false
@@ -128,7 +138,8 @@ function Test-Daemon([string]$Label, [string]$Expected) {
         Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Out-Host
         Fail "${Label}: no '$line' in $log"
     }
-    Stop-Process -Id $daemon[0].ProcessId -Force
+    # taskkill: a daemon of SYSTEM takes the right to debug, which it turns on
+    cmd /c "taskkill.exe /F /PID $($daemon[0].ProcessId) 2>&1" | Out-Host
     $deadline = (Get-Date).AddSeconds(15)
     $again = @()
     while ($again.Count -eq 0 -and (Get-Date) -lt $deadline) {
@@ -187,11 +198,60 @@ Test-Installed '6' $old $false
 $kept = Get-Version (Join-Path $previous 'rustinput.exe')
 if ($kept -ne $version) { Fail "6: the copy kept in $previous is '$kept', not $version" }
 
+# the daemon runs as `User` within `Seconds`
+function Wait-DaemonOwner([string]$Label, [string]$User, [int]$Seconds = 30) {
+    $deadline = (Get-Date).AddSeconds($Seconds)
+    do {
+        Start-Sleep -Milliseconds 500
+        $owners = @(Get-Daemon | ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User })
+    } while (($owners.Count -ne 1 -or $owners[0] -ne $User) -and (Get-Date) -lt $deadline)
+    if ($owners.Count -ne 1 -or $owners[0] -ne $User) {
+        Fail "${Label}: the daemon runs as '$($owners -join ', ')', not $User"
+    } else {
+        Write-Host "  [ok] the daemon runs as $User"
+    }
+}
+
+# what the service remembers for the screen to log on
+function Get-Remembered {
+    return [string](Get-ItemProperty -LiteralPath $remembered -Name LoginScreenLocalAppData -ErrorAction SilentlyContinue).LoginScreenLocalAppData
+}
+
 Write-Stage '7. forward again, then the uninstaller of Settings > Apps'
 Invoke-Updater @('-Setup', $setupPath)
 Test-Installed '7' $version $true
-$settings = @(Get-Daemon | ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User } |
-    ForEach-Object { "C:\Users\$_\AppData\Local\rustinput" } | Where-Object { Test-Path -LiteralPath $_ })
+
+Write-Stage '7a. the lock screen: as SYSTEM, as the user with login_screen = false'
+Wait-DaemonOwner '7a' 'SYSTEM'
+if ((Get-Remembered) -ne $env:LOCALAPPDATA) { Fail "7a: remembered for the screen to log on: '$(Get-Remembered)', not $env:LOCALAPPDATA" }
+$before = if (Test-Path -LiteralPath $config) { Get-Content -LiteralPath $config -Raw } else { '' }
+# before any table of the file, in UTF-8 without the mark PowerShell 5 puts
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $config) | Out-Null
+[System.IO.File]::WriteAllText($config, "login_screen = false`r`n" + $before)
+Wait-DaemonOwner '7a, login_screen = false' $env:USERNAME
+if (Get-Remembered) { Fail "7a: with login_screen = false the service still remembers '$(Get-Remembered)'" }
+if ((Get-Content -LiteralPath $config -Raw) -notmatch '(?m)^login_screen = false') { Fail '7a: login_screen = false left the configuration' }
+[System.IO.File]::WriteAllText($config, $before)
+Wait-DaemonOwner '7a, login_screen again' 'SYSTEM'
+
+Write-Stage '7b. locked: the daemon follows the input to the lock screen'
+$line = 'following the input to the desktop Winlogon of Windows'
+rundll32.exe user32.dll,LockWorkStation
+$deadline = (Get-Date).AddSeconds(20)
+$found = $false
+while (-not $found -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+    $found = (Test-Path -LiteralPath $daemonLog) -and (Select-String -LiteralPath $daemonLog -SimpleMatch $line -Quiet)
+}
+Get-Content -LiteralPath $daemonLog -Tail 15 -ErrorAction SilentlyContinue | Out-Host
+if ($found) {
+    Write-Host "  [ok] $((Select-String -LiteralPath $daemonLog -SimpleMatch $line | Select-Object -Last 1).Line)"
+} else {
+    Fail "7b: no '$line' in $daemonLog"
+}
+
+Write-Stage '7c. the uninstaller of Settings > Apps'
+$settings = @(Join-Path $env:LOCALAPPDATA 'rustinput') | Where-Object { Test-Path -LiteralPath $_ }
 $uninstaller = ([string](Get-ItemProperty -LiteralPath $key).UninstallString).Trim('"')
 $uninstallLog = Join-Path $env:RUNNER_TEMP 'uninstall.log'
 Start-Process -FilePath $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ('/LOG="{0}"' -f $uninstallLog) -Wait
@@ -222,6 +282,7 @@ Test-Exists '7' $previous $false
 Test-Exists '7' $logs $false
 Test-Exists '7' (Join-Path $commonPrograms 'RustInput.lnk') $false
 Test-Exists '7' (Join-Path $commonStartup 'RustInput.lnk') $false
+Test-Exists '7' $remembered $false
 foreach ($dir in $settings) { Test-Exists '7, the settings stay' $dir $true }
 
 Write-Stage '8. update-rustinput.ps1 -Uninstall with nothing installed'

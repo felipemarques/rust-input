@@ -86,6 +86,11 @@ struct ConfigToml {
     /// here and no other computer controls it (from the tray icon, the
     /// window or the radial menu)
     paused: Option<bool>,
+    /// Windows: for an administrator, the service starts RustInput as
+    /// SYSTEM, which also works on the lock screen, the screen to log on and
+    /// the prompts of User Account Control (on when not set). The service
+    /// reads it (`windows_supervisor`); kept here so it stays in the file.
+    login_screen: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
     /// the arrangement of the computers, the same on all of them (see

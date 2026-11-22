@@ -519,6 +519,26 @@ impl CaptureTask {
             self.entering = false;
             return capture.release().await;
         }
+        // The lock screen, the screen to log on or a prompt of User Account
+        // Control of Windows: the keyboard and the mouse of this computer do
+        // not go to another one from there. Giving the pointer back to the
+        // computer controlling this one (`EnterOnly`) still goes through.
+        if event == CaptureEvent::Begin
+            && self.get_type(handle) == CaptureType::Default
+            && crate::lock::secure_desktop()
+        {
+            self.entering = false;
+            const DUR: Duration = Duration::from_secs(5);
+            debounce!(
+                PREV_SECURE_LOG,
+                DUR,
+                log::info!(
+                    "the lock screen of Windows (or a prompt of User Account Control) shows: \
+                     the edge is a wall"
+                )
+            );
+            return capture.release().await;
+        }
         // a client that answers but takes no input (paused there, or
         // without input emulation): the edge is a wall, rather than the
         // pointer going there and coming back at once
@@ -712,6 +732,7 @@ thread_local! {
     static PREV_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
     static PREV_OUTSIDE_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
     static PREV_REFUSED_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
+    static PREV_SECURE_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -216,7 +216,10 @@ async fn run_service(config: Config) -> Result<(), ServiceError> {
     log::info!(
         "RustInput {} daemon, {}",
         env!("CARGO_PKG_VERSION"),
-        if windows_supervisor::runs_as_administrator() {
+        if windows_supervisor::runs_as_system() {
+            "with administrator rights, as SYSTEM: also on the lock screen, the screen to log on \
+             and the prompts of User Account Control"
+        } else if windows_supervisor::runs_as_administrator() {
             "with administrator rights"
         } else {
             "without administrator rights"

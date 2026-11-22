@@ -8,7 +8,10 @@ use std::{ffi::c_void, sync::OnceLock};
 use windows::{
     Win32::{
         Foundation::{CloseHandle, HANDLE, HWND, POINT},
-        Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation},
+        Security::{
+            GetTokenInformation, IsWellKnownSid, TOKEN_ELEVATION, TOKEN_QUERY, TOKEN_USER,
+            TokenElevation, TokenUser, WinLocalSystemSid,
+        },
         System::Threading::{
             GetCurrentProcess, GetCurrentProcessId, OpenProcess, OpenProcessToken,
             PROCESS_NAME_WIN32, PROCESS_POWER_THROTTLING_CURRENT_VERSION,
@@ -38,7 +41,7 @@ impl Program {
     /// whether Windows keeps the input going to this program from the hooks
     /// of RustInput
     pub(super) fn out_of_reach(&self) -> bool {
-        !runs_as_administrator() && self.elevated != Some(false)
+        !runs_as_administrator() && !runs_as_system() && self.elevated != Some(false)
     }
 
     /// "Taskmgr.exe, run as administrator"
@@ -133,6 +136,38 @@ fn elevated(process: HANDLE) -> Option<bool> {
 pub(super) fn runs_as_administrator() -> bool {
     static ELEVATED: OnceLock<bool> = OnceLock::new();
     *ELEVATED.get_or_init(|| elevated(unsafe { GetCurrentProcess() }).unwrap_or(false))
+}
+
+/// Whether RustInput runs as SYSTEM, as its service starts it for an
+/// administrator: then it reaches the lock screen, the screen to log on and
+/// the prompts of User Account Control too.
+pub(super) fn runs_as_system() -> bool {
+    static SYSTEM: OnceLock<bool> = OnceLock::new();
+    *SYSTEM.get_or_init(|| {
+        let mut token = HANDLE::default();
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) }.is_err() {
+            return false;
+        }
+        let mut buffer = [0u64; 32];
+        let mut len = 0;
+        let read = unsafe {
+            GetTokenInformation(
+                token,
+                TokenUser,
+                Some(buffer.as_mut_ptr().cast::<c_void>()),
+                size_of_val(&buffer) as u32,
+                &mut len,
+            )
+        };
+        let system = read.is_ok() && {
+            let user = unsafe { &*(buffer.as_ptr() as *const TOKEN_USER) };
+            unsafe { IsWellKnownSid(user.User.Sid, WinLocalSystemSid) }.as_bool()
+        };
+        unsafe {
+            let _ = CloseHandle(token);
+        }
+        system
+    })
 }
 
 /// Asks Windows not to slow this process down to save energy: it may do so

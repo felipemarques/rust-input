@@ -218,6 +218,10 @@ impl Language {
     }
 }
 
+/// The environment variable with the languages of the user, separated by
+/// `;`, that the Windows service gives RustInput when it starts it as SYSTEM.
+pub const USER_LANGUAGES: &str = "RUSTINPUT_USER_LANGUAGES";
+
 /// The language the system prefers, of those RustInput speaks; English
 /// when it prefers none of them.
 pub fn system() -> Language {
@@ -230,6 +234,11 @@ pub fn system() -> Language {
 /// the languages the user prefers, the most preferred first
 fn preferred() -> Vec<String> {
     let mut tags = Vec::new();
+    // those of the user at the screen, from the Windows service, which
+    // starts RustInput as SYSTEM: Windows would tell those of the system
+    if let Ok(list) = std::env::var(USER_LANGUAGES) {
+        tags.extend(list.split(';').filter(|t| !t.is_empty()).map(str::to_owned));
+    }
     // the list of gettext, which sys-locale does not read
     #[cfg(all(unix, not(target_os = "macos")))]
     if let Ok(list) = std::env::var("LANGUAGE") {

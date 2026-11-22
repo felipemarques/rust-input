@@ -105,6 +105,7 @@ fn uninstall() -> i32 {
         log::error!("could not remove the service: {e}");
         code = EXIT_SERVICE;
     }
+    remove_registry();
     match firewall::remove() {
         Ok(0) => {}
         Ok(n) => log::info!("firewall: removed {n} rules"),
@@ -198,6 +199,28 @@ fn install_service(exe: &Path) -> windows_service::Result<()> {
             )));
         }
         thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Removes what the service remembers (`HKLM\SOFTWARE\RustInput`, see
+/// `windows_supervisor`), if anything.
+fn remove_registry() {
+    use windows_sys::Win32::{
+        Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS},
+        System::Registry::{HKEY_LOCAL_MACHINE, RegDeleteTreeW},
+    };
+    let key: Vec<u16> = crate::windows_supervisor::KEY
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    match unsafe { RegDeleteTreeW(HKEY_LOCAL_MACHINE, key.as_ptr()) } {
+        ERROR_SUCCESS => log::info!("removed HKLM\\{}", crate::windows_supervisor::KEY),
+        ERROR_FILE_NOT_FOUND => {}
+        e => log::warn!(
+            "could not remove HKLM\\{}: {}",
+            crate::windows_supervisor::KEY,
+            std::io::Error::from_raw_os_error(e as i32)
+        ),
     }
 }
 

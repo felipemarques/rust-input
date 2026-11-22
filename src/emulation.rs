@@ -20,8 +20,8 @@ use tokio::{
     task::{JoinHandle, spawn_local},
 };
 
-/// how often, while controlled, whether the lock screen shows is looked at
-/// ([`crate::lock::screen_locked`])
+/// how often, while controlled, whether the lock screen refuses the input is
+/// looked at ([`crate::lock::input_refused`])
 const LOCK_LOOK: Duration = Duration::from_millis(500);
 
 /// emulation handling events received from a listener
@@ -183,9 +183,10 @@ impl ListenTask {
         let mut entered = HashSet::new();
         // paused by the user: nobody controls this device
         let mut paused = false;
-        // Windows refuses the input of RustInput on its lock screen: then
-        // nobody enters, and whoever controls this device gets its pointer
-        // back, rather than lose it here (looked at now and then)
+        // Windows refuses the input of RustInput on its lock screen, unless
+        // it runs as SYSTEM: then nobody enters, and whoever controls this
+        // device gets its pointer back, rather than lose it here (looked at
+        // now and then)
         let mut lock_looked = Instant::now();
         loop {
             select! {
@@ -194,7 +195,7 @@ impl ListenTask {
                         log::trace!("{event} <-<-<-<-<- {addr}");
                         last_response.insert(addr, Instant::now());
                         match event {
-                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if paused || crate::lock::screen_locked() => {
+                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if paused || crate::lock::input_refused() => {
                                 // the other device keeps its pointer
                                 log::debug!("{addr} does not enter: paused or the screen is locked");
                                 self.listener.reply(addr, ProtoEvent::Leave(0)).await;
@@ -231,7 +232,7 @@ impl ListenTask {
                             ProtoEvent::Input(event) => {
                                 let locked = lock_looked.elapsed() >= LOCK_LOOK && {
                                     lock_looked = Instant::now();
-                                    crate::lock::screen_locked()
+                                    crate::lock::input_refused()
                                 };
                                 if locked {
                                     for addr in entered.drain() {

@@ -33,6 +33,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | ⏸️ Pause from the tray icon, the window or the radial menu; the other computers see it paused | ✅ ¹² | ✅ ¹² | ✅ ² | ✅ ² |
 | 🔐 Lock the screen of another computer, or of all of them at once, from the radial menu | ✅ ¹³ | ✅ ¹³ | ✅ ¹⁴ | ✅ ¹⁴ |
+| 🔓 Type the password on the lock screen and the screen to log on, answer the prompts of User Account Control | ✅ ¹⁵ | — | — | — |
 | 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
 | 🌍 In English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文 and 日本語 | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | ⬆️ Tells of new versions, if you want it to; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
@@ -61,6 +62,9 @@ Linux (X11).
 ¹³ New in 0.30.0: tested in automated runs between two Linux (X11) computers (with stand-ins for the screen locker),
 not yet by hand.
 ¹⁴ Locked when another computer asks; the wheel to ask from needs X11 or Windows. Built, not tested by hand yet.
+¹⁵ New in 0.31.0, for an administrator with the service (see [Lock screen and screen to log on](#lock-screen-and-screen-to-log-on-windows)):
+tested in automated runs on a Windows of GitHub (the daemon runs as SYSTEM and follows the lock screen), not yet by
+hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -199,12 +203,32 @@ ever protects it. The computer that locks brings its pointer back first, so the 
 keyboard. If a screen does not lock, the window of RustInput says why ("The screen of laptop did not lock: …"), and
 so does `daemon.log`.
 
-- **Windows**: as Win+L. Its lock screen is a desktop of Windows that RustInput does not reach yet (see the note in
-  [OS support](#os-support)), so unlock it with the keyboard of that computer; meanwhile the pointer of the others does
-  not go there, and comes back if it was there.
+- **Windows**: as Win+L. Since 0.31.0 the password can be typed there from the other computer (see
+  [Lock screen and screen to log on](#lock-screen-and-screen-to-log-on-windows)); without the service, or for a user
+  who is no administrator, unlock it with the keyboard of that computer: meanwhile the pointer of the others does not go
+  there, and comes back if it was there.
 - **Linux**: the screen locker of the desktop (Cinnamon, MATE, XFCE, LXQt), else `loginctl lock-session`, which GNOME,
   KDE and most others follow, else `xdg-screensaver lock`.
 - **macOS**: as "Lock Screen" in the Apple menu.
+
+## Lock screen and screen to log on (Windows)
+
+The lock screen of Windows, the screen to log on after starting it or logging off, and the prompts of User Account
+Control ("Do you want to allow this app to make changes?") are a desktop of Windows of their own, which only the
+system itself may open. For an administrator, the service starts RustInput as SYSTEM, with the settings of that user,
+so it follows the keyboard and the mouse there: type the password or the PIN, or answer **Yes**, from the other
+computer, as Synergy and Mouse Without Borders do.
+
+- While nobody is logged on (after starting Windows, or logging off), RustInput runs with the settings of the
+  administrator who was last at the screen, which the service remembers: the other computers find it and reach the
+  screen to log on.
+- From those screens the keyboard and the mouse of the Windows computer itself do not go to another computer: the edge
+  is a wall. Giving the pointer back to the computer that controls Windows still works.
+- A user who is no administrator gets RustInput as themselves, as before: SYSTEM would give them rights they do not
+  have. So does every user with `login_screen = false` in the [configuration](#configuration) file.
+
+Only the computers you authorized can type there, as they already can while Windows is unlocked, and they still need
+the password. RustInput installed without the service (`-NoService`, or by hand) does not reach those screens.
 
 ## Pausing
 
@@ -405,9 +429,11 @@ Most current desktop environments and operating systems are fully supported, thi
 > the keyboard and the mouse back, so no key stays pressed anywhere, and `daemon.log` (see [Installation](#installation))
 > names the program.
 >
-> - **Windows, lock screen and administrator prompts**: these appear on a desktop of Windows of its own, which RustInput
-> does not reach yet: use the keyboard and the mouse of the Windows computer there. While the lock screen shows, the
-> pointer of another computer does not go to Windows, and comes back if it was there, instead of getting lost there.
+> - **Windows, lock screen and administrator prompts**: these appear on a desktop of Windows of its own. RustInput run
+> by the service for an administrator reaches it (see [Lock screen and screen to log on](#lock-screen-and-screen-to-log-on-windows)).
+> Without the service, or for a user who is no administrator, it does not: use the keyboard and the mouse of the
+> Windows computer there. While the lock screen shows, the pointer of another computer does not go to Windows then,
+> and comes back if it was there, instead of getting lost there.
 
 For more detailed information about os support see [Detailed OS Support](#detailed-os-support)
 
@@ -450,7 +476,9 @@ Windows:
 
 - the Windows service **RustInput**, which starts with Windows and keeps RustInput running in the session of the user
   at the screen, with the administrator rights of that user, without asking: RustInput then reaches programs run as
-  administrator too (see [Caveats](#caveats--known-issues)). Windows starts the service again if it fails, and the
+  administrator too (see [Caveats](#caveats--known-issues)). For an administrator it runs as SYSTEM, which also
+  reaches the lock screen, the screen to log on and the prompts of User Account Control (see
+  [Lock screen and screen to log on](#lock-screen-and-screen-to-log-on-windows)). Windows starts the service again if it fails, and the
   service starts RustInput again if it ends. Closing the window, or quitting it from the tray, leaves the keyboard and
   the mouse shared; the window only shows and changes the settings. The service can be left out (then RustInput runs
   without administrator rights, as before 0.23.0);
@@ -500,6 +528,8 @@ keeping its settings. Run `Get-Help` on the script for the others.
 > and mouse from the computers you authorized. Only those can send it input, but a malicious program running as you
 > could also drive RustInput to reach programs run as administrator: Microsoft does not treat the step from a user to
 > the same user as administrator as a security boundary. Synergy and Deskflow run their Windows service the same way.
+> Run as SYSTEM for an administrator (0.31.0), RustInput writes its settings, logs and received files in the folders
+> of that user, and runs none of the commands of the configuration (`enter_hook` and `leave_hook`).
 
 Or by hand:
 - Download `rustinput-windows-x86_64.zip` from the releases page
@@ -873,6 +903,11 @@ check_updates = true
 # stay on this computer and no other one controls it (only written while paused)
 # paused = true
 
+# Windows: for an administrator the service runs RustInput as SYSTEM, which also works on
+# the lock screen, the screen to log on and the prompts of User Account Control (on when
+# missing); false runs it as you, as before 0.31.0
+# login_screen = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
@@ -921,6 +956,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] System tray icon, closing the window keeps RustInput running
 - [x] Pause from the tray icon, the window or the radial menu, seen by the other computers
 - [x] Lock the screen of another computer, or of all of them, from the radial menu
+- [x] Windows: the lock screen, the screen to log on and the prompts of User Account Control
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [x] Authorize both computers on each other from the controlling one, with a code

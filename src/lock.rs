@@ -14,9 +14,15 @@
 //! The screen locker can not take a mouse RustInput holds: the service
 //! brings the pointer back to this computer first.
 //!
-//! Windows refuses the keyboard and the mouse of RustInput on its lock
-//! screen ([`screen_locked`]): another computer does not enter it then, and
-//! one controlling it gets its pointer back, rather than lose it there.
+//! The lock screen of Windows, its screen to log on and the prompts of User
+//! Account Control are a desktop of their own (Winlogon), which only SYSTEM
+//! may open. Started by its service for an administrator, RustInput runs as
+//! SYSTEM ([`runs_as_system`]) and follows the input there, so another
+//! computer can type the password. Otherwise Windows refuses its keyboard
+//! and mouse there ([`input_refused`]): another computer does not enter it
+//! then, and one controlling it gets its pointer back, rather than lose it
+//! there. From that desktop the keyboard and the mouse of this computer do
+//! not go to another one ([`secure_desktop`]).
 
 #[cfg(unix)]
 use std::time::{Duration, Instant};
@@ -75,10 +81,97 @@ pub(crate) fn screen_locked() -> bool {
     }
 }
 
-/// Whether the lock screen shows: only Windows refuses the input of
-/// RustInput there; elsewhere the screen locker takes it like any other.
+/// Whether RustInput runs as SYSTEM, as its service starts it for an
+/// administrator.
+#[cfg(windows)]
+pub(crate) fn runs_as_system() -> bool {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::{
+        Foundation::CloseHandle,
+        Security::{
+            GetTokenInformation, IsWellKnownSid, TOKEN_QUERY, TOKEN_USER, TokenUser,
+            WinLocalSystemSid,
+        },
+        System::Threading::{GetCurrentProcess, OpenProcessToken},
+    };
+    static SYSTEM: OnceLock<bool> = OnceLock::new();
+    *SYSTEM.get_or_init(|| {
+        let mut token = std::ptr::null_mut();
+        // SAFETY: the token is read into a buffer large enough for a user
+        // and its SID, and closed
+        unsafe {
+            if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
+                return false;
+            }
+            let mut buffer = [0u64; 32];
+            let mut len = 0;
+            let read = GetTokenInformation(
+                token,
+                TokenUser,
+                buffer.as_mut_ptr().cast(),
+                std::mem::size_of_val(&buffer) as u32,
+                &mut len,
+            ) != 0;
+            CloseHandle(token);
+            read && {
+                let user = &*(buffer.as_ptr() as *const TOKEN_USER);
+                IsWellKnownSid(user.User.Sid, WinLocalSystemSid) != 0
+            }
+        }
+    })
+}
+
+/// Whether the input goes to the desktop of the lock screen, of the screen
+/// to log on or of a prompt of User Account Control, not to the one of the
+/// applications. Not able to open it, RustInput does not run as SYSTEM and
+/// that desktop shows.
+#[cfg(windows)]
+pub(crate) fn secure_desktop() -> bool {
+    use windows_sys::Win32::{
+        Foundation::GENERIC_ALL,
+        System::StationsAndDesktops::{
+            CloseDesktop, GetUserObjectInformationW, OpenInputDesktop, UOI_NAME,
+        },
+    };
+    // SAFETY: the desktop is closed again; its name is read into a buffer
+    // of the size given
+    unsafe {
+        let desktop = OpenInputDesktop(0, 0, GENERIC_ALL);
+        if desktop.is_null() {
+            return true;
+        }
+        let mut name = [0u16; 64];
+        let mut needed = 0;
+        let read = GetUserObjectInformationW(
+            desktop,
+            UOI_NAME,
+            name.as_mut_ptr().cast(),
+            (name.len() * 2) as u32,
+            &mut needed,
+        ) != 0;
+        CloseDesktop(desktop);
+        let end = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+        read && !String::from_utf16_lossy(&name[..end]).eq_ignore_ascii_case("Default")
+    }
+}
+
+/// Whether Windows refuses the input of RustInput now: on its lock screen,
+/// unless RustInput runs as SYSTEM, which follows the input there.
+#[cfg(windows)]
+pub(crate) fn input_refused() -> bool {
+    !runs_as_system() && screen_locked()
+}
+
+/// Only Windows has a desktop of its own for the lock screen; elsewhere the
+/// screen locker takes the emulated input like any other.
 #[cfg(not(windows))]
-pub(crate) fn screen_locked() -> bool {
+pub(crate) fn secure_desktop() -> bool {
+    false
+}
+
+/// Only Windows refuses the input of RustInput on its lock screen.
+#[cfg(not(windows))]
+pub(crate) fn input_refused() -> bool {
     false
 }
 

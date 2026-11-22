@@ -655,9 +655,62 @@ For the same reason RustInput is installed in `C:\Program Files\RustInput`:
 a program started with administrator rights from a folder its user may write
 would let any program of that user swap it and get those rights.
 
-The lock screen and the prompts of User Account Control appear on another
-desktop of Windows (`Winlogon`), which only a process of the system may open;
-the daemon, running as the user, does not reach it.
+### The lock screen and the screen to log on (0.31.0)
+
+The lock screen, the screen to log on and the prompts of User Account Control
+are another desktop of Windows (`Winlogon`), which only SYSTEM may open: as
+any other user, `OpenInputDesktop`, `GetCursorPos` and `SendInput` fail there
+with "access denied". So for an administrator the service starts the daemon
+as SYSTEM instead (its own token, `DuplicateTokenEx`, with the session of the
+screen set, `TokenSessionId`), with the environment of that user, so the
+daemon still reads and writes the folders of that user (`LOCALAPPDATA`: the
+configuration, the certificate, the logs, the received files). The threads
+that touch the input follow it to the desktop that gets it
+(`SetThreadDesktop`, which only works for a thread without windows and
+hooks):
+
+- the emulation hands every input to a thread of its own
+  (`input-emulation/src/windows.rs`), which moves to the input desktop when
+  `SendInput` or `SetCursorPos` fail, and tries again;
+- the capture thread looks four times a second whether another desktop gets
+  the input; if so it gives the input back (capturing ends), removes its
+  window, timer and hooks, moves there and sets them up again, logging
+  "following the input to the desktop Winlogon of Windows".
+
+From that desktop the keyboard and the mouse of Windows itself do not go to
+another computer: a `Begin` for a client (`CaptureType::Default`) is released
+at once while `lock::secure_desktop` (`OpenInputDesktop` is not `Default`, or
+can not be opened). The `EnterOnly` capture of the computer controlling this
+one still gives it its pointer back. The 0.30.0 refusal of `Enter` on a
+locked Windows (`lock::input_refused`) only applies when the daemon does not
+run as SYSTEM.
+
+The service looks at who is at the screen once a second while no daemon
+runs, every 5 s otherwise, and at once when Windows reports a session change:
+
+- an administrator (the full token of the user is elevated) with
+  `login_screen` not `false` in their configuration: SYSTEM with their
+  environment. Their `LOCALAPPDATA` is remembered in
+  `HKLM\SOFTWARE\RustInput` (`LoginScreenLocalAppData`), where only
+  administrators may write;
+- nobody logged on, and an administrator remembered whose configuration is
+  still there: SYSTEM with the environment of the system and that
+  `LOCALAPPDATA`, for the screen to log on. When the same administrator logs
+  on, that daemon stays (nothing is interrupted while typing the password);
+  another user gets a daemon of their own;
+- a user who is no administrator, or `login_screen = false`: the daemon runs
+  as the user, as before (and the administrator is forgotten).
+
+As SYSTEM the daemon runs none of the commands of the configuration
+(`enter_hook`, `leave_hook`). The uninstaller removes `HKLM\SOFTWARE\RustInput`.
+An experiment on a runner of GitHub (PsExec as SYSTEM in the session at the
+screen) showed what SYSTEM can do there: lock it, open `Winlogon`, move to
+it, read and place the pointer, `SendInput`, low level hooks; the user of
+the session got "access denied" for all of it while locked.
+`windows-install-test.ps1`
+(stages 7a and 7b) checks the daemon runs as SYSTEM, as the user with
+`login_screen = false`, and follows the input once the runner is locked
+(`LockWorkStation`).
 
 ## The Windows installer
 

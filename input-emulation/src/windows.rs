@@ -8,8 +8,18 @@ use input_event::{
 use async_trait::async_trait;
 use std::cell::Cell;
 use std::ops::BitOrAssign;
+use std::sync::{
+    OnceLock,
+    mpsc::{Receiver, Sender, channel},
+};
 use std::time::{Duration, Instant};
 use tokio::task::AbortHandle;
+use windows::Win32::Foundation::GENERIC_ALL;
+use windows::Win32::System::StationsAndDesktops::{
+    CloseDesktop, DESKTOP_ACCESS_FLAGS, DESKTOP_CONTROL_FLAGS, GetThreadDesktop,
+    GetUserObjectInformationW, HDESK, OpenInputDesktop, SetThreadDesktop, UOI_NAME,
+};
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, SetThreadDpiAwarenessContext,
 };
@@ -92,21 +102,128 @@ impl Emulation for WindowsEmulation {
     async fn terminate(&mut self) {}
 
     async fn warp(&mut self, edge: Edge, fraction: f64) {
-        unsafe {
-            // physical pixels, also when the displays are scaled
-            let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-            let desktop = Area {
-                x: GetSystemMetrics(SM_XVIRTUALSCREEN),
-                y: GetSystemMetrics(SM_YVIRTUALSCREEN),
-                width: GetSystemMetrics(SM_CXVIRTUALSCREEN),
-                height: GetSystemMetrics(SM_CYVIRTUALSCREEN),
-            };
-            let (x, y) = desktop.point(edge, fraction);
-            if let Err(e) = SetCursorPos(x, y) {
-                log::warn!("could not place the pointer at ({x}, {y}): {e}");
+        inject(Injection::Warp(edge, fraction));
+    }
+}
+
+/// places the pointer at `fraction` along `edge` of the desktop, on the
+/// thread of the input
+fn warp_now(edge: Edge, fraction: f64) {
+    unsafe {
+        // physical pixels, also when the displays are scaled
+        let previous = SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        let desktop = Area {
+            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+            width: GetSystemMetrics(SM_CXVIRTUALSCREEN),
+            height: GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        };
+        let (x, y) = desktop.point(edge, fraction);
+        let placed = SetCursorPos(x, y).or_else(|e| match follow_input_desktop() {
+            true => SetCursorPos(x, y),
+            false => Err(e),
+        });
+        if let Err(e) = placed {
+            log::warn!("could not place the pointer at ({x}, {y}): {e}");
+        }
+        if !previous.is_invalid() {
+            SetThreadDpiAwarenessContext(previous);
+        }
+    }
+}
+
+/// what the thread of the input does
+enum Injection {
+    Input(INPUT),
+    Warp(Edge, f64),
+}
+
+/// The thread that hands the input to Windows, in order. The lock screen,
+/// the screen to log on and the prompts of User Account Control are another
+/// desktop of Windows (Winlogon), which only SYSTEM may open: RustInput,
+/// started as SYSTEM by its service, follows the input there. A thread can
+/// only change its desktop while it has no windows and no hooks, hence one of
+/// its own.
+fn inject(injection: Injection) {
+    static INJECTOR: OnceLock<Sender<Injection>> = OnceLock::new();
+    let injector = INJECTOR.get_or_init(|| {
+        let (tx, rx) = channel();
+        let spawned = std::thread::Builder::new()
+            .name("rustinput-input".into())
+            .spawn(move || run_injector(rx));
+        if let Err(e) = spawned {
+            log::error!("could not start the thread of the input: {e}");
+        }
+        tx
+    });
+    let _ = injector.send(injection);
+}
+
+fn run_injector(rx: Receiver<Injection>) {
+    for injection in rx {
+        match injection {
+            Injection::Input(input) => send_input_safe(input),
+            Injection::Warp(edge, fraction) => warp_now(edge, fraction),
+        }
+    }
+}
+
+thread_local! {
+    /// the desktop this thread moved to, closed when it moves on
+    static OPENED: Cell<Option<HDESK>> = const { Cell::new(None) };
+}
+
+/// the name of a desktop: "Default", or "Winlogon" for the lock screen
+fn desktop_name(desktop: HDESK) -> Option<String> {
+    let mut name = [0u16; 64];
+    let mut needed = 0;
+    unsafe {
+        GetUserObjectInformationW(
+            windows::Win32::Foundation::HANDLE(desktop.0),
+            UOI_NAME,
+            Some(name.as_mut_ptr().cast()),
+            (name.len() * 2) as u32,
+            Some(&mut needed),
+        )
+    }
+    .ok()?;
+    let end = name.iter().position(|&c| c == 0).unwrap_or(name.len());
+    Some(String::from_utf16_lossy(&name[..end]))
+}
+
+/// Moves this thread to the desktop that gets the input now, when that is
+/// another one; whether it did. Opening the desktop of the lock screen takes
+/// SYSTEM: otherwise nothing changes.
+fn follow_input_desktop() -> bool {
+    unsafe {
+        let Ok(input) = OpenInputDesktop(
+            DESKTOP_CONTROL_FLAGS(0),
+            false,
+            DESKTOP_ACCESS_FLAGS(GENERIC_ALL.0),
+        ) else {
+            return false;
+        };
+        let name = desktop_name(input);
+        let current = GetThreadDesktop(GetCurrentThreadId())
+            .ok()
+            .and_then(desktop_name);
+        if name.is_none() || name == current {
+            let _ = CloseDesktop(input);
+            return false;
+        }
+        let name = name.unwrap_or_default();
+        match SetThreadDesktop(input) {
+            Ok(()) => {
+                log::info!("the keyboard and the mouse of RustInput go to the desktop {name} now");
+                if let Some(left) = OPENED.replace(Some(input)) {
+                    let _ = CloseDesktop(left);
+                }
+                true
             }
-            if !previous.is_invalid() {
-                SetThreadDpiAwarenessContext(previous);
+            Err(e) => {
+                log::warn!("could not follow the input to the desktop {name}: {e}");
+                let _ = CloseDesktop(input);
+                false
             }
         }
     }
@@ -138,15 +255,14 @@ thread_local! {
     static REFUSED_LOGGED: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
-/// Windows refuses input while the lock screen or a prompt of User Account
-/// Control is up, which RustInput does not reach: the input is dropped then,
-/// after a few tries, rather than tried again forever.
+/// Windows refuses input sent to a desktop that does not get it: the input
+/// follows to the one that does (the lock screen, a prompt of User Account
+/// Control) when RustInput may open it, and is dropped otherwise, after a
+/// few tries, rather than tried again forever.
 fn send_input_safe(input: INPUT) {
-    for _ in 0..3 {
-        /* retval = number of successfully submitted events */
-        if unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) } > 0 {
-            return;
-        }
+    let send = || unsafe { SendInput(&[input], std::mem::size_of::<INPUT>() as i32) } > 0;
+    if send() || (follow_input_desktop() && send()) || send() {
+        return;
     }
     let error = std::io::Error::last_os_error();
     let now = Instant::now();
@@ -157,23 +273,24 @@ fn send_input_safe(input: INPUT) {
         REFUSED_LOGGED.set(Some(now));
         log::warn!(
             "Windows refuses the keyboard and the mouse of RustInput ({error}): the lock \
-             screen or a prompt of User Account Control is up"
+             screen or a prompt of User Account Control is up, which only RustInput \
+             started as SYSTEM by its service reaches"
         );
     }
 }
 
 fn send_mouse_input(mi: MOUSEINPUT) {
-    send_input_safe(INPUT {
+    inject(Injection::Input(INPUT {
         r#type: INPUT_MOUSE,
         Anonymous: INPUT_0 { mi },
-    });
+    }));
 }
 
 fn send_keyboard_input(ki: KEYBDINPUT) {
-    send_input_safe(INPUT {
+    inject(Injection::Input(INPUT {
         r#type: INPUT_KEYBOARD,
         Anonymous: INPUT_0 { ki },
-    });
+    }));
 }
 fn rel_mouse(dx: i32, dy: i32) {
     let mi = MOUSEINPUT {
