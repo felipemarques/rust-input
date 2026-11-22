@@ -12,6 +12,7 @@ pub mod emulation_test;
 mod files;
 mod identify;
 mod listen;
+mod lock;
 mod netstats;
 mod pairing;
 mod radial;

@@ -40,10 +40,12 @@ pub(crate) enum Action {
     SendCopiedFiles,
     /// keep the pointer on this device, or let it go again
     ToggleLock,
-    /// turn sending copied files along with the pointer on or off
-    ToggleSendCopied,
     /// pause RustInput on this device, or let it go on
     TogglePause,
+    /// lock the screen of the client, as Win+L there
+    LockScreen(ClientHandle),
+    /// lock the screens of this device and of the clients
+    LockAllScreens,
     ShowTransfers,
     ShowWindow,
 }
@@ -112,20 +114,21 @@ impl Texts {
         .to_owned()
     }
 
-    pub(crate) fn send_copied(&self, on: bool) -> String {
-        match on {
-            true => tr("Turn auto-send off"),
-            false => tr("Turn auto-send on"),
-        }
-        .to_owned()
-    }
-
     pub(crate) fn pause(&self, paused: bool) -> String {
         match paused {
             true => tr("Resume RustInput"),
             false => tr("Pause RustInput"),
         }
         .to_owned()
+    }
+
+    /// locking the screen of the computer `name`
+    pub(crate) fn lock_screen(&self, name: &str) -> String {
+        trf("Lock {name}", &[("name", &name)])
+    }
+
+    pub(crate) fn lock_all_screens(&self) -> String {
+        tr("Lock all computers").to_owned()
     }
 
     pub(crate) fn transfers(&self) -> String {
@@ -179,12 +182,13 @@ impl Wheel {
     }
 
     fn size(&self) -> u32 {
-        draw::size(self.scale)
+        draw::size(self.scale, self.items.len())
     }
 
     /// the pointer is `(dx, dy)` from the middle; whether the slice changed
     fn point(&mut self, dx: f64, dy: f64) -> bool {
-        let selected = draw::slice_at(self.items.len(), dx, dy, draw::dead_zone(self.scale));
+        let n = self.items.len();
+        let selected = draw::slice_at(n, dx, dy, draw::dead_zone(self.scale, n));
         let changed = selected != self.selected;
         self.selected = selected;
         changed
@@ -287,5 +291,6 @@ mod tests {
         let texts = Texts;
         assert_eq!(texts.go_to("xeon"), "Go to xeon");
         assert_eq!(texts.lock(true), "Free the pointer");
+        assert_eq!(texts.lock_screen("laptop"), "Lock laptop");
     }
 }

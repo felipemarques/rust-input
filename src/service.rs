@@ -150,7 +150,13 @@ enum ArrangeResult {
     Sent(String, Result<(), ArrangeError>),
     /// the computer `name` was asked to identify its monitors
     Identified(String, Result<(), ArrangeError>),
+    /// the screen of the computer `name` (this one too) was to lock
+    Locked(String, Result<(), ArrangeError>),
 }
+
+/// before locking the screen: the screen locker can not take the mouse and
+/// the keyboard while RustInput or the radial menu still hold them
+const LOCK_DELAY: Duration = Duration::from_millis(300);
 
 #[derive(Debug)]
 struct Incoming {
@@ -942,7 +948,7 @@ impl Service {
             ]);
             return;
         }
-        let mut items: Vec<Item> = self
+        let clients: Vec<(ClientHandle, String)> = self
             .client_manager
             .get_client_states()
             .into_iter()
@@ -953,14 +959,15 @@ impl Service {
                     .clone()
                     .or_else(|| state.ips.iter().next().map(|ip| ip.to_string()))
                     .unwrap_or_else(|| format!("{handle}"));
-                Item {
-                    label: self.texts.go_to(&name),
-                    action: Action::GoTo(handle),
-                }
+                (handle, name)
             })
             .collect();
         let files = self.file_options.available;
+        let mut items = Vec::new();
         let mut add = |label: String, action: Action| items.push(Item { label, action });
+        for (handle, name) in &clients {
+            add(self.texts.go_to(name), Action::GoTo(*handle));
+        }
         if self.clipboard.capabilities() != 0 {
             add(self.texts.send_clipboard(), Action::SendClipboard);
         }
@@ -969,11 +976,11 @@ impl Service {
         }
         add(self.texts.lock(self.locked), Action::ToggleLock);
         add(self.texts.pause(false), Action::TogglePause);
+        for (handle, name) in &clients {
+            add(self.texts.lock_screen(name), Action::LockScreen(*handle));
+        }
+        add(self.texts.lock_all_screens(), Action::LockAllScreens);
         if files {
-            add(
-                self.texts.send_copied(self.file_options.send_copied),
-                Action::ToggleSendCopied,
-            );
             add(self.texts.transfers(), Action::ShowTransfers);
         }
         add(self.texts.window(), Action::ShowWindow);
@@ -993,14 +1000,18 @@ impl Service {
                 self.capture.lock(self.locked);
                 self.update_radial();
             }
-            Action::ToggleSendCopied => {
-                let options = FileOptions {
-                    send_copied: !self.file_options.send_copied,
-                    ..self.file_options
-                };
-                self.set_file_options(options, true);
-            }
             Action::TogglePause => self.set_paused(!self.paused),
+            Action::LockScreen(handle) => self.lock_screens(vec![handle], false),
+            Action::LockAllScreens => {
+                let clients = self
+                    .client_manager
+                    .get_client_states()
+                    .into_iter()
+                    .filter(|(_, _, state)| state.active)
+                    .map(|(handle, ..)| handle)
+                    .collect();
+                self.lock_screens(clients, true);
+            }
             Action::ShowTransfers => self.notify_frontend(FrontendEvent::ShowTransfers),
             Action::ShowWindow => self.notify_frontend(FrontendEvent::ShowWindow),
         }
@@ -1456,15 +1467,56 @@ impl Service {
             if addrs.is_empty() {
                 continue;
             }
-            let (expected, name) = match self.descriptions.get(&handle) {
-                Some(Ok((fingerprint, d))) => (Some(fingerprint.clone()), d.name.clone()),
-                _ => (None, self.client_name(handle)),
-            };
+            let (expected, name) = self.peer(handle);
             let (cert, results) = (self.cert.clone(), self.arrange_results_tx.clone());
             tokio::task::spawn_local(async move {
                 let result = arrangement::identify(cert, addrs, expected).await;
                 let _ = results.send(ArrangeResult::Identified(name, result));
             });
+        }
+    }
+
+    /// Locks the screens of the computers of `clients`, and of this one if
+    /// `here`. Locking only ever protects a computer: it is asked even of
+    /// one paused, and done here even when paused.
+    fn lock_screens(&mut self, clients: Vec<ClientHandle>, here: bool) {
+        for handle in clients {
+            let addrs = self.client_addrs(handle);
+            let (expected, name) = self.peer(handle);
+            log::info!("asking {name} to lock its screen");
+            let (cert, results) = (self.cert.clone(), self.arrange_results_tx.clone());
+            tokio::task::spawn_local(async move {
+                let result = arrangement::lock(cert, addrs, expected).await;
+                let _ = results.send(ArrangeResult::Locked(name, result));
+            });
+        }
+        if here {
+            let locking = self.lock_here();
+            let (name, results) = (self.name.clone(), self.arrange_results_tx.clone());
+            tokio::task::spawn_local(async move {
+                let result = locking.await.map_err(ArrangeError::Failed);
+                let _ = results.send(ArrangeResult::Locked(name, result));
+            });
+        }
+    }
+
+    /// Locks the screen of this computer: the pointer comes back here first,
+    /// as the screen locker can not take a mouse RustInput holds.
+    fn lock_here(&self) -> impl std::future::Future<Output = Result<(), String>> + 'static {
+        self.capture.release();
+        async {
+            tokio::time::sleep(LOCK_DELAY).await;
+            tokio::task::spawn_blocking(crate::lock::lock_screen)
+                .await
+                .unwrap_or_else(|e| Err(e.to_string()))
+        }
+    }
+
+    /// the fingerprint of a client, when it described itself, and its name
+    fn peer(&self, handle: ClientHandle) -> (Option<String>, String) {
+        match self.descriptions.get(&handle) {
+            Some(Ok((fingerprint, d))) => (Some(fingerprint.clone()), d.name.clone()),
+            _ => (None, self.client_name(handle)),
         }
     }
 
@@ -1493,6 +1545,19 @@ impl Service {
             ArrangementEvent::Identify { addr } => {
                 log::info!("{addr} asks to show the numbers of the monitors");
                 crate::identify::show(self.name.clone());
+                return;
+            }
+            ArrangementEvent::Lock { addr, done } => {
+                log::info!("{addr} asks to lock the screen");
+                let locking = self.lock_here();
+                tokio::task::spawn_local(async move {
+                    let result = locking.await;
+                    match &result {
+                        Ok(()) => log::info!("screen locked, as {addr} asked"),
+                        Err(e) => log::warn!("screen not locked, as {addr} asked: {e}"),
+                    }
+                    let _ = done.send(result);
+                });
                 return;
             }
         };
@@ -1538,6 +1603,16 @@ impl Service {
                 }
                 self.notify_frontend(FrontendEvent::ArrangementSent { name, error });
             }
+            ArrangeResult::Locked(name, result) => match result {
+                Ok(()) => log::info!("the screen of {name} is locked"),
+                Err(e) => {
+                    log::warn!("the screen of {name} did not lock: {e}");
+                    self.notify_frontend(FrontendEvent::ScreenNotLocked {
+                        name,
+                        error: e.to_string(),
+                    });
+                }
+            },
             ArrangeResult::Identified(name, result) => match result {
                 Ok(()) => log::info!("{name} shows the numbers of its monitors"),
                 Err(e) => {

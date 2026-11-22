@@ -423,27 +423,27 @@ msgstr "退出"
 msgid "_File"
 msgstr "文件(_F)"
 
-#: rustinput-gtk/src/lib.rs:450
+#: rustinput-gtk/src/lib.rs:453
 msgid "{name} and this computer authorized each other"
 msgstr "{name} 与本机已相互授权"
 
-#: rustinput-gtk/src/lib.rs:455
+#: rustinput-gtk/src/lib.rs:458
 msgid "Not authorized: {error}"
 msgstr "未授权：{error}"
 
-#: rustinput-gtk/src/lib.rs:462
+#: rustinput-gtk/src/lib.rs:465
 msgid "{address} connected"
 msgstr "{address} 已连接"
 
-#: rustinput-gtk/src/lib.rs:469
+#: rustinput-gtk/src/lib.rs:472
 msgid "The mouse came from {address}"
 msgstr "鼠标来自 {address}"
 
-#: rustinput-gtk/src/lib.rs:475
+#: rustinput-gtk/src/lib.rs:478
 msgid "{address} disconnected"
 msgstr "{address} 已断开连接"
 
-#: rustinput-gtk/src/lib.rs:519
+#: rustinput-gtk/src/lib.rs:522
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "已收到来自 {name} 的 {count} 个文件，可以粘贴"
 
@@ -686,255 +686,259 @@ msgstr "已应用排列"
 msgid "{name} did not show the numbers of its monitors: {error}"
 msgstr "未能在 {name} 上显示显示器编号：{error}"
 
-#: rustinput-gtk/src/window.rs:319
+#: rustinput-gtk/src/window.rs:318
+msgid "The screen of {name} did not lock: {error}"
+msgstr "未能锁定 {name} 的屏幕：{error}"
+
+#: rustinput-gtk/src/window.rs:327
 msgid "Arrangement sent to {name}"
 msgstr "已将排列发送给 {name}"
 
-#: rustinput-gtk/src/window.rs:320
+#: rustinput-gtk/src/window.rs:328
 msgid "Arrangement not sent to {name}: {error}"
 msgstr "未能将排列发送给 {name}：{error}"
 
-#: rustinput-gtk/src/window.rs:329
+#: rustinput-gtk/src/window.rs:337
 msgid "{name} changed the arrangement"
 msgstr "{name} 更改了排列"
 
-#: rustinput-gtk/src/window.rs:343
+#: rustinput-gtk/src/window.rs:351
 msgid "{names} does not touch a computer this one reaches: move it next to one"
 msgstr "{names} 未与本机可连接的电脑相接：请将其移到其中一台旁边"
 
-#: rustinput-gtk/src/window.rs:348
+#: rustinput-gtk/src/window.rs:356
 msgid "Made from the connections as they are now: arrange and apply"
 msgstr "根据当前的连接生成：请排列后应用"
 
-#: rustinput-gtk/src/window.rs:350
+#: rustinput-gtk/src/window.rs:358
 msgid "Changes not applied yet"
 msgstr "更改尚未应用"
 
-#: rustinput-gtk/src/window.rs:352
+#: rustinput-gtk/src/window.rs:360
 msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
 msgstr "{names} 未报告其尺寸：请将其上的 RustInput 更新到 0.26.0 或更高版本"
 
-#: rustinput-gtk/src/window.rs:357
+#: rustinput-gtk/src/window.rs:365
 msgid "Applied on the computers of the arrangement"
 msgstr "已在排列中的电脑上应用"
 
-#: rustinput-gtk/src/window.rs:377
+#: rustinput-gtk/src/window.rs:385
 msgid "Where the mouse leaves {name}"
 msgstr "鼠标离开 {name} 的位置"
 
-#: rustinput-gtk/src/window.rs:383
+#: rustinput-gtk/src/window.rs:391
 msgid "Nowhere"
 msgstr "无"
 
-#: rustinput-gtk/src/window.rs:384
+#: rustinput-gtk/src/window.rs:392
 msgid "It touches no other computer"
 msgstr "它未与其他电脑相接"
 
-#: rustinput-gtk/src/window.rs:391
+#: rustinput-gtk/src/window.rs:399
 msgid "Left edge: {name}"
 msgstr "左边缘：{name}"
 
-#: rustinput-gtk/src/window.rs:392
+#: rustinput-gtk/src/window.rs:400
 msgid "Right edge: {name}"
 msgstr "右边缘：{name}"
 
-#: rustinput-gtk/src/window.rs:393
+#: rustinput-gtk/src/window.rs:401
 msgid "Top edge: {name}"
 msgstr "上边缘：{name}"
 
-#: rustinput-gtk/src/window.rs:394
+#: rustinput-gtk/src/window.rs:402
 msgid "Bottom edge: {name}"
 msgstr "下边缘：{name}"
 
-#: rustinput-gtk/src/window.rs:397
+#: rustinput-gtk/src/window.rs:405
 msgid "The whole edge of both, the place along it in proportion"
 msgstr "两者的整条边缘，沿边缘的位置按比例对应"
 
-#: rustinput-gtk/src/window.rs:399
+#: rustinput-gtk/src/window.rs:407
 msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
 msgstr "{part}，即相接之处；打开开关可使用两者的整条边缘，按比例对应"
 
-#: rustinput-gtk/src/window.rs:404
+#: rustinput-gtk/src/window.rs:412
 msgid "{part}, where they touch: the edge is shared"
 msgstr "{part}，即相接之处：整条边缘共用"
 
-#: rustinput-gtk/src/window.rs:417
+#: rustinput-gtk/src/window.rs:425
 msgid "Whole edge, in proportion"
 msgstr "整条边缘，按比例"
 
-#: rustinput-gtk/src/window.rs:908
+#: rustinput-gtk/src/window.rs:916
 msgid "As the system ({language})"
 msgstr "跟随系统（{language}）"
 
-#: rustinput-gtk/src/window.rs:931
+#: rustinput-gtk/src/window.rs:939
 msgid "The windows change language when RustInput starts again"
 msgstr "RustInput 重新启动后，窗口语言才会更改"
 
-#: rustinput-gtk/src/window.rs:934
+#: rustinput-gtk/src/window.rs:942
 msgid "Restart now"
 msgstr "立即重新启动"
 
-#: rustinput-gtk/src/window.rs:1006
+#: rustinput-gtk/src/window.rs:1014
 msgid "Asking GitHub…"
 msgstr "正在查询 GitHub…"
 
-#: rustinput-gtk/src/window.rs:1008
+#: rustinput-gtk/src/window.rs:1016
 msgid "Could not ask GitHub: {error}"
 msgstr "无法查询 GitHub：{error}"
 
-#: rustinput-gtk/src/window.rs:1010
+#: rustinput-gtk/src/window.rs:1018
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr "RustInput {version} 已发布；本机版本为 {current}"
 
-#: rustinput-gtk/src/window.rs:1015
+#: rustinput-gtk/src/window.rs:1023
 msgid "{version} is the latest version"
 msgstr "{version} 是最新版本"
 
-#: rustinput-gtk/src/window.rs:1017
+#: rustinput-gtk/src/window.rs:1025
 msgid "This computer has {current}"
 msgstr "本机版本为 {current}"
 
-#: rustinput-gtk/src/window.rs:1026
+#: rustinput-gtk/src/window.rs:1034
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr "要让 RustInput 检查新版本吗？它会在启动时及每 12 小时向 GitHub 查询最新版本号；不会发送任何有关你或你的电脑的信息。"
 
-#: rustinput-gtk/src/window.rs:1032
+#: rustinput-gtk/src/window.rs:1040
 msgid "No"
 msgstr "否"
 
-#: rustinput-gtk/src/window.rs:1033
+#: rustinput-gtk/src/window.rs:1041
 msgid "Yes, look for them"
 msgstr "是，检查新版本"
 
-#: rustinput-gtk/src/window.rs:1037
+#: rustinput-gtk/src/window.rs:1045
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr "RustInput {version} 已发布；本机版本为 {current}。"
 
-#: rustinput-gtk/src/window.rs:1041
+#: rustinput-gtk/src/window.rs:1049
 msgid "Later"
 msgstr "稍后"
 
-#: rustinput-gtk/src/window.rs:1090
+#: rustinput-gtk/src/window.rs:1098
 msgid "The update starts: Windows asks for administrator rights"
 msgstr "更新即将开始：Windows 会请求管理员权限"
 
-#: rustinput-gtk/src/window.rs:1115
+#: rustinput-gtk/src/window.rs:1123
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr "在文件管理器中复制的文件会随指针一起发送。关闭后，只发送通过“复制到 RustInput”选择的文件"
 
-#: rustinput-gtk/src/window.rs:1121
+#: rustinput-gtk/src/window.rs:1129
 msgid "“Copy to RustInput” in the file manager"
 msgstr "文件管理器中的“复制到 RustInput”"
 
-#: rustinput-gtk/src/window.rs:1122
+#: rustinput-gtk/src/window.rs:1130
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr "位于文件和文件夹的菜单中：Explorer、Nemo 和 Nautilus"
 
-#: rustinput-gtk/src/window.rs:1125
+#: rustinput-gtk/src/window.rs:1133
 msgid "Show the transfers window"
 msgstr "显示传输窗口"
 
-#: rustinput-gtk/src/window.rs:1126
+#: rustinput-gtk/src/window.rs:1134
 msgid "With the progress, when files are sent or received"
 msgstr "发送或接收文件时显示进度"
 
-#: rustinput-gtk/src/window.rs:1130
+#: rustinput-gtk/src/window.rs:1138
 msgid "Progress, history and log"
 msgstr "进度、历史记录和日志"
 
-#: rustinput-gtk/src/window.rs:1133
+#: rustinput-gtk/src/window.rs:1141
 msgid "Open"
 msgstr "打开"
 
-#: rustinput-gtk/src/window.rs:1250
+#: rustinput-gtk/src/window.rs:1258
 msgid "Sharing the mouse and keyboard"
 msgstr "正在共享鼠标和键盘"
 
-#: rustinput-gtk/src/window.rs:1251
+#: rustinput-gtk/src/window.rs:1259
 msgid "Capture and emulation are on"
 msgstr "捕获和模拟已开启"
 
-#: rustinput-gtk/src/window.rs:1254
+#: rustinput-gtk/src/window.rs:1262
 msgid "Input capture is off"
 msgstr "输入捕获已关闭"
 
-#: rustinput-gtk/src/window.rs:1255
+#: rustinput-gtk/src/window.rs:1263
 msgid "Needed for every connection"
 msgstr "所有连接都需要此功能"
 
-#: rustinput-gtk/src/window.rs:1271
+#: rustinput-gtk/src/window.rs:1279
 msgid "Sending"
 msgstr "发送"
 
-#: rustinput-gtk/src/window.rs:1272
+#: rustinput-gtk/src/window.rs:1280
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "越过屏幕边缘后，鼠标和键盘会转到下一台电脑"
 
-#: rustinput-gtk/src/window.rs:1285
+#: rustinput-gtk/src/window.rs:1293
 msgid "Receiving"
 msgstr "接收"
 
-#: rustinput-gtk/src/window.rs:1286
+#: rustinput-gtk/src/window.rs:1294
 msgid "The other computers can control this one"
 msgstr "其他电脑可以控制本机"
 
-#: rustinput-gtk/src/window.rs:1289
+#: rustinput-gtk/src/window.rs:1297
 msgid "Input emulation is off"
 msgstr "输入模拟已关闭"
 
-#: rustinput-gtk/src/window.rs:1290
+#: rustinput-gtk/src/window.rs:1298
 msgid "Needed for the other computers to control this one"
 msgstr "其他电脑控制本机时需要此功能"
 
-#: rustinput-gtk/src/window.rs:1307
+#: rustinput-gtk/src/window.rs:1315
 msgid "Paused: no other computer controls this one"
 msgstr "已暂停：其他计算机无法控制这台计算机"
 
-#: rustinput-gtk/src/window.rs:1331
+#: rustinput-gtk/src/window.rs:1339
 msgid "Relaunch required"
 msgstr "需要重新启动"
 
-#: rustinput-gtk/src/window.rs:1332
+#: rustinput-gtk/src/window.rs:1340
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "已授予辅助功能权限：重新启动以开启捕获和模拟"
 
-#: rustinput-gtk/src/window.rs:1335
+#: rustinput-gtk/src/window.rs:1343
 msgid "Relaunch"
 msgstr "重新启动"
 
-#: rustinput-gtk/src/window.rs:1339
+#: rustinput-gtk/src/window.rs:1347
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "授予辅助功能权限以开启此功能"
 
-#: rustinput-gtk/src/window.rs:1340
+#: rustinput-gtk/src/window.rs:1348
 msgid "Grant"
 msgstr "授予"
 
-#: rustinput-gtk/src/window.rs:1380
+#: rustinput-gtk/src/window.rs:1388
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "本机尝试连接时，{name} 会询问是否授权并显示配对码。在此输入配对码，即可让两台电脑相互授权，用于控制、剪贴板和文件。"
 
-#: rustinput-gtk/src/window.rs:1386
+#: rustinput-gtk/src/window.rs:1394
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "本机尝试连接时，另一台电脑会询问是否授权并显示配对码。在此输入配对码，即可让两台电脑相互授权，用于控制、剪贴板和文件。"
 
-#: rustinput-gtk/src/window.rs:1427
+#: rustinput-gtk/src/window.rs:1435
 msgid "Authorize with {name}"
 msgstr "与 {name} 相互授权"
 
-#: rustinput-gtk/src/window.rs:1428
+#: rustinput-gtk/src/window.rs:1436
 msgid "Authorize with the other computer"
 msgstr "与另一台电脑相互授权"
 
-#: rustinput-gtk/src/window.rs:1465
+#: rustinput-gtk/src/window.rs:1473
 msgid "Authorizing…"
 msgstr "正在授权…"
 
-#: rustinput-gtk/src/window.rs:1545
+#: rustinput-gtk/src/window.rs:1553
 msgid "Update now"
 msgstr "立即更新"
 
-#: rustinput-gtk/src/window.rs:1547
+#: rustinput-gtk/src/window.rs:1555
 msgid "Download"
 msgstr "下载"
 
@@ -946,38 +950,38 @@ msgstr "复制到 RustInput"
 msgid "Send to the other computer, ready to be pasted there"
 msgstr "发送到另一台计算机，可在那里粘贴"
 
-#: src/radial/mod.rs:96
+#: src/radial/mod.rs:98
 msgid "Go to {name}"
 msgstr "转到 {name}"
 
-#: src/radial/mod.rs:100
+#: src/radial/mod.rs:102
 msgid "Send the clipboard"
 msgstr "发送剪贴板"
 
-#: src/radial/mod.rs:104
+#: src/radial/mod.rs:106
 msgid "Send copied files"
 msgstr "发送复制的文件"
 
-#: src/radial/mod.rs:109
+#: src/radial/mod.rs:111
 msgid "Free the pointer"
 msgstr "释放指针"
 
-#: src/radial/mod.rs:110
+#: src/radial/mod.rs:112
 msgid "Keep the pointer here"
 msgstr "将指针保留在此"
 
-#: src/radial/mod.rs:117
-msgid "Turn auto-send off"
-msgstr "关闭自动发送"
+#: src/radial/mod.rs:127
+msgid "Lock {name}"
+msgstr "锁定 {name}"
 
-#: src/radial/mod.rs:118
-msgid "Turn auto-send on"
-msgstr "开启自动发送"
+#: src/radial/mod.rs:131
+msgid "Lock all computers"
+msgstr "锁定所有计算机"
 
-#: src/radial/mod.rs:140
+#: src/radial/mod.rs:143
 msgid "No files copied: copy files in the file manager first"
 msgstr "没有已复制的文件：请先在文件管理器中复制文件"
 
-#: src/radial/mod.rs:144
+#: src/radial/mod.rs:147
 msgid "Point at an action and let go"
 msgstr "指向一个操作并松开"

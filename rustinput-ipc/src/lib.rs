@@ -446,6 +446,9 @@ pub enum FrontendEvent {
     /// the computer `name` was asked to show the numbers of its monitors
     /// ([`FrontendRequest::IdentifyMonitors`]) and did not (`error`)
     MonitorsNotIdentified { name: String, error: String },
+    /// the screen of the computer `name` (this one too) was to lock, from
+    /// the radial menu, and did not (`error`)
+    ScreenNotLocked { name: String, error: String },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]

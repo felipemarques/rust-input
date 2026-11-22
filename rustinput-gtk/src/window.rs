@@ -313,6 +313,14 @@ impl Window {
         ));
     }
 
+    /// the screen of the computer `name` did not lock
+    pub(super) fn screen_not_locked(&self, name: &str, error: &str) {
+        self.show_toast(&trf(
+            "The screen of {name} did not lock: {error}",
+            &[("name", &name), ("error", &error)],
+        ));
+    }
+
     /// the arrangement went to `name`, or not
     pub(super) fn arrangement_sent(&self, name: &str, error: Option<&str>) {
         match error {

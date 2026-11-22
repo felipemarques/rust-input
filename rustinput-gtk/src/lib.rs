@@ -424,6 +424,9 @@ fn build_ui(app: &Application) {
                         window.arrangement_sent(&name, error.as_deref())
                     }
                     FrontendEvent::ArrangementChanged { by } => window.arrangement_received(&by),
+                    FrontendEvent::ScreenNotLocked { name, error } => {
+                        window.screen_not_locked(&name, &error)
+                    }
                     FrontendEvent::MonitorsNotIdentified { name, error } => {
                         window.monitors_not_identified(&name, &error)
                     }

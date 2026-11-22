@@ -11,9 +11,12 @@
 //! - [`Message::Identify`]: the other device shows the number of each of
 //!   its monitors on it for a few seconds ([`crate::identify`]). An older
 //!   RustInput does not know it and closes the connection.
+//! - [`Message::Lock`]: the other device locks its screen ([`crate::lock`]),
+//!   and answers once it did, or why not.
 //!
 //! All are answered only to authorized devices: an arrangement changes
-//! where the pointer goes, and the monitors are no business of strangers.
+//! where the pointer goes, the monitors are no business of strangers, and
+//! only a device allowed to control this one may lock it.
 
 use std::{cell::RefCell, fmt, io, net::SocketAddr, rc::Rc, sync::Arc, time::Duration};
 
@@ -23,6 +26,7 @@ use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     net::TcpStream,
+    sync::oneshot,
     time::timeout,
 };
 use tokio_rustls::TlsConnector;
@@ -37,16 +41,28 @@ const MAX_MESSAGE: u32 = 256 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// longest name accepted from the other device
 const MAX_NAME: usize = 64;
+/// longest the screen may take to lock, within [`TIMEOUT`]
+const LOCK_TIMEOUT: Duration = Duration::from_secs(7);
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Message {
     Describe,
     Description(Description),
-    Arrange { layout: Layout, you: String },
+    Arrange {
+        layout: Layout,
+        you: String,
+    },
     Arranged,
     Identify,
     Identified,
-    Refused { reason: String },
+    Lock,
+    /// the screen locked, or `error`
+    Locked {
+        error: Option<String>,
+    },
+    Refused {
+        reason: String,
+    },
 }
 
 /// a device as it describes itself
@@ -75,6 +91,12 @@ pub(crate) enum ArrangementEvent {
     },
     /// an authorized device asks to show the numbers of the monitors
     Identify { addr: SocketAddr },
+    /// an authorized device asks to lock the screen; `done` tells it how
+    /// that went
+    Lock {
+        addr: SocketAddr,
+        done: oneshot::Sender<Result<(), String>>,
+    },
 }
 
 /// the monitors of this device, from the top left corner of its desktop,
@@ -164,6 +186,17 @@ impl Arrangement {
                 let _ = self.events.send(ArrangementEvent::Identify { addr });
                 Message::Identified
             }
+            Message::Lock => {
+                let (done, result) = oneshot::channel();
+                let _ = self.events.send(ArrangementEvent::Lock { addr, done });
+                let error = match timeout(LOCK_TIMEOUT, result).await {
+                    Ok(Ok(Ok(()))) => None,
+                    Ok(Ok(Err(e))) => Some(e),
+                    Ok(Err(_)) => Some("RustInput is closing".into()),
+                    Err(_) => Some("the screen did not lock in time".into()),
+                };
+                Message::Locked { error }
+            }
             _ => Message::Refused {
                 reason: "unexpected message".into(),
             },
@@ -179,6 +212,8 @@ pub(crate) enum ArrangeError {
     Unreachable(String),
     /// it answered no
     Refused(String),
+    /// it tried and could not
+    Failed(String),
 }
 
 impl fmt::Display for ArrangeError {
@@ -186,6 +221,7 @@ impl fmt::Display for ArrangeError {
         match self {
             ArrangeError::Unreachable(why) => write!(f, "{why}"),
             ArrangeError::Refused(why) => write!(f, "refused: {why}"),
+            ArrangeError::Failed(why) => write!(f, "{why}"),
         }
     }
 }
@@ -238,12 +274,34 @@ pub(crate) async fn identify(
         Ok((_, Message::Identified)) => Ok(()),
         Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
         Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
-        // an older RustInput closes the connection on a message it does not
-        // know
-        Err(ArrangeError::Unreachable(e)) if e.contains("eof") || e.contains("closed") => Err(
-            ArrangeError::Unreachable("it runs an older RustInput, without this".into()),
-        ),
-        Err(e) => Err(e),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// asks the device at one of `addrs` to lock its screen, and waits until it
+/// did
+pub(crate) async fn lock(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+) -> Result<(), ArrangeError> {
+    match ask(cert, addrs, expected, Message::Lock).await {
+        Ok((_, Message::Locked { error: None })) => Ok(()),
+        Ok((_, Message::Locked { error: Some(e) })) => Err(ArrangeError::Failed(e)),
+        Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// An older RustInput closes the connection on a message it does not know:
+/// said so instead of the end of the connection.
+fn older(e: ArrangeError) -> ArrangeError {
+    match e {
+        ArrangeError::Unreachable(e) if e.contains("eof") || e.contains("closed") => {
+            ArrangeError::Unreachable("it runs an older RustInput, without this".into())
+        }
+        e => e,
     }
 }
 
@@ -422,5 +480,36 @@ mod tests {
             rx.recv().await.unwrap(),
             ArrangementEvent::Identify { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn locks_its_screen_for_authorized_devices_only_and_says_how_it_went() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        assert!(matches!(
+            exchange(&arrangement, Message::Lock, false).await,
+            Message::Refused { .. }
+        ));
+        assert!(
+            timeout(Duration::from_millis(50), rx.recv()).await.is_err(),
+            "not locked for a stranger"
+        );
+        let failed = "no screen locker answered".to_owned();
+        for (result, expected) in [(Ok(()), None), (Err(failed.clone()), Some(failed))] {
+            // the service locks the screen and says how it went
+            let service = async {
+                match rx.recv().await.unwrap() {
+                    ArrangementEvent::Lock { done, .. } => {
+                        let _ = done.send(result);
+                    }
+                    other => panic!("unexpected {other:?}"),
+                }
+            };
+            let (answer, ()) = tokio::join!(exchange(&arrangement, Message::Lock, true), service);
+            match answer {
+                Message::Locked { error } => assert_eq!(error, expected),
+                other => panic!("unexpected {other:?}"),
+            }
+        }
     }
 }

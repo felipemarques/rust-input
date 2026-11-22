@@ -302,6 +302,48 @@ network: the device the pointer is on shows it, because the keys go there.
   except one asked for with "Go to".
 - "Pause RustInput" pauses (see Pausing); while paused the wheel has only
   "Resume RustInput" and "Open RustInput".
+- "Lock <name>" (one for each client, like "Go to") and "Lock all
+  computers" lock screens (see Locking the screens). "Turn auto-send on/off"
+  left the wheel in 0.30.0: it is in the tray menu and in Preferences.
+- The slices keep their order, so that pointing becomes a habit: the
+  clients to go to, the clipboard, the files, keeping the pointer, pausing,
+  the clients to lock, locking all, the transfers, the window. Beyond eight
+  slices the wheel grows (up to half as large again, `draw::size`), so each
+  label keeps its room.
+
+## Locking the screens
+
+`src/lock.rs` locks the screen of this device: `LockWorkStation` on Windows
+(the daemon runs in the session at the screen), `SACLockScreenImmediate` of
+the login framework on macOS (else `pmset displaysleepnow`), and on Linux
+and the BSDs the screen locker of `XDG_CURRENT_DESKTOP` (Cinnamon, MATE,
+XFCE, LXQt), then `loginctl lock-session`, then `xdg-screensaver lock`, each
+given 5 s. `loginctl` succeeds even when nothing follows it, so it comes after
+the lockers of the desktops that do not.
+
+"Lock <name>" sends `Lock` to that client over the arrangement channel (see
+Arrangement); "Lock all computers" sends it to every active client and locks
+this device. A device asked to lock releases its capture first (a screen
+locker can not take a mouse grabbed by RustInput, nor while the wheel holds
+it, hence `LOCK_DELAY`, 300 ms), locks, and only then answers
+`Locked { error }`. Errors come back to the window as
+`FrontendEvent::ScreenNotLocked`. A paused device still locks: pausing keeps
+the mouse and keyboard, locking only protects.
+
+Windows refuses the input of RustInput on its lock screen (another desktop,
+which the daemon does not reach yet). `lock::screen_locked` reads it from
+`WTSQuerySessionInformationW(WTSSessionInfoEx)`: while it shows, the listen
+side answers `Enter` with `Leave` (the other device keeps its pointer), and
+every 500 ms of input it looks whether a device controlling this one should
+get its pointer back (`Leave`), rather than lose it on a screen that takes
+no input. Elsewhere the screen locker takes the emulated input like any
+other, which unlocks it from the other keyboard.
+
+`e2e-tests/lock.sh` checks it with two instances that have each other as
+clients and stand-ins for the screen lockers (`e2e-tests/lib.sh`, so no test
+locks the real screen): locking B from A, locking both, locking A from the
+wheel of B while A controls B (A brings its pointer back first), a paused B
+still locking, and the reason given when no locker works.
 
 ## Pausing
 
@@ -412,6 +454,9 @@ answers authorized computers only:
 - `Identify` (0.28.0): show the numbers of your monitors. An older RustInput
   does not know the message and closes the connection, which the asking
   computer reports as "older RustInput".
+- `Lock` (0.30.0): lock your screen, answered `Locked { error }` once it did
+  or could not (see Locking the screens); an older RustInput closes the
+  connection, as for `Identify`.
 
 Applying an arrangement in the window (`FrontendRequest::Arrange`) gives it
 the next revision, applies it here and sends it to every other computer of

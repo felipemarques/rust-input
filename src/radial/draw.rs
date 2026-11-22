@@ -11,9 +11,17 @@ const SIZE: f32 = 420.0;
 /// the accent of the RustInput icon
 pub(crate) const ACCENT: (u8, u8, u8) = (232, 105, 46);
 
-/// size in pixels of the wheel at `scale`
-pub(super) fn size(scale: f32) -> u32 {
-    (SIZE * scale.clamp(1.0, 4.0)).round() as u32
+/// slices the wheel has room for at [`SIZE`]
+const ROOMY: usize = 8;
+/// the most the wheel grows for more slices than [`ROOMY`]
+const MAX_GROWTH: f32 = 1.5;
+
+/// Size in pixels of the wheel at `scale`, with `n` slices: beyond
+/// [`ROOMY`] it grows, so that each slice keeps the room of its label, up to
+/// [`MAX_GROWTH`].
+pub(super) fn size(scale: f32, n: usize) -> u32 {
+    let growth = (n as f32 / ROOMY as f32).clamp(1.0, MAX_GROWTH);
+    (SIZE * growth * scale.clamp(1.0, 4.0)).round() as u32
 }
 
 /// The slice the pointer points at, `(dx, dy)` away from the middle, among
@@ -29,9 +37,10 @@ pub(super) fn slice_at(n: usize, dx: f64, dy: f64, dead_zone: f64) -> Option<usi
     Some((angle.rem_euclid(360.0) / width) as usize % n)
 }
 
-/// radius of the dead zone at `scale`: pointing into the middle picks nothing
-pub(super) fn dead_zone(scale: f32) -> f64 {
-    (SIZE * 0.5 * 0.38 * 0.6 * scale.clamp(1.0, 4.0)) as f64
+/// radius of the dead zone at `scale` with `n` slices: pointing into the
+/// middle picks nothing
+pub(super) fn dead_zone(scale: f32, n: usize) -> f64 {
+    size(scale, n) as f64 * 0.5 * 0.38 * 0.6
 }
 
 /// the wheel with `labels` around it, `selected` highlighted and described in
@@ -44,7 +53,7 @@ pub(super) fn render(
     scale: f32,
 ) -> Pixmap {
     let scale = scale.clamp(1.0, 4.0);
-    let size = size(scale);
+    let size = size(scale, labels.len());
     let mut pixmap = Pixmap::new(size, size).expect("wheel size");
     let c = size as f32 / 2.0;
     let outer = c - 2.0 * scale;
@@ -88,7 +97,7 @@ pub(super) fn render(
             &mut pixmap,
             font,
             label,
-            13.0 * scale,
+            fitting(font, label, 13.0 * scale, width),
             (x, y),
             width,
             3,
@@ -199,6 +208,26 @@ fn pieces(text: &str) -> Vec<(String, bool)> {
         }
     }
     pieces
+}
+
+/// The size of the letters of `text`, at most `px`, at which its longest word
+/// fits in `width`: a little smaller (down to 80 %) rather than cut, as long
+/// words are in Russian or German.
+fn fitting(font: &Fonts, text: &str, px: f32, width: f32) -> f32 {
+    let words = pieces(text);
+    let widest = |px: f32| {
+        words
+            .iter()
+            .map(|(piece, _)| text_width(font, piece, px))
+            .fold(0.0, f32::max)
+    };
+    let smallest = px * 0.8;
+    // the widths do not shrink quite in proportion (whole pixels)
+    let mut fit = px;
+    while widest(fit) > width && fit > smallest {
+        fit = (fit * 0.97).max(smallest);
+    }
+    fit
 }
 
 /// `text` broken into lines of at most `width`, at most `max_lines` of them
@@ -316,6 +345,38 @@ mod tests {
     }
 
     #[test]
+    fn the_wheel_grows_for_more_slices_than_it_has_room_for() {
+        assert_eq!(size(1.0, 3), 420);
+        assert_eq!(size(1.0, 8), 420);
+        assert_eq!(size(1.0, 10), 525);
+        assert_eq!(size(1.0, 12), 630);
+        assert_eq!(size(1.0, 20), 630, "up to half as large again");
+        assert_eq!(size(2.0, 8), 840);
+        assert!(dead_zone(1.0, 12) > dead_zone(1.0, 8));
+        assert_eq!(
+            render(&vec![String::new(); 10], None, "", None, 1.0).width(),
+            525
+        );
+    }
+
+    #[test]
+    fn a_long_word_gets_smaller_letters_rather_than_cut() {
+        // the fonts of the system: none on some build machines
+        let Some(font) = Fonts::load(rustinput_i18n::ENGLISH) else {
+            return;
+        };
+        let word = "Заблокировать";
+        let width = text_width(&font, word, 13.0) * 0.9;
+        let px = fitting(&font, "Заблокировать все", 13.0, width);
+        assert!((13.0 * 0.8..13.0).contains(&px));
+        assert!(text_width(&font, word, px) <= width + 0.5);
+        assert_eq!(wrap(&font, word, px, width, 3), vec![word.to_owned()]);
+        // short words keep their size, and the shrinking stops at 80 %
+        assert_eq!(fitting(&font, "Go to xeon", 13.0, 200.0), 13.0);
+        assert_eq!(fitting(&font, word, 13.0, 10.0), 13.0 * 0.8);
+    }
+
+    #[test]
     fn chinese_and_japanese_break_between_letters() {
         let joined = |text: &str| {
             pieces(text)
@@ -333,13 +394,13 @@ mod tests {
     fn the_wheel_is_drawn_without_a_font_too() {
         let labels = vec!["a".to_owned(), "b".to_owned(), "c".to_owned()];
         let pixmap = render(&labels, Some(1), "hint", None, 1.0);
-        assert_eq!(pixmap.width(), size(1.0));
+        assert_eq!(pixmap.width(), size(1.0, 3));
         let c = (pixmap.width() / 2) as usize;
         let at = |x: usize, y: usize| pixmap.data()[(y * pixmap.width() as usize + x) * 4 + 3];
         // the corners are transparent, the wheel is not
         assert_eq!(at(0, 0), 0);
         assert!(at(c, c / 3) > 0);
-        assert_eq!(size(2.0), 2 * size(1.0));
+        assert_eq!(size(2.0, 3), 2 * size(1.0, 3));
         assert_eq!(bgra(&pixmap).len(), pixmap.data().len());
     }
 }

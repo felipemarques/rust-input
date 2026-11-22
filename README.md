@@ -32,6 +32,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | ⏸️ Pause from the tray icon, the window or the radial menu; the other computers see it paused | ✅ ¹² | ✅ ¹² | ✅ ² | ✅ ² |
+| 🔐 Lock the screen of another computer, or of all of them at once, from the radial menu | ✅ ¹³ | ✅ ¹³ | ✅ ¹⁴ | ✅ ¹⁴ |
 | 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
 | 🌍 In English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文 and 日本語 | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | ⬆️ Tells of new versions, if you want it to; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
@@ -57,6 +58,9 @@ Windows and Linux (X11), the parts of an edge that lead nowhere are not a wall y
 ¹¹ New in 0.28.0: tested in automated runs between two Linux (X11) computers, and by hand between Windows 11 and
 Linux (X11).
 ¹² New in 0.29.0: tested in automated runs between two Linux (X11) computers, not yet by hand on Windows.
+¹³ New in 0.30.0: tested in automated runs between two Linux (X11) computers (with stand-ins for the screen locker),
+not yet by hand.
+¹⁴ Locked when another computer asks; the wheel to ask from needs X11 or Windows. Built, not tested by hand yet.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -163,7 +167,7 @@ weapon wheel of GTA V. Point at an action and let go of the keys to pick it; let
 picks nothing.
 
 <p align="center">
-  <img src="screenshots/radial-menu.png" width="380" alt="The radial menu">
+  <img src="screenshots/radial-menu.png" width="420" alt="The radial menu">
 </p>
 
 - **Go to** another computer: the pointer moves there without crossing the edge, at the same height.
@@ -173,8 +177,26 @@ picks nothing.
   drawing.
 - **Pause RustInput**: see [Pausing](#pausing). While paused the wheel only has **Resume RustInput** and
   **Open RustInput**.
-- **Turn auto-send on / off**: "Send copied files automatically".
+- **Lock** another computer: its screen locks, as Win+L does there. One for each computer, like **Go to**.
+- **Lock all computers**: this one and the others at once, when you leave the desk.
 - **File transfers** and **Open RustInput** open those windows.
+
+"Send copied files automatically" is in the menu of the tray icon and in Preferences. With more than eight actions
+(several computers), the wheel grows so their names keep their room.
+
+### Locking the screens
+
+Only an authorized computer can ask another to lock its screen, and it does even when that one is paused: locking only
+ever protects it. The computer that locks brings its pointer back first, so the screen locker gets the mouse and the
+keyboard. If a screen does not lock, the window of RustInput says why ("The screen of laptop did not lock: …"), and
+so does `daemon.log`.
+
+- **Windows**: as Win+L. Its lock screen is a desktop of Windows that RustInput does not reach yet (see the note in
+  [OS support](#os-support)), so unlock it with the keyboard of that computer; meanwhile the pointer of the others does
+  not go there, and comes back if it was there.
+- **Linux**: the screen locker of the desktop (Cinnamon, MATE, XFCE, LXQt), else `loginctl lock-session`, which GNOME,
+  KDE and most others follow, else `xdg-screensaver lock`.
+- **macOS**: as "Lock Screen" in the Apple menu.
 
 The wheel shows on the screen of the computer the pointer is on: the keys go there, and that computer shows it.
 The keys are only watched, never taken from the applications, so every shortcut with Ctrl+Alt keeps working: pressing
@@ -384,7 +406,8 @@ Most current desktop environments and operating systems are fully supported, thi
 > names the program.
 >
 > - **Windows, lock screen and administrator prompts**: these appear on a desktop of Windows of its own, which RustInput
-> does not reach yet: use the keyboard and the mouse of the Windows computer there.
+> does not reach yet: use the keyboard and the mouse of the Windows computer there. While the lock screen shows, the
+> pointer of another computer does not go to Windows, and comes back if it was there, instead of getting lost there.
 
 For more detailed information about os support see [Detailed OS Support](#detailed-os-support)
 
@@ -897,6 +920,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
 - [x] Pause from the tray icon, the window or the radial menu, seen by the other computers
+- [x] Lock the screen of another computer, or of all of them, from the radial menu
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [x] Authorize both computers on each other from the controlling one, with a code

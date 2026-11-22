@@ -20,6 +20,10 @@ use tokio::{
     task::{JoinHandle, spawn_local},
 };
 
+/// how often, while controlled, whether the lock screen shows is looked at
+/// ([`crate::lock::screen_locked`])
+const LOCK_LOOK: Duration = Duration::from_millis(500);
+
 /// emulation handling events received from a listener
 pub(crate) struct Emulation {
     task: JoinHandle<()>,
@@ -179,6 +183,10 @@ impl ListenTask {
         let mut entered = HashSet::new();
         // paused by the user: nobody controls this device
         let mut paused = false;
+        // Windows refuses the input of RustInput on its lock screen: then
+        // nobody enters, and whoever controls this device gets its pointer
+        // back, rather than lose it here (looked at now and then)
+        let mut lock_looked = Instant::now();
         loop {
             select! {
                 e = self.listener.next() => {match e {
@@ -186,8 +194,9 @@ impl ListenTask {
                         log::trace!("{event} <-<-<-<-<- {addr}");
                         last_response.insert(addr, Instant::now());
                         match event {
-                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if paused => {
+                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if paused || crate::lock::screen_locked() => {
                                 // the other device keeps its pointer
+                                log::debug!("{addr} does not enter: paused or the screen is locked");
                                 self.listener.reply(addr, ProtoEvent::Leave(0)).await;
                             }
                             ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) | ProtoEvent::EnterSpan { pos, .. } => {
@@ -219,7 +228,21 @@ impl ListenTask {
                                 self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                             }
                             ProtoEvent::Input(_) if paused => {}
-                            ProtoEvent::Input(event) => self.emulation_proxy.consume(event, addr),
+                            ProtoEvent::Input(event) => {
+                                let locked = lock_looked.elapsed() >= LOCK_LOOK && {
+                                    lock_looked = Instant::now();
+                                    crate::lock::screen_locked()
+                                };
+                                if locked {
+                                    for addr in entered.drain() {
+                                        log::info!("the screen is locked: {addr} no longer controls this device");
+                                        self.emulation_proxy.remove(addr);
+                                        self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                                    }
+                                } else {
+                                    self.emulation_proxy.consume(event, addr)
+                                }
+                            }
                             ProtoEvent::Ping => {
                                 let available = self.emulation_proxy.emulation_active.get() && !paused;
                                 self.listener.reply(addr, ProtoEvent::Pong(available)).await;
