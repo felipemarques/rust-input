@@ -26,6 +26,7 @@
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/status/network-wired-disconnected-symbolic.svg">icons/scalable/status/network-wired-disconnected-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/devices/video-joined-displays-symbolic.svg">icons/scalable/devices/video-joined-displays-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/devices/computer-symbolic.svg">icons/scalable/devices/computer-symbolic.svg</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="scalable/devices/video-display-symbolic.svg">icons/scalable/devices/video-display-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/categories/preferences-system-symbolic.svg">icons/scalable/categories/preferences-system-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/help-about-symbolic.svg">icons/scalable/actions/help-about-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/go-next-symbolic.svg">icons/scalable/actions/go-next-symbolic.svg</file>

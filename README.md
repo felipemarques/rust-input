@@ -23,6 +23,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | ↔️ Move between computers through the screen edge, both ways | ✅ | ✅ | ✅ ¹ | ✅ |
 | 🎯 Pointer keeps its height when crossing, like Synergy | ✅ | ✅ | — | — |
 | 🧩 Arrange the computers like monitors, by dragging them; set up on all of them at once | ✅ ⁹ | ✅ ⁹ | ✅ ² | ✅ ² |
+| 🔢 Identify the monitors: each one shows its number, on every computer at once | ✅ ¹¹ | ✅ ¹¹ | — | — |
 | 📋 Clipboard: text | ✅ | ✅ | ✅ ² | ✅ ² |
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
@@ -52,6 +53,7 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁹ New in 0.26.0: tested in automated runs between two Linux (X11) computers, not yet by hand. On other systems than
 Windows and Linux (X11), the parts of an edge that lead nowhere are not a wall yet (see [Arrangement](#arrangement)).
 ¹⁰ New in 0.27.0: tested in automated runs on Linux (X11), not yet by hand on Windows.
+¹¹ New in 0.28.0: tested in automated runs between two Linux (X11) computers, not yet by hand on Windows.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -211,10 +213,10 @@ the pointer keeps the previous behavior.
 ## Arrangement
 
 <p align="center">
-  <img src="screenshots/arrangement.png" width="820" alt="The Arrangement page: two computers side by side, the laptop selected">
+  <img src="screenshots/arrangement.png" width="820" alt="The Arrangement page: an office computer with two monitors and a laptop right of the lower one, each monitor with its number">
   <br>
-  <em>The Arrangement page: the laptop right of the office computer, where they touch drawn in the accent color, and
-  beside it where the mouse leaves the laptop.</em>
+  <em>The Arrangement page: the laptop right of the lower monitor of the office computer, where they touch drawn in the
+  accent color, each monitor with its number, and beside it where the mouse leaves the laptop.</em>
 </p>
 
 The Arrangement page shows the computers like the monitors in the display settings of a desktop: each one at the size of
@@ -227,6 +229,12 @@ edges are not shared can also meet over the whole of both edges, the place along
 before arrangements: the switch next to that neighbor, beside the arrangement. Clicking a computer shows there where the
 mouse leaves it; **Connection settings** opens its connection on the Computers page, with its address and the code to
 authorize it.
+
+Each monitor shows its number, counted as text is read: row by row from the top, from left to right in a row (monitors
+side by side make a row also when not at the same height). **Identify monitors** shows that number on the monitor itself
+for four seconds, with the name of the computer and the size of the monitor, on this computer and on the others at once
+(those that authorized this one; a click hides it). It works on Windows and Linux (X11), and both computers need
+RustInput 0.28.0 or newer; a computer that did not show its numbers is named in a message.
 
 **Apply** sets up this computer and sends the arrangement to the others, over the encrypted TCP connection, to the
 computers that authorized this one only. Each finds itself in it and sets up its connections: the edge and the part of
@@ -862,6 +870,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
+- [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 
 
 ## Detailed OS Support

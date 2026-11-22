@@ -436,6 +436,9 @@ pub enum FrontendEvent {
     PointerAt(Option<ClientHandle>),
     /// whether there is a newer version of RustInput, and whether to ask
     Updates(UpdateState),
+    /// the computer `name` was asked to show the numbers of its monitors
+    /// ([`FrontendRequest::IdentifyMonitors`]) and did not (`error`)
+    MonitorsNotIdentified { name: String, error: String },
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -465,6 +468,10 @@ pub enum FrontendRequest {
     Arrangement,
     /// arrange the computers so, here and on the others
     Arrange(layout::Layout),
+    /// show the number of each monitor on it for a few seconds, here and
+    /// on the other computers, as the arrangement numbers them
+    /// ([`layout::monitor_numbers`])
+    IdentifyMonitors,
     /// update fix-ips
     UpdateFixIps(ClientHandle, Vec<IpAddr>),
     /// request reenabling input capture

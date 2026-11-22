@@ -143,6 +143,8 @@ const UPDATE_RETRY: Duration = Duration::from_secs(60 * 60);
 enum ArrangeResult {
     Described(ClientHandle, Result<(String, Description), ArrangeError>),
     Sent(String, Result<(), ArrangeError>),
+    /// the computer `name` was asked to identify its monitors
+    Identified(String, Result<(), ArrangeError>),
 }
 
 #[derive(Debug)]
@@ -403,6 +405,7 @@ impl Service {
             }
             FrontendRequest::Arrangement => self.show_arrangement(true),
             FrontendRequest::Arrange(layout) => self.arrange(layout),
+            FrontendRequest::IdentifyMonitors => self.identify_monitors(),
             FrontendRequest::ResolveDns(handle) => self.resolve(handle),
             FrontendRequest::Sync => self.sync_frontend(),
             FrontendRequest::RemoveAuthorizedKey(key) => {
@@ -1370,13 +1373,54 @@ impl Service {
         }
     }
 
+    /// shows the numbers of the monitors here and on the other computers
+    fn identify_monitors(&mut self) {
+        crate::identify::show(self.name.clone());
+        for handle in self.client_manager.registered_clients() {
+            let addrs = self.client_addrs(handle);
+            if addrs.is_empty() {
+                continue;
+            }
+            let (expected, name) = match self.descriptions.get(&handle) {
+                Some(Ok((fingerprint, d))) => (Some(fingerprint.clone()), d.name.clone()),
+                _ => (None, self.client_name(handle)),
+            };
+            let (cert, results) = (self.cert.clone(), self.arrange_results_tx.clone());
+            tokio::task::spawn_local(async move {
+                let result = arrangement::identify(cert, addrs, expected).await;
+                let _ = results.send(ArrangeResult::Identified(name, result));
+            });
+        }
+    }
+
+    /// what a client is called before it described itself
+    fn client_name(&self, handle: ClientHandle) -> String {
+        let config = self.client_manager.get_state(handle).map(|(c, _)| c);
+        config
+            .as_ref()
+            .and_then(|c| c.hostname.clone())
+            .or_else(|| {
+                config
+                    .as_ref()
+                    .and_then(|c| c.fix_ips.first().map(|ip| ip.to_string()))
+            })
+            .unwrap_or_else(|| format!("client {handle}"))
+    }
+
     fn handle_arrangement_event(&mut self, event: ArrangementEvent) {
-        let ArrangementEvent::Received {
-            layout,
-            you,
-            from,
-            addr,
-        } = event;
+        let (layout, you, from, addr) = match event {
+            ArrangementEvent::Received {
+                layout,
+                you,
+                from,
+                addr,
+            } => (layout, you, from, addr),
+            ArrangementEvent::Identify { addr } => {
+                log::info!("{addr} asks to show the numbers of the monitors");
+                crate::identify::show(self.name.clone());
+                return;
+            }
+        };
         if layout.revision < self.layout.revision {
             log::info!(
                 "arrangement {} from {addr} is older than this one ({}), kept this one",
@@ -1419,6 +1463,16 @@ impl Service {
                 }
                 self.notify_frontend(FrontendEvent::ArrangementSent { name, error });
             }
+            ArrangeResult::Identified(name, result) => match result {
+                Ok(()) => log::info!("{name} shows the numbers of its monitors"),
+                Err(e) => {
+                    log::warn!("{name} did not show the numbers of its monitors: {e}");
+                    self.notify_frontend(FrontendEvent::MonitorsNotIdentified {
+                        name,
+                        error: e.to_string(),
+                    });
+                }
+            },
         }
     }
 

@@ -4,7 +4,8 @@
 //! keys, glues it to the nearest free edge of another one, aligned with the
 //! ends, the middle and the monitors where it comes close; the parts of the
 //! edges that meet are drawn in the accent color, lighter where a pair meets
-//! over the whole of its edges in proportion.
+//! over the whole of its edges in proportion. Each monitor shows its number
+//! ([`monitor_numbers`]), the one "Identify monitors" shows on it.
 
 use std::cell::{Cell, RefCell};
 
@@ -12,7 +13,7 @@ use adw::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk, pango, prelude::*};
 use rustinput_ipc::{
     ClientHandle, Position,
-    layout::{ArrangementView, Layout, Machine},
+    layout::{ArrangementView, Layout, Machine, monitor_numbers},
 };
 
 use crate::i18n::{tr, trf};
@@ -940,6 +941,8 @@ impl ArrangementArea {
             snapshot.append_layout(&text, &if item.own { fg } else { dim });
             snapshot.pop();
             snapshot.restore();
+            let text_bottom = y + 8.0 + text.pixel_size().1 as f64;
+            self.draw_monitor_numbers(snapshot, t, (x, y), m, text_bottom, with_alpha(fg, 0.38));
 
             // the computer the mouse is on
             let here = if item.own {
@@ -999,6 +1002,69 @@ impl ArrangementArea {
                 };
                 self.draw_link(snapshot, t, a, b, n.pos, accent, layout.whole(&a.id, &b.id));
             }
+        }
+    }
+
+    /// The number of each monitor of `m`, drawn at (`x`, `y`), in its middle
+    /// below the text of the computer (which ends at `text_bottom`), with
+    /// its size under it when the computer has more than one.
+    fn draw_monitor_numbers(
+        &self,
+        snapshot: &gtk::Snapshot,
+        t: Transform,
+        (x, y): (f64, f64),
+        m: &Machine,
+        text_bottom: f64,
+        color: gdk::RGBA,
+    ) {
+        let numbers = monitor_numbers(&m.monitors);
+        let several = m.monitors.len() > 1;
+        for (mon, number) in m.monitors.iter().zip(numbers) {
+            let left = x + mon.x as f64 * t.scale;
+            let width = mon.width as f64 * t.scale;
+            let top = (y + mon.y as f64 * t.scale).max(text_bottom + 2.0);
+            let bottom = y + (mon.y + mon.height) as f64 * t.scale - 4.0;
+            let room = bottom - top;
+            let px = (room * 0.55).min(width * 0.4).min(56.0);
+            if px < 12.0 {
+                continue;
+            }
+            let digits = self.create_pango_layout(Some(&number.to_string()));
+            let mut font = pango::FontDescription::new();
+            font.set_weight(pango::Weight::Bold);
+            font.set_absolute_size(px * pango::SCALE as f64);
+            digits.set_font_description(Some(&font));
+            let (dw, dh) = digits.pixel_size();
+            let size = several.then(|| {
+                let size =
+                    self.create_pango_layout(Some(&format!("{} × {}", mon.width, mon.height)));
+                size.set_auto_dir(false);
+                size
+            });
+            let size_h = size.as_ref().map_or(0, |s| s.pixel_size().1) as f64;
+            let show_size = size.is_some() && room >= dh as f64 + size_h + 4.0;
+            let block = dh as f64 + if show_size { size_h } else { 0.0 };
+            let block_top = top + (room - block) / 2.0;
+            let clip = graphene::Rect::new(left as f32, top as f32, width as f32, room as f32);
+            snapshot.push_clip(&clip);
+            snapshot.save();
+            snapshot.translate(&graphene::Point::new(
+                (left + (width - dw as f64) / 2.0) as f32,
+                block_top as f32,
+            ));
+            snapshot.append_layout(&digits, &color);
+            snapshot.restore();
+            if let (true, Some(size)) = (show_size, size) {
+                let (sw, _) = size.pixel_size();
+                snapshot.save();
+                snapshot.translate(&graphene::Point::new(
+                    (left + (width - sw as f64) / 2.0) as f32,
+                    (block_top + dh as f64) as f32,
+                ));
+                snapshot.append_layout(&size, &color);
+                snapshot.restore();
+            }
+            snapshot.pop();
         }
     }
 

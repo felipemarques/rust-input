@@ -106,7 +106,19 @@ impl Window {
         let undo = gtk::Button::with_label(tr("Undo changes"));
         let apply = gtk::Button::with_label(tr("Apply"));
         apply.add_css_class("suggested-action");
+        let identify = gtk::Button::builder()
+            .child(
+                &adw::ButtonContent::builder()
+                    .icon_name("video-display-symbolic")
+                    .label(tr("Identify monitors"))
+                    .build(),
+            )
+            .tooltip_text(tr(
+                "Shows the number of each monitor on it for a few seconds, on every computer",
+            ))
+            .build();
         let bar = gtk::Box::builder().spacing(8).margin_top(10).build();
+        bar.append(&identify);
         bar.append(&status);
         bar.append(&undo);
         bar.append(&apply);
@@ -186,6 +198,11 @@ impl Window {
             #[weak]
             area,
             move |_| area.undo()
+        ));
+        identify.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.request(FrontendRequest::IdentifyMonitors)
         ));
         apply.connect_clicked(clone!(
             #[weak(rename_to = window)]
@@ -286,6 +303,14 @@ impl Window {
             parts.area.mark_applied();
         }
         self.show_toast(tr("Arrangement applied"));
+    }
+
+    /// the computer `name` did not show the numbers of its monitors
+    pub(super) fn monitors_not_identified(&self, name: &str, error: &str) {
+        self.show_toast(&trf(
+            "{name} did not show the numbers of its monitors: {error}",
+            &[("name", &name), ("error", &error)],
+        ));
     }
 
     /// the arrangement went to `name`, or not

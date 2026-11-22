@@ -25,6 +25,44 @@ pub struct Monitor {
     pub height: i32,
 }
 
+/// The number of each of `monitors`, from 1, in the order given: row by row
+/// from the top, and from left to right within a row, as text is read.
+/// Monitors side by side make a row also when not at the same height (the
+/// middle of one is within the height of the other). The window shows these
+/// numbers in the arrangement, and each computer shows them on its monitors
+/// when asked to identify them.
+pub fn monitor_numbers(monitors: &[Monitor]) -> Vec<usize> {
+    let middle = |m: &Monitor| m.y + m.height / 2;
+    let within = |p: i32, m: &Monitor| p >= m.y && p < m.y + m.height;
+    let mut by_height: Vec<usize> = (0..monitors.len()).collect();
+    by_height.sort_by_key(|&i| (middle(&monitors[i]), monitors[i].x));
+    let mut rows: Vec<Vec<usize>> = Vec::new();
+    for i in by_height {
+        let m = &monitors[i];
+        match rows.last_mut() {
+            Some(row)
+                if {
+                    let first = &monitors[row[0]];
+                    within(middle(m), first) || within(middle(first), m)
+                } =>
+            {
+                row.push(i)
+            }
+            _ => rows.push(vec![i]),
+        }
+    }
+    let mut numbers = vec![0; monitors.len()];
+    let mut next = 1;
+    for mut row in rows {
+        row.sort_by_key(|&i| (monitors[i].x, monitors[i].y));
+        for i in row {
+            numbers[i] = next;
+            next += 1;
+        }
+    }
+    numbers
+}
+
 /// a computer of the arrangement
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Machine {
@@ -244,6 +282,37 @@ impl Layout {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn monitor(x: i32, y: i32, width: i32, height: i32) -> Monitor {
+        Monitor {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    #[test]
+    fn monitors_are_numbered_as_text_is_read() {
+        // two stacked: the top one first, whatever the order given
+        let stacked = [monitor(0, 1080, 1920, 1080), monitor(0, 0, 1920, 1080)];
+        assert_eq!(monitor_numbers(&stacked), [2, 1]);
+        // side by side, not at the same height: one row, from the left
+        let side = [
+            monitor(1920, -200, 2560, 1440),
+            monitor(0, 0, 1920, 1080),
+            monitor(4480, 300, 1080, 1920),
+        ];
+        assert_eq!(monitor_numbers(&side), [2, 1, 3]);
+        // a row of two over a third one
+        let grid = [
+            monitor(0, 1080, 1920, 1080),
+            monitor(1920, 0, 1920, 1080),
+            monitor(0, 0, 1920, 1080),
+        ];
+        assert_eq!(monitor_numbers(&grid), [3, 2, 1]);
+        assert!(monitor_numbers(&[]).is_empty());
+    }
 
     fn machine(id: &str, x: i32, y: i32, width: i32, height: i32) -> Machine {
         Machine {

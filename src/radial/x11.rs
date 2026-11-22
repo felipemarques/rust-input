@@ -180,7 +180,7 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Err
 }
 
 /// waits for something to read on the connection, at most `timeout`
-fn wait(conn: &RustConnection, timeout: Option<Duration>) {
+pub(crate) fn wait(conn: &RustConnection, timeout: Option<Duration>) {
     let mut fd = libc::pollfd {
         fd: conn.stream().as_raw_fd(),
         events: libc::POLLIN,
@@ -188,6 +188,95 @@ fn wait(conn: &RustConnection, timeout: Option<Duration>) {
     };
     let ms = timeout.map_or(-1, |t| t.as_millis() as i32);
     unsafe { libc::poll(&mut fd, 1, ms) };
+}
+
+/// display scaling from Xft.dpi, which desktops set for HiDPI screens
+pub(crate) fn display_scale(conn: &RustConnection, root: xproto::Window) -> f32 {
+    let property = conn
+        .get_property(
+            false,
+            root,
+            xproto::AtomEnum::RESOURCE_MANAGER,
+            xproto::AtomEnum::STRING,
+            0,
+            64 * 1024,
+        )
+        .ok()
+        .and_then(|c| c.reply().ok());
+    let dpi = property
+        .and_then(|p| String::from_utf8(p.value).ok())
+        .and_then(|resources| {
+            resources.lines().find_map(|line| {
+                let value = line.strip_prefix("Xft.dpi:")?;
+                value.trim().parse::<f32>().ok()
+            })
+        })
+        .unwrap_or(96.0);
+    (dpi / 96.0).clamp(1.0, 4.0)
+}
+
+/// a 32 bit visual for a window with an alpha channel
+pub(crate) fn argb_visual(screen: &xproto::Screen) -> Option<xproto::Visualid> {
+    screen
+        .allowed_depths
+        .iter()
+        .filter(|d| d.depth == 32)
+        .flat_map(|d| d.visuals.iter())
+        .find(|v| v.class == xproto::VisualClass::TRUE_COLOR)
+        .map(|v| v.visual_id)
+}
+
+/// whether a compositor blends windows with their alpha channel
+pub(crate) fn composited(conn: &RustConnection, root: xproto::Window) -> bool {
+    let screen = conn
+        .setup()
+        .roots
+        .iter()
+        .position(|s| s.root == root)
+        .unwrap_or(0);
+    let name = format!("_NET_WM_CM_S{screen}");
+    let Ok(atom) = conn.intern_atom(false, name.as_bytes()) else {
+        return false;
+    };
+    let Some(atom) = atom.reply().ok().map(|a| a.atom) else {
+        return false;
+    };
+    conn.get_selection_owner(atom)
+        .ok()
+        .and_then(|c| c.reply().ok())
+        .is_some_and(|r| r.owner != NONE)
+}
+
+/// Puts the premultiplied BGRA `pixels`, `width` of them a row, into
+/// `window`, in bands that fit into a request.
+pub(crate) fn put_pixels(
+    conn: &RustConnection,
+    window: xproto::Window,
+    gc: xproto::Gcontext,
+    width: usize,
+    depth: u8,
+    pixels: &[u8],
+) -> Result<(), String> {
+    let row = width * 4;
+    let max = conn.maximum_request_bytes().saturating_sub(64).max(row);
+    let rows_per_band = (max / row).max(1);
+    for (band, data) in pixels.chunks(rows_per_band * row).enumerate() {
+        let rows = data.len() / row;
+        conn.put_image(
+            xproto::ImageFormat::Z_PIXMAP,
+            window,
+            gc,
+            width as u16,
+            rows as u16,
+            0,
+            (band * rows_per_band) as i16,
+            0,
+            depth,
+            data,
+        )
+        .map_err(err)?;
+    }
+    conn.flush().map_err(err)
 }
 
 impl State {
@@ -200,30 +289,8 @@ impl State {
         }
     }
 
-    /// display scaling from Xft.dpi, which desktops set for HiDPI screens
     fn scale(&self) -> f32 {
-        let property = self
-            .conn
-            .get_property(
-                false,
-                self.root,
-                xproto::AtomEnum::RESOURCE_MANAGER,
-                xproto::AtomEnum::STRING,
-                0,
-                64 * 1024,
-            )
-            .ok()
-            .and_then(|c| c.reply().ok());
-        let dpi = property
-            .and_then(|p| String::from_utf8(p.value).ok())
-            .and_then(|resources| {
-                resources.lines().find_map(|line| {
-                    let value = line.strip_prefix("Xft.dpi:")?;
-                    value.trim().parse::<f32>().ok()
-                })
-            })
-            .unwrap_or(96.0);
-        (dpi / 96.0).clamp(1.0, 4.0)
+        display_scale(&self.conn, self.root)
     }
 
     /// the monitor the point is on, as x, y, width, height
@@ -248,38 +315,12 @@ impl State {
             .unwrap_or(screen)
     }
 
-    /// a 32 bit visual for a window with an alpha channel
     fn argb_visual(&self) -> Option<xproto::Visualid> {
-        self.screen
-            .allowed_depths
-            .iter()
-            .filter(|d| d.depth == 32)
-            .flat_map(|d| d.visuals.iter())
-            .find(|v| v.class == xproto::VisualClass::TRUE_COLOR)
-            .map(|v| v.visual_id)
+        argb_visual(&self.screen)
     }
 
-    /// whether a compositor blends windows with their alpha channel
     fn composited(&self) -> bool {
-        let screen = self
-            .conn
-            .setup()
-            .roots
-            .iter()
-            .position(|s| s.root == self.root)
-            .unwrap_or(0);
-        let name = format!("_NET_WM_CM_S{screen}");
-        let Ok(atom) = self.conn.intern_atom(false, name.as_bytes()) else {
-            return false;
-        };
-        let Some(atom) = atom.reply().ok().map(|a| a.atom) else {
-            return false;
-        };
-        self.conn
-            .get_selection_owner(atom)
-            .ok()
-            .and_then(|c| c.reply().ok())
-            .is_some_and(|r| r.owner != NONE)
+        composited(&self.conn, self.root)
     }
 
     fn open(&mut self) -> Result<(), Error> {
@@ -427,34 +468,14 @@ impl State {
     }
 
     fn draw(&self, overlay: &Overlay) -> Result<(), Error> {
-        let size = overlay.wheel.size() as usize;
-        let pixels = overlay.wheel.pixels();
-        let row = size * 4;
-        // in bands that fit into a request
-        let max = self
-            .conn
-            .maximum_request_bytes()
-            .saturating_sub(64)
-            .max(row);
-        let rows_per_band = (max / row).max(1);
-        for (band, data) in pixels.chunks(rows_per_band * row).enumerate() {
-            let rows = data.len() / row;
-            self.conn
-                .put_image(
-                    xproto::ImageFormat::Z_PIXMAP,
-                    overlay.window,
-                    overlay.gc,
-                    size as u16,
-                    rows as u16,
-                    0,
-                    (band * rows_per_band) as i16,
-                    0,
-                    overlay.depth,
-                    data,
-                )
-                .map_err(err)?;
-        }
-        self.conn.flush().map_err(err)
+        put_pixels(
+            &self.conn,
+            overlay.window,
+            overlay.gc,
+            overlay.wheel.size() as usize,
+            overlay.depth,
+            &overlay.wheel.pixels(),
+        )
     }
 
     fn follow_pointer(&mut self) -> Result<(), Error> {

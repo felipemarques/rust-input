@@ -7,9 +7,12 @@
 //! - [`Message::Describe`]: the other device answers with its name and its
 //!   monitors, which the window shows to arrange it;
 //! - [`Message::Arrange`]: the other device takes the arrangement, finds
-//!   itself in it (`you`) and sets up its connections from it.
+//!   itself in it (`you`) and sets up its connections from it;
+//! - [`Message::Identify`]: the other device shows the number of each of
+//!   its monitors on it for a few seconds ([`crate::identify`]). An older
+//!   RustInput does not know it and closes the connection.
 //!
-//! Both are answered only to authorized devices: an arrangement changes
+//! All are answered only to authorized devices: an arrangement changes
 //! where the pointer goes, and the monitors are no business of strangers.
 
 use std::{cell::RefCell, fmt, io, net::SocketAddr, rc::Rc, sync::Arc, time::Duration};
@@ -41,6 +44,8 @@ enum Message {
     Description(Description),
     Arrange { layout: Layout, you: String },
     Arranged,
+    Identify,
+    Identified,
     Refused { reason: String },
 }
 
@@ -68,6 +73,8 @@ pub(crate) enum ArrangementEvent {
         from: String,
         addr: SocketAddr,
     },
+    /// an authorized device asks to show the numbers of the monitors
+    Identify { addr: SocketAddr },
 }
 
 /// the monitors of this device, from the top left corner of its desktop,
@@ -153,6 +160,10 @@ impl Arrangement {
                 });
                 Message::Arranged
             }
+            Message::Identify => {
+                let _ = self.events.send(ArrangementEvent::Identify { addr });
+                Message::Identified
+            }
             _ => Message::Refused {
                 reason: "unexpected message".into(),
             },
@@ -214,6 +225,25 @@ pub(crate) async fn arrange(
         (_, Message::Arranged) => Ok(()),
         (_, Message::Refused { reason }) => Err(ArrangeError::Refused(reason)),
         _ => Err(ArrangeError::Refused("unexpected answer".into())),
+    }
+}
+
+/// asks the device at one of `addrs` to show the numbers of its monitors
+pub(crate) async fn identify(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+) -> Result<(), ArrangeError> {
+    match ask(cert, addrs, expected, Message::Identify).await {
+        Ok((_, Message::Identified)) => Ok(()),
+        Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        // an older RustInput closes the connection on a message it does not
+        // know
+        Err(ArrangeError::Unreachable(e)) if e.contains("eof") || e.contains("closed") => Err(
+            ArrangeError::Unreachable("it runs an older RustInput, without this".into()),
+        ),
+        Err(e) => Err(e),
     }
 }
 
@@ -368,6 +398,29 @@ mod tests {
                 assert_eq!(you, "b");
                 assert_eq!(from, "peer");
             }
+            other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn identifies_its_monitors_for_authorized_devices_only() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        assert!(matches!(
+            exchange(&arrangement, Message::Identify, false).await,
+            Message::Refused { .. }
+        ));
+        assert!(
+            timeout(Duration::from_millis(50), rx.recv()).await.is_err(),
+            "nothing shown for a stranger"
+        );
+        assert!(matches!(
+            exchange(&arrangement, Message::Identify, true).await,
+            Message::Identified
+        ));
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ArrangementEvent::Identify { .. }
+        ));
     }
 }

@@ -12,12 +12,12 @@
 #![cfg_attr(target_os = "macos", allow(dead_code))]
 
 mod chord;
-mod draw;
-mod fonts;
+pub(crate) mod draw;
+pub(crate) mod fonts;
 #[cfg(windows)]
-mod windows;
+pub(crate) mod windows;
 #[cfg(all(unix, not(target_os = "macos")))]
-mod x11;
+pub(crate) mod x11;
 
 use std::sync::{
     Arc, Mutex,
@@ -137,7 +137,7 @@ impl Texts {
 
 /// The fonts for the labels in the language of RustInput, those of `cache`
 /// while it does not change: loaded again after it changed.
-fn fonts_now(cache: &mut Option<Arc<Fonts>>) -> Option<Arc<Fonts>> {
+pub(crate) fn fonts_now(cache: &mut Option<Arc<Fonts>>) -> Option<Arc<Fonts>> {
     let language = rustinput_i18n::current();
     if cache.as_ref().is_none_or(|f| f.language != language) {
         *cache = Fonts::load(language).map(Arc::new);

@@ -9,7 +9,7 @@ use tiny_skia::{Color, FillRule, Paint, PathBuilder, Pixmap, Transform};
 /// diameter of the wheel at 100 % display scaling
 const SIZE: f32 = 420.0;
 /// the accent of the RustInput icon
-const ACCENT: (u8, u8, u8) = (232, 105, 46);
+pub(crate) const ACCENT: (u8, u8, u8) = (232, 105, 46);
 
 /// size in pixels of the wheel at `scale`
 pub(super) fn size(scale: f32) -> u32 {
@@ -241,7 +241,7 @@ fn wrap(font: &Fonts, text: &str, px: f32, width: f32, max_lines: usize) -> Vec<
 
 /// draws `text` centered on `center`, wrapped to `width`
 #[allow(clippy::too_many_arguments)]
-fn draw_text(
+pub(crate) fn draw_text(
     pixmap: &mut Pixmap,
     font: &Fonts,
     text: &str,
@@ -288,7 +288,7 @@ fn blend(pixmap: &mut Pixmap, x: i32, y: i32, coverage: f32, color: (u8, u8, u8)
 
 /// the pixels as premultiplied BGRA, what X11 (32 bit visuals) and Windows
 /// (layered windows) take
-pub(super) fn bgra(pixmap: &Pixmap) -> Vec<u8> {
+pub(crate) fn bgra(pixmap: &Pixmap) -> Vec<u8> {
     let mut data = pixmap.data().to_vec();
     for at in (0..data.len()).step_by(4) {
         data.swap(at, at + 2);

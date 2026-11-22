@@ -379,6 +379,9 @@ answers authorized computers only:
   Windows, CoreGraphics on macOS) and the revision of its arrangement. The
   window asks every client when it opens, to draw each at its size.
 - `Arrange { layout, you }`: take this arrangement, in which you are `you`.
+- `Identify` (0.28.0): show the numbers of your monitors. An older RustInput
+  does not know the message and closes the connection, which the asking
+  computer reports as "older RustInput".
 
 Applying an arrangement in the window (`FrontendRequest::Arrange`) gives it
 the next revision, applies it here and sends it to every other computer of
@@ -397,6 +400,37 @@ proposes one from the connections as they are when there is none (whole edges,
 nothing changes until it is applied), and keeps what the user moved and did not
 apply when the view comes again. `FrontendEvent::PointerAt` tells which
 computer the keyboard and mouse of this one are on.
+
+Over a computer the pointer is a hand, while dragging it is the closed hand
+("grab", "grabbing"); on Windows the hand ("pointer") and the arrows to move
+("move"), because GTK on Windows has no "grab" and makes a cursor without an
+image for a name it does not know, so the pointer disappeared over the
+arrangement (0.27.0) and a fallback cursor is never used.
+
+### Numbers of the monitors
+
+`rustinput_ipc::layout::monitor_numbers` numbers the monitors of a computer
+as text is read: sorted by the middle of their height, a monitor joins the
+row of the one before when the middle of either is within the height of the
+other, rows from the top and monitors from the left within a row. The order
+depends only on where they are, so the window (which numbers the monitors a
+computer described) and the computer itself (which numbers its own monitors,
+read again) agree. "Identify monitors" (`FrontendRequest::IdentifyMonitors`)
+shows the numbers here (`src/identify/`) and sends `Identify` to every client;
+a client that does not show them comes back to the window as
+`FrontendEvent::MonitorsNotIdentified`. Each number is a card in the middle
+of its monitor, drawn with tiny-skia and the fonts of the radial menu, for
+four seconds: on X11 an override-redirect window with a 32 bit visual (its
+corners cut with the shape extension when no compositor blends it), drawn
+again on `Expose`; on Windows a layered window, topmost and never activated,
+in physical pixels (per monitor DPI awareness on its thread), the positions
+coming from the display settings like the capture. A click hides them. On
+other systems the request only logs that it is not available.
+
+`e2e-tests/identify.sh` checks it with A as two stacked monitors (RandR
+monitors made with `xrandr --setmonitor` in Xephyr) and B: the cards show on
+both monitors of A and on B, go after four seconds, and B shows nothing once
+it no longer authorizes A, which A reports.
 
 `e2e-tests/arrangement.sh` (outside the repository, see its `LEIA-ME.md`)
 checks it with two instances: the arrangement goes from A to B, B creates its

@@ -314,52 +314,7 @@ impl State {
 
     fn draw(&self, open: &Open) {
         let size = open.wheel.size() as i32;
-        let pixels = open.wheel.pixels();
-        unsafe {
-            let screen = GetDC(ptr::null_mut());
-            let memory = CreateCompatibleDC(screen);
-            let mut info: BITMAPINFO = std::mem::zeroed();
-            info.bmiHeader = BITMAPINFOHEADER {
-                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
-                biWidth: size,
-                // negative: rows from the top down, like the pixels
-                biHeight: -size,
-                biPlanes: 1,
-                biBitCount: 32,
-                biCompression: BI_RGB,
-                biSizeImage: 0,
-                biXPelsPerMeter: 0,
-                biYPelsPerMeter: 0,
-                biClrUsed: 0,
-                biClrImportant: 0,
-            };
-            let mut bits: *mut std::ffi::c_void = ptr::null_mut();
-            let bitmap =
-                CreateDIBSection(memory, &info, DIB_RGB_COLORS, &mut bits, ptr::null_mut(), 0);
-            if !bitmap.is_null() && !bits.is_null() {
-                ptr::copy_nonoverlapping(pixels.as_ptr(), bits as *mut u8, pixels.len());
-                let previous = SelectObject(memory, bitmap);
-                let blend = BLENDFUNCTION {
-                    BlendOp: AC_SRC_OVER as u8,
-                    BlendFlags: 0,
-                    SourceConstantAlpha: 255,
-                    AlphaFormat: AC_SRC_ALPHA as u8,
-                };
-                let to = POINT {
-                    x: open.at.0,
-                    y: open.at.1,
-                };
-                let extent = SIZE { cx: size, cy: size };
-                let from = POINT { x: 0, y: 0 };
-                UpdateLayeredWindow(
-                    self.hwnd, screen, &to, &extent, memory, &from, 0, &blend, ULW_ALPHA,
-                );
-                SelectObject(memory, previous);
-                DeleteObject(bitmap);
-            }
-            DeleteDC(memory);
-            ReleaseDC(ptr::null_mut(), screen);
-        }
+        update_layered(self.hwnd, open.at, (size, size), &open.wheel.pixels());
     }
 
     fn follow_pointer(&mut self) {
@@ -395,5 +350,56 @@ impl State {
             log::info!("radial menu: {action:?}");
             let _ = self.chosen.send(action);
         }
+    }
+}
+
+/// Shows the premultiplied BGRA `pixels` in the layered window `hwnd`, its
+/// top left corner at `at` and of `size`, in physical pixels.
+pub(crate) fn update_layered(hwnd: HWND, at: (i32, i32), size: (i32, i32), pixels: &[u8]) {
+    let (width, height) = size;
+    unsafe {
+        let screen = GetDC(ptr::null_mut());
+        let memory = CreateCompatibleDC(screen);
+        let mut info: BITMAPINFO = std::mem::zeroed();
+        info.bmiHeader = BITMAPINFOHEADER {
+            biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width,
+            // negative: rows from the top down, like the pixels
+            biHeight: -height,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB,
+            biSizeImage: 0,
+            biXPelsPerMeter: 0,
+            biYPelsPerMeter: 0,
+            biClrUsed: 0,
+            biClrImportant: 0,
+        };
+        let mut bits: *mut std::ffi::c_void = ptr::null_mut();
+        let bitmap = CreateDIBSection(memory, &info, DIB_RGB_COLORS, &mut bits, ptr::null_mut(), 0);
+        let length = (width * height * 4) as usize;
+        if !bitmap.is_null() && !bits.is_null() && pixels.len() >= length {
+            ptr::copy_nonoverlapping(pixels.as_ptr(), bits as *mut u8, length);
+            let previous = SelectObject(memory, bitmap);
+            let blend = BLENDFUNCTION {
+                BlendOp: AC_SRC_OVER as u8,
+                BlendFlags: 0,
+                SourceConstantAlpha: 255,
+                AlphaFormat: AC_SRC_ALPHA as u8,
+            };
+            let to = POINT { x: at.0, y: at.1 };
+            let extent = SIZE {
+                cx: width,
+                cy: height,
+            };
+            let from = POINT { x: 0, y: 0 };
+            UpdateLayeredWindow(
+                hwnd, screen, &to, &extent, memory, &from, 0, &blend, ULW_ALPHA,
+            );
+            SelectObject(memory, previous);
+            DeleteObject(bitmap);
+        }
+        DeleteDC(memory);
+        ReleaseDC(ptr::null_mut(), screen);
     }
 }
