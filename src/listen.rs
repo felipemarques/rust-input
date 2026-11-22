@@ -1,7 +1,7 @@
 use futures::{Stream, StreamExt};
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_proto::{
-    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
+    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
     MAX_EVENT_SIZE, ProtoEvent,
 };
 use rustls::pki_types::CertificateDer;
@@ -324,7 +324,8 @@ async fn read_loop(
                 let hello = ProtoEvent::Hello {
                     commit: local_commit(),
                 };
-                let flags = CAP_CURSOR_POSITION | CAP_EDGE_SPAN | clipboard.capabilities();
+                let flags =
+                    CAP_CURSOR_POSITION | CAP_EDGE_SPAN | CAP_PAUSE | clipboard.capabilities();
                 for event in [hello, ProtoEvent::Capabilities(flags)] {
                     let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
                     let _ = conn.send(&buf[..len]).await;

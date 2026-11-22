@@ -762,8 +762,11 @@ impl Window {
 
         /* activation state */
         row.set_active(state.active);
+        row.imp().paused.set(state.paused);
         if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
-            parts.area.set_state(handle, state.active, state.alive);
+            parts
+                .area
+                .set_state(handle, state.active, state.alive, state.paused);
         }
 
         /* dns state */
@@ -958,6 +961,30 @@ impl Window {
     }
 
     /// what the service knows about new versions
+    /// whether RustInput is paused here, as the service says: the button
+    /// in the header bar, the line under it, the tooltips
+    pub(super) fn set_paused(&self, paused: bool) {
+        let imp = self.imp();
+        imp.paused.set(paused);
+        imp.pause_button.set_active(paused);
+        imp.pause_button.set_tooltip_text(Some(if paused {
+            tr("Resume RustInput")
+        } else {
+            tr("Pause RustInput")
+        }));
+        imp.pause_revealer.set_reveal_child(paused);
+        self.update_capture_emulation_status();
+    }
+
+    pub(crate) fn is_paused(&self) -> bool {
+        self.imp().paused.get()
+    }
+
+    /// asks the service to pause RustInput, or to go on
+    pub(crate) fn request_pause(&self, paused: bool) {
+        self.request(FrontendRequest::SetPaused(paused));
+    }
+
     pub(super) fn set_updates(&self, state: UpdateState) {
         self.imp().updates.replace(state);
         self.show_updates();
@@ -1263,6 +1290,30 @@ impl Window {
                     tr("Needed for the other computers to control this one"),
                 ),
             );
+        }
+        // paused: working, but the mouse and keyboard stay here
+        if imp.paused.get() {
+            let rows = [
+                (
+                    &imp.capture_status_row,
+                    &imp.capture_status_icon,
+                    capture,
+                    tr("Paused: the mouse and keyboard stay on this computer"),
+                ),
+                (
+                    &imp.emulation_status_row,
+                    &imp.emulation_status_icon,
+                    emulation,
+                    tr("Paused: no other computer controls this one"),
+                ),
+            ];
+            for (row, icon, active, subtitle) in rows {
+                if active {
+                    row.set_subtitle(subtitle);
+                    icon.set_icon_name(Some("media-playback-pause-symbolic"));
+                    icon.set_css_classes(&["warning"]);
+                }
+            }
         }
         imp.computers_page
             .set_needs_attention(!capture || !emulation);

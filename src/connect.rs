@@ -6,7 +6,7 @@ use crate::netstats::NetStats;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
 use rustinput_proto::{
-    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
+    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
     MAX_EVENT_SIZE, ProtoEvent,
 };
 use std::{
@@ -189,6 +189,13 @@ impl RustInputConnection {
 
     pub(crate) async fn recv(&mut self) -> (ClientHandle, ProtoEvent) {
         self.recv_rx.recv().await.expect("channel closed")
+    }
+
+    /// The client is connected and answers, but takes no input: it is
+    /// paused there or has no input emulation. Before the first connection
+    /// (which the first crossing opens) it is not known, so not refused.
+    pub(crate) fn refuses(&self, handle: ClientHandle) -> bool {
+        self.client_manager.active_addr(handle).is_some() && !self.client_manager.alive(handle)
     }
 
     pub(crate) async fn send(
@@ -393,6 +400,7 @@ async fn receive_loop(
     let peer = Peer::Outgoing(handle);
     let flags = CAP_CURSOR_POSITION
         | CAP_EDGE_SPAN
+        | CAP_PAUSE
         | clipboard.as_ref().map_or(0, |(c, _)| c.capabilities());
     // whether the peer was told our build and features
     let mut introduced = false;
@@ -414,8 +422,13 @@ async fn receive_loop(
                     ProtoEvent::Pong(b) => {
                         client_manager.set_active_addr(handle, Some(addr));
                         client_manager.set_alive(handle, b);
+                        // a paused peer follows with `Paused(true)`
+                        if b {
+                            client_manager.set_paused(handle, false);
+                        }
                         ping_response.borrow_mut().insert(addr);
                     }
+                    ProtoEvent::Paused(paused) => client_manager.set_paused(handle, paused),
                     ProtoEvent::Hello { commit } => {
                         client_manager.set_peer_commit(handle, Some(commit));
                     }
@@ -464,6 +477,7 @@ async fn disconnect(
     client_manager.set_active_addr(handle, None);
     client_manager.set_peer_commit(handle, None);
     client_manager.set_peer_capabilities(handle, 0);
+    client_manager.set_paused(handle, false);
     let active: Vec<SocketAddr> = conns.lock().await.keys().copied().collect();
     log::info!("active connections: {active:?}");
 }

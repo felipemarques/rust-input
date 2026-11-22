@@ -486,6 +486,15 @@ fn build_ui(app: &Application) {
                         }
                         window.set_updates(state);
                     }
+                    FrontendEvent::Paused(paused) => {
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(tray) = &tray {
+                            tray.show_paused(paused);
+                        }
+                        #[cfg(target_os = "macos")]
+                        crate::macos_status_item::show_paused(paused);
+                        window.set_paused(paused);
+                    }
                     FrontendEvent::ShowWindow => window.present(),
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {

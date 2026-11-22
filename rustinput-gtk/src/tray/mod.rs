@@ -3,7 +3,8 @@
 //! With a tray icon, closing the window only hides it: RustInput keeps
 //! sharing mouse, keyboard and clipboard, and the icon brings the window back
 //! or quits. Without a system tray closing the window quits, as before. The
-//! menu of the icon also lists the file transfers.
+//! menu of the icon also pauses RustInput (the icon then turns grey with a
+//! pause sign) and lists the file transfers.
 
 mod action;
 mod icon;
@@ -29,7 +30,7 @@ use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState};
 pub(crate) use action::{Summary, TrayAction};
 
 use crate::{
-    i18n::{trf, trn},
+    i18n::{tr, trf, trn},
     transfers::Transfers,
     window::Window,
 };
@@ -47,6 +48,8 @@ pub(crate) struct Tray {
     options: Cell<Option<FileOptions>>,
     /// the new version, when there is one
     update: RefCell<Option<String>>,
+    /// whether RustInput is paused, once the service said
+    paused: Cell<Option<bool>>,
 }
 
 impl Tray {
@@ -68,6 +71,12 @@ impl Tray {
         self.refresh();
     }
 
+    /// shows whether RustInput is paused: the icon, the tooltip, the item
+    pub(crate) fn show_paused(&self, paused: bool) {
+        self.paused.set(Some(paused));
+        self.refresh();
+    }
+
     fn refresh(&self) {
         if let Some(handle) = self.handle.borrow().as_ref() {
             let now = crate::transfers::now_ms();
@@ -77,6 +86,7 @@ impl Tray {
                 .borrow()
                 .as_ref()
                 .map(|version| trf("Update to RustInput {version}…", &[("version", version)]));
+            summary.paused = self.paused.get();
             handle.show(summary);
         }
     }
@@ -103,6 +113,7 @@ pub(crate) fn setup(
         transfers: Default::default(),
         options: Default::default(),
         update: Default::default(),
+        paused: Default::default(),
     });
 
     // whether the icon is on screen right now
@@ -154,6 +165,7 @@ pub(crate) fn setup(
                     TrayAction::CancelTransfers => window.request_cancel_transfers(),
                     TrayAction::ShowTransfers => transfers.present(),
                     TrayAction::Update => window.install_update(),
+                    TrayAction::TogglePause => window.request_pause(!window.is_paused()),
                     TrayAction::ToggleSendCopied => {
                         if let Some(options) = window.file_options() {
                             window.request(FrontendRequest::SetFileOptions(FileOptions {
@@ -174,6 +186,19 @@ pub(crate) fn setup(
         }
     ));
     Some(tray)
+}
+
+/// the item that pauses RustInput or lets it go on
+pub(crate) fn pause_label(paused: bool) -> &'static str {
+    match paused {
+        true => tr("Resume RustInput"),
+        false => tr("Pause RustInput"),
+    }
+}
+
+/// the tooltip line while paused
+pub(crate) fn paused_status() -> &'static str {
+    tr("Paused: the mouse and keyboard stay on this computer")
 }
 
 fn percent(t: &TransferInfo) -> u64 {
@@ -308,6 +333,7 @@ pub(crate) fn summary(
         cancellable: sorted.iter().any(|t| rank(t) < 2),
         send_copied: options.filter(|o| o.available).map(|o| o.send_copied),
         update: None,
+        paused: None,
     }
 }
 

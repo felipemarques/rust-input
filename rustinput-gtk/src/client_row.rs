@@ -230,6 +230,17 @@ impl ClientRow {
             .as_ref()
             .and_then(|co| co.property::<Option<String>>("peer-commit"));
         let local = crate::local_commit_str();
+        self.remove_css_class("peer-paused");
+        if self.imp().paused.get() {
+            self.remove_css_class("peer-mismatch");
+            self.remove_css_class("peer-match");
+            self.remove_css_class("peer-unknown");
+            self.add_css_class("peer-paused");
+            self.set_subtitle(tr(
+                "Paused on that computer: it neither controls nor is controlled",
+            ));
+            return;
+        }
         let markup = match peer.as_deref() {
             None => trf(
                 "Its version: unknown · this one: {local}",

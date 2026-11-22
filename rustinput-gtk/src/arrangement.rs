@@ -40,6 +40,8 @@ pub(crate) struct Item {
     /// the connection is switched on, and it answers
     pub(crate) active: bool,
     pub(crate) alive: bool,
+    /// paused there by its user
+    pub(crate) paused: bool,
 }
 
 /// what the editor shows about the selected computer: one row per computer
@@ -392,11 +394,12 @@ impl ArrangementArea {
     }
 
     /// whether the connection is switched on and answers
-    pub(crate) fn set_state(&self, handle: ClientHandle, active: bool, alive: bool) {
+    pub(crate) fn set_state(&self, handle: ClientHandle, active: bool, alive: bool, paused: bool) {
         let mut model = self.model_mut();
         if let Some(item) = model.items.iter_mut().find(|i| i.handle == Some(handle)) {
             item.active = active;
             item.alive = alive;
+            item.paused = paused;
         }
         drop(model);
         self.queue_draw();
@@ -449,6 +452,7 @@ impl ArrangementArea {
             described: true,
             active: true,
             alive: true,
+            paused: false,
         }];
         let in_layout = |id: &str| view.layout.machine(id).is_some();
         let mut unplaced = Vec::new();
@@ -460,7 +464,7 @@ impl ArrangementArea {
             if !in_layout(&machine.id) {
                 unplaced.push((items.len(), peer.pos, peer.active));
             }
-            let alive = peer.alive;
+            let (alive, paused) = (peer.alive, peer.paused);
             items.push(Item {
                 machine,
                 own: false,
@@ -468,6 +472,7 @@ impl ArrangementArea {
                 described: peer.described,
                 active: peer.active,
                 alive,
+                paused,
             });
         }
         if dirty {
@@ -910,6 +915,8 @@ impl ArrangementArea {
                     tr("not reached")
                 } else if !item.active {
                     tr("switched off")
+                } else if item.paused {
+                    tr("paused there")
                 } else if item.alive {
                     tr("connected")
                 } else {
@@ -977,7 +984,13 @@ impl ArrangementArea {
             if dotted {
                 let dot_x = if rtl { x + 8.0 } else { x + mw - 16.0 };
                 let dot = graphene::Rect::new(dot_x as f32, (y + 10.0) as f32, 8.0, 8.0);
-                let color = if item.alive { success } else { dim };
+                let color = if item.alive {
+                    success
+                } else if item.paused {
+                    warning
+                } else {
+                    dim
+                };
                 snapshot.push_rounded_clip(&gsk::RoundedRect::from_rect(dot, 4.0));
                 snapshot.append_color(&color, &dot);
                 snapshot.pop();
@@ -1141,6 +1154,7 @@ mod tests {
             described: true,
             active: true,
             alive: true,
+            paused: false,
         }
     }
 

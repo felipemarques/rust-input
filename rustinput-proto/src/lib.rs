@@ -43,6 +43,11 @@ pub const CAP_CLIPBOARD_HTML: u32 = 1 << 3;
 /// [`CAP_CURSOR_POSITION`]
 pub const CAP_EDGE_SPAN: u32 = 1 << 4;
 
+/// capability flag: the peer understands [`ProtoEvent::Paused`], which a
+/// paused RustInput sends along with its [`ProtoEvent::Pong`] so the other
+/// device can tell paused from not available
+pub const CAP_PAUSE: u32 = 1 << 5;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///
@@ -149,6 +154,11 @@ pub enum ProtoEvent {
         lo: f32,
         hi: f32,
     },
+    /// Sent by a paused device in answer to [`ProtoEvent::Ping`], after its
+    /// `Pong(false)`: it is paused by its user, neither controlling nor
+    /// controlled, rather than without input emulation. A `Pong(true)` ends
+    /// it. Only sent to peers with [`CAP_PAUSE`].
+    Paused(bool),
 }
 
 impl Display for ProtoEvent {
@@ -176,6 +186,7 @@ impl Display for ProtoEvent {
             ProtoEvent::EnterSpan { pos, at, lo, hi } => {
                 write!(f, "EnterSpan({pos}, {at:.3}, {lo:.3}..{hi:.3})")
             }
+            ProtoEvent::Paused(paused) => write!(f, "Paused({paused})"),
         }
     }
 }
@@ -201,6 +212,7 @@ pub enum EventType {
     EnterAt = 0x85,
     LeaveAt = 0x86,
     EnterSpan = 0x87,
+    Paused = 0x88,
 }
 
 impl ProtoEvent {
@@ -228,6 +240,7 @@ impl ProtoEvent {
             ProtoEvent::EnterAt(..) => EventType::EnterAt,
             ProtoEvent::LeaveAt(_) => EventType::LeaveAt,
             ProtoEvent::EnterSpan { .. } => EventType::EnterSpan,
+            ProtoEvent::Paused(_) => EventType::Paused,
         }
     }
 }
@@ -301,6 +314,7 @@ impl TryFrom<[u8; MAX_EVENT_SIZE]> for ProtoEvent {
                 lo: decode_f32(&mut buf)?,
                 hi: decode_f32(&mut buf)?,
             }),
+            EventType::Paused => Ok(Self::Paused(decode_u8(&mut buf)? != 0)),
         }
     }
 }
@@ -382,6 +396,7 @@ impl From<ProtoEvent> for ([u8; MAX_EVENT_SIZE], usize) {
                     encode_f32(buf, len, lo);
                     encode_f32(buf, len, hi);
                 }
+                ProtoEvent::Paused(paused) => encode_u8(buf, len, paused as u8),
             }
         }
         (buf, len)
@@ -463,6 +478,20 @@ mod tests {
             Datagram::Event(event) => event,
             Datagram::Clipboard(frame) => panic!("unexpected clipboard frame {frame:?}"),
         }
+    }
+
+    #[test]
+    fn paused_roundtrip() {
+        assert!(matches!(
+            roundtrip(ProtoEvent::Paused(true)),
+            ProtoEvent::Paused(true)
+        ));
+        assert!(matches!(
+            roundtrip(ProtoEvent::Paused(false)),
+            ProtoEvent::Paused(false)
+        ));
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::Paused(true).into();
+        assert_eq!(&buf[..len], &[0x88, 1]);
     }
 
     #[test]

@@ -22,7 +22,7 @@ use windows_sys::Win32::{
     },
 };
 
-use super::{Summary, TrayAction, icon};
+use super::{Summary, TrayAction, icon, pause_label, paused_status};
 use crate::i18n::tr;
 
 /// size of the icon handed to Windows, which scales it to the notification
@@ -41,6 +41,7 @@ const CANCEL: &str = "cancel";
 const SEND_COPIED: &str = "send-copied";
 const TRANSFERS: &str = "transfers";
 const UPDATE: &str = "update";
+const PAUSE: &str = "pause";
 
 /// state handed from GTK to the tray thread
 #[derive(Default)]
@@ -123,6 +124,10 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
     let add = |item: &dyn tray_icon::menu::IsMenuItem| menu.append(item).map_err(|e| e.to_string());
     add(&MenuItem::new(label, false, None))?;
     add(&PredefinedMenuItem::separator())?;
+    if let Some(paused) = transfers.paused {
+        add(&MenuItem::with_id(PAUSE, pause_label(paused), true, None))?;
+        add(&PredefinedMenuItem::separator())?;
+    }
     if let Some(update) = &transfers.update {
         add(&MenuItem::with_id(UPDATE, update, true, None))?;
         add(&PredefinedMenuItem::separator())?;
@@ -164,16 +169,25 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
 }
 
 fn tooltip(label: &str, transfers: &Summary) -> String {
-    let text = match &transfers.status {
-        Some(status) => format!("{label}\n{status}"),
-        None => label.to_owned(),
-    };
+    let mut text = label.to_owned();
+    if transfers.paused == Some(true) {
+        text = format!("{text}\n{}", paused_status());
+    }
+    if let Some(status) = &transfers.status {
+        text = format!("{text}\n{status}");
+    }
     text.chars().take(MAX_TOOLTIP).collect()
 }
 
-fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> {
+/// the icon for the notification area, grey with a pause sign while paused
+fn tray_icon(paused: bool) -> Result<Icon, String> {
     let icon = icon::icon(ICON_SIZE).ok_or("no tray icon could be decoded")?;
-    let icon = Icon::from_rgba(icon.pixels, icon.width, icon.height).map_err(|e| e.to_string())?;
+    let icon = if paused { icon::paused(&icon) } else { icon };
+    Icon::from_rgba(icon.pixels, icon.width, icon.height).map_err(|e| e.to_string())
+}
+
+fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> {
+    let icon = tray_icon(false)?;
 
     // The handlers are global and run on this thread. Only the first call
     // installs one, which is fine as there is a single tray icon.
@@ -186,6 +200,7 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
             SEND_COPIED => TrayAction::ToggleSendCopied,
             TRANSFERS => TrayAction::ShowTransfers,
             UPDATE => TrayAction::Update,
+            PAUSE => TrayAction::TogglePause,
             _ => return,
         };
         let _ = menu_actions.try_send(action);
@@ -220,6 +235,8 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
 
 fn run_message_loop(tray: &TrayIcon, label: &str, shared: &Mutex<Shared>) {
     let mut msg: MSG = unsafe { std::mem::zeroed() };
+    // whether the icon shows RustInput paused
+    let mut shown_paused = false;
     // GetMessageW returns 0 for WM_QUIT and -1 on errors
     while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
         if msg.hwnd.is_null() && msg.message == WM_TRANSFERS {
@@ -231,6 +248,15 @@ fn run_message_loop(tray: &TrayIcon, label: &str, shared: &Mutex<Shared>) {
                 }
                 if let Err(e) = tray.set_tooltip(Some(tooltip(label, &transfers))) {
                     log::debug!("could not update the tray tooltip: {e}");
+                }
+                let paused = transfers.paused == Some(true);
+                if paused != shown_paused {
+                    match tray_icon(paused)
+                        .and_then(|icon| tray.set_icon(Some(icon)).map_err(|e| e.to_string()))
+                    {
+                        Ok(()) => shown_paused = paused,
+                        Err(e) => log::warn!("could not change the tray icon: {e}"),
+                    }
                 }
             }
             continue;

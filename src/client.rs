@@ -315,6 +315,13 @@ impl ClientManager {
         }
     }
 
+    /// the client says it is paused by its user (see `ProtoEvent::Paused`)
+    pub(crate) fn set_paused(&self, handle: ClientHandle, paused: bool) {
+        if let Some((_, s)) = self.clients.borrow_mut().get_mut(handle as usize) {
+            s.paused = paused;
+        }
+    }
+
     pub(crate) fn set_peer_commit(&self, handle: ClientHandle, commit: Option<[u8; 8]>) {
         if let Some((_, s)) = self.clients.borrow_mut().get_mut(handle as usize) {
             s.peer_commit = commit;

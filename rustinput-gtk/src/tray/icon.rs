@@ -1,7 +1,8 @@
 //! The tray icon, embedded as PNG in a few sizes.
 //!
 //! The files are rendered from the logo by `scripts/render-icons.py`, so
-//! no SVG renderer is needed at runtime.
+//! no SVG renderer is needed at runtime. The icon of a paused RustInput is
+//! made from them ([`paused`]).
 
 use std::io::Cursor;
 
@@ -44,6 +45,65 @@ pub(crate) fn icon(size: u32) -> Option<Rgba> {
     }
 }
 
+/// the orange of the RustInput logo
+const ACCENT: [f32; 3] = [232.0, 105.0, 46.0];
+
+/// The icon of a paused RustInput: grey and fainter, with a pause sign (two
+/// white bars on an orange disc) at the bottom right.
+pub(crate) fn paused(icon: &Rgba) -> Rgba {
+    const SAMPLES: usize = 4;
+    let (w, h) = (icon.width as usize, icon.height as usize);
+    let mut pixels = icon.pixels.clone();
+    for p in pixels.as_chunks_mut::<4>().0 {
+        let grey = (0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32) as u8;
+        *p = [grey, grey, grey, (p[3] as f32 * 0.55) as u8];
+    }
+    let size = w.min(h) as f32;
+    let r = size * 0.27;
+    let (cx, cy) = (w as f32 - r - size * 0.01, h as f32 - r - size * 0.01);
+    let (bar, half, gap) = (r * 0.3, r * 0.5, r * 0.17);
+    for y in 0..h {
+        for x in 0..w {
+            // how much of the pixel the disc and the bars cover
+            let (mut disc, mut bars) = (0.0f32, 0.0f32);
+            for sy in 0..SAMPLES {
+                for sx in 0..SAMPLES {
+                    let dx = x as f32 + (sx as f32 + 0.5) / SAMPLES as f32 - cx;
+                    let dy = y as f32 + (sy as f32 + 0.5) / SAMPLES as f32 - cy;
+                    if dx * dx + dy * dy > r * r {
+                        continue;
+                    }
+                    disc += 1.0;
+                    let across = dx.abs();
+                    if dy.abs() <= half && across >= gap && across <= gap + bar {
+                        bars += 1.0;
+                    }
+                }
+            }
+            if disc == 0.0 {
+                continue;
+            }
+            let white = bars / disc;
+            let coverage = disc / (SAMPLES * SAMPLES) as f32;
+            let at = (y * w + x) * 4;
+            let p = &mut pixels[at..at + 4];
+            let below = p[3] as f32 / 255.0;
+            let alpha = coverage + below * (1.0 - coverage);
+            for (k, accent) in ACCENT.iter().enumerate() {
+                let color = accent + (255.0 - accent) * white;
+                let mixed = color * coverage + p[k] as f32 * below * (1.0 - coverage);
+                p[k] = (mixed / alpha.max(f32::EPSILON)).round().clamp(0.0, 255.0) as u8;
+            }
+            p[3] = (alpha * 255.0).round() as u8;
+        }
+    }
+    Rgba {
+        width: icon.width,
+        height: icon.height,
+        pixels,
+    }
+}
+
 fn decode(png: &[u8]) -> Result<Rgba, String> {
     let decoder = png::Decoder::new(Cursor::new(png));
     let mut reader = decoder.read_info().map_err(|e| e.to_string())?;
@@ -80,6 +140,27 @@ mod tests {
             assert_eq!(icon.pixels.len(), (icon.width * icon.height * 4) as usize);
             // the logo is not empty: some pixels are opaque
             assert!(icon.pixels.chunks(4).any(|p| p[3] == 0xff));
+        }
+    }
+
+    #[test]
+    fn the_paused_icon_is_grey_with_an_orange_sign() {
+        for icon in icons() {
+            let paused = paused(&icon);
+            assert_eq!(paused.pixels.len(), icon.pixels.len());
+            let (w, h) = (icon.width as usize, icon.height as usize);
+            let pixel = |x: usize, y: usize| {
+                let at = (y * w + x) * 4;
+                &paused.pixels[at..at + 4]
+            };
+            // the sign at the bottom right: orange and opaque at its edge
+            let r = (w as f32 * 0.27) as usize;
+            let edge = pixel(w - 2, h - 1 - r);
+            assert!(edge[0] > 180 && edge[1] < 160 && edge[3] > 200, "{edge:?}");
+            // the rest is grey
+            for p in paused.pixels.as_chunks::<4>().0.iter().take(w * h / 3) {
+                assert_eq!((p[0], p[1]), (p[1], p[2]));
+            }
         }
     }
 

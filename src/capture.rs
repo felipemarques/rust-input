@@ -78,6 +78,8 @@ enum CaptureRequest {
     Enter(CaptureHandle),
     /// keep the pointer on this device: crossing an edge does nothing
     Lock(bool),
+    /// paused: the pointer comes back and stays here, also on request
+    Pause(bool),
     /// add a capture client, reached through the part of the edge in the link
     Create(CaptureHandle, Position, CaptureType, EdgeLink),
     /// where a capture client meets this device changed
@@ -111,6 +113,7 @@ impl Capture {
             state: Default::default(),
             entry_fraction: None,
             locked: false,
+            paused: false,
             entering: false,
         };
         let task = spawn_local(capture_task.run());
@@ -184,6 +187,15 @@ impl Capture {
             .expect("channel closed");
     }
 
+    /// Paused, the mouse and keyboard stay on this device: a client being
+    /// controlled lets go, crossing an edge does nothing and neither does
+    /// going to a client on request.
+    pub(crate) fn pause(&self, paused: bool) {
+        self.request_tx
+            .send(CaptureRequest::Pause(paused))
+            .expect("channel closed");
+    }
+
     /// releases the mouse because another device entered at `fraction` along
     /// `edge`, answered by [`ICaptureEvent::PlacePointer`]
     pub(crate) fn release_at(&self, edge: Edge, fraction: f64) {
@@ -232,6 +244,8 @@ struct CaptureTask {
     entry_fraction: Option<f64>,
     /// the pointer stays on this device
     locked: bool,
+    /// paused by the user: the pointer stays on this device, also on request
+    paused: bool,
     /// a client is entered on request, which goes through when locked
     entering: bool,
 }
@@ -306,6 +320,7 @@ impl CaptureTask {
                         }
                         CaptureRequest::Enter(_) => { /* no capture to enter with */ }
                         CaptureRequest::Lock(locked) => self.locked = locked,
+                        CaptureRequest::Pause(paused) => self.paused = paused,
                         CaptureRequest::SetReleaseBind(bind) => {
                             self.release_bind.borrow_mut().clone_from(&bind);
                         }
@@ -411,7 +426,7 @@ impl CaptureTask {
                             .captures
                             .iter()
                             .any(|(h, _, t, _)| *h == handle && *t == CaptureType::Default);
-                        if default && self.active_client.is_none() {
+                        if default && self.active_client.is_none() && !self.paused {
                             // an explicit request goes through even when locked
                             self.entering = true;
                             capture.enter_client(handle).await?;
@@ -420,6 +435,14 @@ impl CaptureTask {
                     CaptureRequest::Lock(locked) => {
                         log::info!("pointer {}", if locked { "kept on this device" } else { "free to move on" });
                         self.locked = locked;
+                    }
+                    CaptureRequest::Pause(paused) => {
+                        log::info!("{}", if paused { "paused" } else { "going on" });
+                        self.paused = paused;
+                        if paused && self.active_client.is_some() {
+                            log::info!("releasing capture: paused");
+                            self.release_capture(capture).await?;
+                        }
                     }
                     CaptureRequest::Create(h, p, t, l) => {
                         self.add_capture(h, p, t, l);
@@ -490,6 +513,29 @@ impl CaptureTask {
 
         if event == CaptureEvent::Begin && self.locked && !std::mem::take(&mut self.entering) {
             // kept on this device: the edge is a wall
+            return capture.release().await;
+        }
+        if event == CaptureEvent::Begin && self.paused {
+            self.entering = false;
+            return capture.release().await;
+        }
+        // a client that answers but takes no input (paused there, or
+        // without input emulation): the edge is a wall, rather than the
+        // pointer going there and coming back at once
+        if event == CaptureEvent::Begin
+            && self.active_client != Some(handle)
+            && self.get_type(handle) == CaptureType::Default
+            && self.conn.refuses(handle)
+        {
+            self.entering = false;
+            const DUR: Duration = Duration::from_secs(5);
+            debounce!(
+                PREV_REFUSED_LOG,
+                DUR,
+                log::info!(
+                    "client {handle} takes no input now (paused there?), the edge is a wall"
+                )
+            );
             return capture.release().await;
         }
         if event == CaptureEvent::Begin {
@@ -665,6 +711,7 @@ impl CaptureTask {
 thread_local! {
     static PREV_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
     static PREV_OUTSIDE_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
+    static PREV_REFUSED_LOG: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

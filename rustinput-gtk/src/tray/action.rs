@@ -13,6 +13,8 @@ pub(crate) enum TrayAction {
     ToggleSendCopied,
     /// get the new version of RustInput
     Update,
+    /// pause RustInput, or let it go on
+    TogglePause,
     /// The tray icon disappeared or came back, for example because the
     /// panel showing it restarted. While it is gone, closing the window
     /// quits RustInput as there would be no way to get the window back.
@@ -34,4 +36,6 @@ pub(crate) struct Summary {
     pub(crate) send_copied: Option<bool>,
     /// the item that gets a new version of RustInput, when there is one
     pub(crate) update: Option<String>,
+    /// whether RustInput is paused, `None` until the service said
+    pub(crate) paused: Option<bool>,
 }

@@ -31,6 +31,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
+| ⏸️ Pause from the tray icon, the window or the radial menu; the other computers see it paused | ✅ ¹² | ✅ ¹² | ✅ ² | ✅ ² |
 | 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
 | 🌍 In English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文 and 日本語 | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | ⬆️ Tells of new versions, if you want it to; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
@@ -53,7 +54,9 @@ Windows. "Copy to RustInput" in Explorer and pasting by moving on Windows are ne
 ⁹ New in 0.26.0: tested in automated runs between two Linux (X11) computers, not yet by hand. On other systems than
 Windows and Linux (X11), the parts of an edge that lead nowhere are not a wall yet (see [Arrangement](#arrangement)).
 ¹⁰ New in 0.27.0: tested in automated runs on Linux (X11), not yet by hand on Windows.
-¹¹ New in 0.28.0: tested in automated runs between two Linux (X11) computers, not yet by hand on Windows.
+¹¹ New in 0.28.0: tested in automated runs between two Linux (X11) computers, and by hand between Windows 11 and
+Linux (X11).
+¹² New in 0.29.0: tested in automated runs between two Linux (X11) computers, not yet by hand on Windows.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -168,6 +171,8 @@ picks nothing.
 - **Send copied files**: what was copied with Ctrl+C in the file manager, like "Copy to RustInput".
 - **Keep the pointer here**: crossing an edge does nothing until you pick **Free the pointer**, handy for games and
   drawing.
+- **Pause RustInput**: see [Pausing](#pausing). While paused the wheel only has **Resume RustInput** and
+  **Open RustInput**.
 - **Turn auto-send on / off**: "Send copied files automatically".
 - **File transfers** and **Open RustInput** open those windows.
 
@@ -175,9 +180,31 @@ The wheel shows on the screen of the computer the pointer is on: the keys go the
 The keys are only watched, never taken from the applications, so every shortcut with Ctrl+Alt keeps working: pressing
 another key with them keeps the wheel from showing, or closes it. The right Alt (AltGr on many keyboards) does not
 count. While the wheel shows the pointer stays inside it, and afterwards it goes back to where it was. The labels are
-in Portuguese when the system is, in English otherwise.
+in the language of RustInput (see [Languages](#languages)).
 
 The wheel needs X11 or Windows. To turn it off, set `radial_menu = false` in the [configuration](#configuration) file.
+
+## Pausing
+
+<p align="center">
+  <img src="screenshots/paused.png" width="820" alt="The window while paused: a line under the header with Resume, the pause button pressed">
+  <br>
+  <em>Paused: the line under the header with <b>Resume</b>, the pause button pressed, and the status of this computer.</em>
+</p>
+
+Like the pause of Synergy: **Pause RustInput** in the menu of the tray icon (the menu bar item on macOS), the pause
+button in the header of the window, or the radial menu. While paused, the mouse and keyboard stay on this computer and
+no other computer controls it: a computer being controlled lets go at once, and the edges are walls both ways. The
+tray icon turns grey with an orange pause sign, and a line under the header of the window says so, with **Resume**.
+
+The other computers see it: "Paused on that computer" on its connection, "paused there" in the arrangement, and its
+edge is a wall for them too, without the pointer going there and coming back. "Copy to RustInput" in the file
+manager still sends files, as it is asked for by hand; the clipboard that goes along with the pointer does not go, as
+the pointer does not.
+
+The pause is kept in the [configuration](#configuration) (`paused = true`), so RustInput starts paused after a
+restart until it is resumed. A computer with RustInput older than 0.29.0 does not tell that the other one is paused:
+for it that edge is a wall, as for a computer that can not be controlled.
 
 ## Latency and network usage
 
@@ -819,6 +846,10 @@ language = "pt-BR"
 # asks the first time when this is missing)
 check_updates = true
 
+# paused from the tray icon, the window or the radial menu: the mouse and keyboard
+# stay on this computer and no other one controls it (only written while paused)
+# paused = true
+
 # list of authorized tls certificate fingerprints that
 # are accepted for incoming traffic
 [authorized_fingerprints]
@@ -865,6 +896,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Bandwidth usage measurement and visualization
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
+- [x] Pause from the tray icon, the window or the radial menu, seen by the other computers
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [x] Authorize both computers on each other from the controlling one, with a code

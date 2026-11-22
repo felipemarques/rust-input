@@ -149,6 +149,9 @@ pub struct Peer {
     pub active: bool,
     #[serde(default)]
     pub alive: bool,
+    /// paused there by its user
+    #[serde(default)]
+    pub paused: bool,
 }
 
 /// a computer next to another one, as seen from that one

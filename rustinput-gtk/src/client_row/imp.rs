@@ -54,6 +54,8 @@ pub struct ClientRow {
     position_change_handler: RefCell<Option<SignalHandlerId>>,
     set_state_handler: RefCell<Option<SignalHandlerId>>,
     pub client_object: RefCell<Option<ClientObject>>,
+    /// the client says it is paused by its user
+    pub paused: std::cell::Cell<bool>,
 }
 
 #[glib::object_subclass]

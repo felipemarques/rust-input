@@ -42,6 +42,8 @@ pub(crate) enum Action {
     ToggleLock,
     /// turn sending copied files along with the pointer on or off
     ToggleSendCopied,
+    /// pause RustInput on this device, or let it go on
+    TogglePause,
     ShowTransfers,
     ShowWindow,
 }
@@ -114,6 +116,14 @@ impl Texts {
         match on {
             true => tr("Turn auto-send off"),
             false => tr("Turn auto-send on"),
+        }
+        .to_owned()
+    }
+
+    pub(crate) fn pause(&self, paused: bool) -> String {
+        match paused {
+            true => tr("Resume RustInput"),
+            false => tr("Pause RustInput"),
         }
         .to_owned()
     }

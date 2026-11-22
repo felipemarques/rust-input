@@ -22,6 +22,8 @@ struct StatusItem {
     _hold: gio::ApplicationHoldGuard,
     _delegate: Id,
     _status_item: Id,
+    /// pauses RustInput or lets it go on, its title says which
+    pause_item: Id,
 }
 
 thread_local! {
@@ -52,8 +54,10 @@ pub fn setup(app: &adw::Application, window: &Window) {
             msg_send_bool_usize(ns_app, sel(c"setActivationPolicy:"), 1);
 
             let delegate = new_delegate();
+            let pause_item = menu_item(&text(crate::i18n::tr("Pause RustInput")), c"togglePause:");
             let menu = menu(&[
                 menu_item(&text(crate::i18n::tr("Open RustInput")), c"showRustInput:"),
+                pause_item,
                 separator_item(),
                 menu_item(&text(crate::i18n::tr("Quit RustInput")), c"quitRustInput:"),
             ]);
@@ -88,6 +92,7 @@ pub fn setup(app: &adw::Application, window: &Window) {
                 _hold: hold,
                 _delegate: delegate,
                 _status_item: status_item,
+                pause_item,
             }));
         }
     });
@@ -203,6 +208,12 @@ fn delegate_class() -> Class {
         );
         class_addMethod(
             class,
+            sel(c"togglePause:"),
+            toggle_pause as *const c_void,
+            c"v@:@".as_ptr(),
+        );
+        class_addMethod(
+            class,
             sel(c"quitRustInput:"),
             quit_rustinput as *const c_void,
             c"v@:@".as_ptr(),
@@ -273,6 +284,36 @@ unsafe fn install_reopen_handler(delegate: Id) {
         K_CORE_EVENT_CLASS,
         K_AE_REOPEN_APPLICATION,
     );
+}
+
+extern "C" fn toggle_pause(_this: Id, _cmd: Sel, _sender: Id) {
+    STATUS_ITEM.with(|item| {
+        if let Some(window) = item
+            .borrow()
+            .as_ref()
+            .and_then(|item| item.window.upgrade())
+        {
+            window.request_pause(!window.is_paused());
+        }
+    });
+}
+
+/// shows in the menu whether RustInput is paused: its item resumes it then
+pub fn show_paused(paused: bool) {
+    STATUS_ITEM.with(|item| {
+        let item = item.borrow();
+        let Some(item) = item.as_ref() else {
+            return;
+        };
+        let title = text(if paused {
+            crate::i18n::tr("Resume RustInput")
+        } else {
+            crate::i18n::tr("Pause RustInput")
+        });
+        unsafe {
+            msg_send_void_id(item.pause_item, sel(c"setTitle:"), nsstring(&title));
+        }
+    });
 }
 
 extern "C" fn quit_rustinput(_this: Id, _cmd: Sel, _sender: Id) {

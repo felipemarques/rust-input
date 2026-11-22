@@ -82,6 +82,10 @@ struct ConfigToml {
     /// whether RustInput asks GitHub for its latest version; not asked yet
     /// when missing (the window asks)
     check_updates: Option<bool>,
+    /// RustInput is paused on this computer: the mouse and keyboard stay
+    /// here and no other computer controls it (from the tray icon, the
+    /// window or the radial menu)
+    paused: Option<bool>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
     /// the arrangement of the computers, the same on all of them (see
@@ -644,6 +648,20 @@ impl Config {
     pub fn set_check_updates(&mut self, check: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.check_updates = Some(check);
+    }
+
+    /// whether RustInput is paused on this computer (`paused`)
+    pub fn paused(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.paused)
+            .unwrap_or(false)
+    }
+
+    /// pauses RustInput, or lets it go on (`paused` only while paused)
+    pub fn set_paused(&mut self, paused: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.paused = paused.then_some(true);
     }
 
     /// changes what happens to copied files

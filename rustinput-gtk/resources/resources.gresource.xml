@@ -18,6 +18,7 @@
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/object-rotate-right-symbolic.svg">icons/scalable/actions/object-rotate-right-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/object-select-symbolic.svg">icons/scalable/actions/object-select-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/open-menu-symbolic.svg">icons/scalable/actions/open-menu-symbolic.svg</file>
+    <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/media-playback-pause-symbolic.svg">icons/scalable/actions/media-playback-pause-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/actions/process-stop-symbolic.svg">icons/scalable/actions/process-stop-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/devices/auth-fingerprint-symbolic.svg">icons/scalable/devices/auth-fingerprint-symbolic.svg</file>
     <file compressed="true" preprocess="xml-stripblanks" alias="scalable/devices/network-wired-symbolic.svg">icons/scalable/devices/network-wired-symbolic.svg</file>

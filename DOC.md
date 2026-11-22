@@ -293,13 +293,43 @@ network: the device the pointer is on shows it, because the keys go there.
   not show it: that device gets the keys and shows its own.
 - The wheel is an override-redirect window with an alpha channel on X11 (cut
   round with the shape extension when no compositor runs) and a layered
-  window on Windows, drawn with tiny-skia and fontdue in a font of the system.
+  window on Windows, drawn with tiny-skia and ab_glyph in a font of the system.
   The pointer is confined to it (a pointer grab, `ClipCursor`) and goes back
   to where it was when it closes.
 - "Go to" asks the capture to start for that client as if the pointer crossed
   its edge at its current height (`Capture::enter`, X11 and Windows).
   "Keep the pointer here" makes the capture release every capture right away,
   except one asked for with "Go to".
+- "Pause RustInput" pauses (see Pausing); while paused the wheel has only
+  "Resume RustInput" and "Open RustInput".
+
+## Pausing
+
+`FrontendRequest::SetPaused` (the tray icon, the window, the radial menu)
+pauses RustInput on this device, kept as `paused = true` in `config.toml` and
+told to the windows with `FrontendEvent::Paused`:
+
+- The capture (`Capture::pause`) releases a client being controlled and
+  releases every capture right away, also one asked for with "Go to": the
+  mouse and keyboard stay here.
+- The listen side (`Emulation::pause`) lets go of the devices controlling
+  this one (their pressed keys are released here, and they get `Leave`),
+  answers `Enter` with `Leave`, drops input, and answers `Ping` with
+  `Pong(false)`, followed by `Paused(true)` (0x88) for peers with
+  `CAP_PAUSE`. A `Pong(true)` ends the pause for the peer.
+
+The connect side keeps it in the client state (`ClientState::paused`, also
+in the arrangement view), which the window shows; the service tells the
+window once a second about clients whose answering or pausing changed. A
+client that is connected but takes no input (`Pong(false)`: paused there, or
+without input emulation) is a wall: the capture releases at once instead of
+sending `Enter` and coming back. Older peers get `Pong(false)` only, which
+they already treated so.
+
+`e2e-tests/pause.sh` checks it with two instances: paused, A does not cross
+and keeps the pause in its configuration; resumed, it crosses again; B
+paused is seen by A as paused and is a wall; pausing B while A controls it,
+and pausing A while it controls B, gives the pointer back to A.
 
 ## Latency and network usage
 

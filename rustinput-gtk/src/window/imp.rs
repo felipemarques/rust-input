@@ -73,6 +73,14 @@ pub struct Window {
     pub arrangement_box: TemplateChild<gtk::Box>,
     #[template_child]
     pub language_row: TemplateChild<adw::ComboRow>,
+    /// pauses RustInput, pressed while paused
+    #[template_child]
+    pub pause_button: TemplateChild<gtk::ToggleButton>,
+    /// the line under the header bar while paused
+    #[template_child]
+    pub pause_revealer: TemplateChild<gtk::Revealer>,
+    /// RustInput is paused on this computer, as the service says
+    pub paused: Cell<bool>,
     /// the line under the header bar about new versions
     #[template_child]
     pub update_revealer: TemplateChild<gtk::Revealer>,
@@ -242,6 +250,20 @@ impl Window {
             macos_privacy::open_accessibility_settings();
         }
         self.obj().request_capture();
+    }
+
+    #[template_callback]
+    fn handle_pause_toggled(&self) {
+        let pressed = self.pause_button.is_active();
+        // also when the service said so: then nothing changes
+        if pressed != self.paused.get() {
+            self.obj().request_pause(pressed);
+        }
+    }
+
+    #[template_callback]
+    fn handle_resume(&self) {
+        self.obj().request_pause(false);
     }
 
     #[template_callback]

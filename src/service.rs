@@ -106,6 +106,11 @@ pub struct Service {
     notices: Receiver<String>,
     /// the pointer is kept on this device
     locked: bool,
+    /// paused by the user: neither controlling nor controlled
+    paused: bool,
+    /// whether each client answered and whether it is paused, as the window
+    /// last heard
+    peer_states: HashMap<ClientHandle, (bool, bool)>,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
     /// bytes and pings of the input channel, reported once a second
@@ -234,6 +239,7 @@ impl Service {
 
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());
+        let paused = config.paused();
         let capture = Capture::new(capture_backend, conn, config.release_bind());
         let emulation_backend = config.emulation_backend().map(|b| b.into());
         let emulation = Emulation::new(emulation_backend, listener);
@@ -283,6 +289,8 @@ impl Service {
             texts: Texts::new(),
             notices,
             locked: false,
+            paused,
+            peer_states: HashMap::new(),
             layout,
             arrangement,
             arrangement_events,
@@ -309,6 +317,11 @@ impl Service {
         for handle in active {
             self.activate_client(handle);
         }
+        if self.paused {
+            log::info!("paused (paused = true in the configuration)");
+            self.capture.pause(true);
+            self.emulation.pause(true);
+        }
         // the radial menu has its slices also without a window connected
         self.update_radial();
 
@@ -322,6 +335,7 @@ impl Service {
                     let elapsed = sampled.elapsed();
                     sampled = std::time::Instant::now();
                     self.report_link_stats(elapsed);
+                    self.report_peer_states();
                 }
                 request = self.frontend_listener.next() => self.handle_frontend_request(request),
                 _ = self.frontend_event_pending.notified() => self.handle_frontend_pending().await,
@@ -452,6 +466,7 @@ impl Service {
                 self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
             }
             FrontendRequest::CheckUpdates => self.check_updates(),
+            FrontendRequest::SetPaused(paused) => self.set_paused(paused),
             FrontendRequest::SendFiles(paths) => match &self.files {
                 Some(files) => files.send_now(paths),
                 None => log::warn!("file transfers are turned off (clipboard_files = false)"),
@@ -734,6 +749,49 @@ impl Service {
         self.notify_frontend(FrontendEvent::FileOptions(self.file_options));
         self.notify_frontend(FrontendEvent::Theme(self.theme));
         self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+        self.notify_frontend(FrontendEvent::Paused(self.paused));
+    }
+
+    /// Pauses RustInput on this computer, or lets it go on: paused, the
+    /// mouse and keyboard stay here (a client being controlled lets go) and
+    /// no other computer controls this one (one that does lets go, the
+    /// others hear it is paused). Kept in the configuration.
+    fn set_paused(&mut self, paused: bool) {
+        if paused == self.paused {
+            return;
+        }
+        log::info!(
+            "{}",
+            if paused {
+                "paused by the user"
+            } else {
+                "going on"
+            }
+        );
+        self.paused = paused;
+        self.capture.pause(paused);
+        self.emulation.pause(paused);
+        self.config.set_paused(paused);
+        self.save_config();
+        self.notify_frontend(FrontendEvent::Paused(paused));
+        self.update_radial();
+    }
+
+    /// tells the window about clients that began or stopped answering, or
+    /// that were paused or went on there (learnt from their pings)
+    fn report_peer_states(&mut self) {
+        let changed: Vec<ClientHandle> = self
+            .client_manager
+            .get_client_states()
+            .into_iter()
+            .filter(|(handle, _, s)| {
+                self.peer_states.insert(*handle, (s.alive, s.paused)) != Some((s.alive, s.paused))
+            })
+            .map(|(handle, ..)| handle)
+            .collect();
+        for handle in changed {
+            self.broadcast_client(handle);
+        }
     }
 
     /// asks GitHub for the latest version, unless it is asking already
@@ -868,8 +926,22 @@ impl Service {
         }
     }
 
-    /// the slices of the radial menu: the clients to go to, then the actions
+    /// the slices of the radial menu: the clients to go to, then the actions;
+    /// while paused only going on and the window
     fn update_radial(&mut self) {
+        if self.paused {
+            self.radial.set_items(vec![
+                Item {
+                    label: self.texts.pause(true),
+                    action: Action::TogglePause,
+                },
+                Item {
+                    label: self.texts.window(),
+                    action: Action::ShowWindow,
+                },
+            ]);
+            return;
+        }
         let mut items: Vec<Item> = self
             .client_manager
             .get_client_states()
@@ -896,6 +968,7 @@ impl Service {
             add(self.texts.send_files(), Action::SendCopiedFiles);
         }
         add(self.texts.lock(self.locked), Action::ToggleLock);
+        add(self.texts.pause(false), Action::TogglePause);
         if files {
             add(
                 self.texts.send_copied(self.file_options.send_copied),
@@ -927,6 +1000,7 @@ impl Service {
                 };
                 self.set_file_options(options, true);
             }
+            Action::TogglePause => self.set_paused(!self.paused),
             Action::ShowTransfers => self.notify_frontend(FrontendEvent::ShowTransfers),
             Action::ShowWindow => self.notify_frontend(FrontendEvent::ShowWindow),
         }
@@ -1317,6 +1391,7 @@ impl Service {
                 pos: config.pos,
                 active: state.active,
                 alive: state.alive,
+                paused: state.paused,
             });
         }
         self.notify_frontend(FrontendEvent::Arrangement(ArrangementView {

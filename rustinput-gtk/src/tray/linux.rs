@@ -8,12 +8,14 @@ use ksni::{
     menu::{CheckmarkItem, StandardItem},
 };
 
-use super::{Summary, TrayAction, icon};
+use super::{Summary, TrayAction, icon, pause_label, paused_status};
 use crate::i18n::tr;
 
 struct RustInputTray {
     actions: Sender<TrayAction>,
     icons: Vec<ksni::Icon>,
+    /// the same, grey with a pause sign, while paused
+    paused_icons: Vec<ksni::Icon>,
     /// name and version, shown in the tooltip and at the top of the menu
     label: String,
     /// the file transfers
@@ -37,15 +39,21 @@ impl ksni::Tray for RustInputTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        self.icons.clone()
+        match self.transfers.paused {
+            Some(true) => self.paused_icons.clone(),
+            _ => self.icons.clone(),
+        }
     }
 
     fn tool_tip(&self) -> ToolTip {
-        let description = self
+        let mut description = self
             .transfers
             .status
             .clone()
             .unwrap_or_else(|| tr("Mouse and keyboard sharing").into());
+        if self.transfers.paused == Some(true) {
+            description = format!("{}\n{description}", paused_status());
+        }
         ToolTip {
             title: self.label.clone(),
             description,
@@ -67,6 +75,23 @@ impl ksni::Tray for RustInputTray {
             .into(),
             MenuItem::Separator,
         ];
+        if let Some(paused) = self.transfers.paused {
+            menu.extend([
+                StandardItem {
+                    label: pause_label(paused).into(),
+                    icon_name: if paused {
+                        "media-playback-start"
+                    } else {
+                        "media-playback-pause"
+                    }
+                    .into(),
+                    activate: Box::new(|tray: &mut Self| tray.send(TrayAction::TogglePause)),
+                    ..Default::default()
+                }
+                .into(),
+                MenuItem::Separator,
+            ]);
+        }
         if let Some(update) = &self.transfers.update {
             menu.extend([
                 StandardItem {
@@ -174,10 +199,13 @@ impl Drop for Handle {
 
 /// shows the tray icon, `None` if the desktop has no system tray
 pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle> {
-    let icons = icon::icons().into_iter().map(argb).collect();
+    let originals = icon::icons();
+    let paused_icons = originals.iter().map(icon::paused).map(argb).collect();
+    let icons = originals.into_iter().map(argb).collect();
     let tray = RustInputTray {
         actions,
         icons,
+        paused_icons,
         label,
         transfers: Summary::default(),
     };

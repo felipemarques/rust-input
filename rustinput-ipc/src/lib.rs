@@ -217,6 +217,10 @@ pub struct ClientState {
     /// protocol), 0 until it did
     #[serde(default)]
     pub peer_capabilities: u32,
+    /// the client is paused by its user: it neither controls nor is
+    /// controlled (it answers, but `alive` is false)
+    #[serde(default)]
+    pub paused: bool,
 }
 
 /// a file transfer, as shown to the user
@@ -436,6 +440,9 @@ pub enum FrontendEvent {
     PointerAt(Option<ClientHandle>),
     /// whether there is a newer version of RustInput, and whether to ask
     Updates(UpdateState),
+    /// whether RustInput is paused on this computer
+    /// ([`FrontendRequest::SetPaused`])
+    Paused(bool),
     /// the computer `name` was asked to show the numbers of its monitors
     /// ([`FrontendRequest::IdentifyMonitors`]) and did not (`error`)
     MonitorsNotIdentified { name: String, error: String },
@@ -509,6 +516,10 @@ pub enum FrontendRequest {
     SetCheckUpdates(bool),
     /// ask GitHub for the latest version now
     CheckUpdates,
+    /// Pause RustInput on this computer, or let it go on: paused, the mouse
+    /// and keyboard stay here and no other computer controls this one. Kept
+    /// in the configuration ([`FrontendEvent::Paused`]).
+    SetPaused(bool),
     /// remove the received files that were not pasted
     RemoveReceivedFiles,
     /// authorize this device and the client on each other with the code the

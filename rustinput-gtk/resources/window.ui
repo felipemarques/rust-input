@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  The main window: four pages switched in the header bar, and a line under it
-  about new versions (whether to look for them, then a new one).
+  The main window: four pages switched in the header bar, a button pausing
+  RustInput, a line under it while paused, and one about new versions
+  (whether to look for them, then a new one).
 
   - Computers: on the left, this computer (its name, port and certificate,
     what the others need to reach it) and whether it sends and receives; on
@@ -78,6 +79,48 @@
                 <property name="tooltip-text" translatable="yes">Menu</property>
               </object>
             </child>
+            <child type="end">
+              <object class="GtkToggleButton" id="pause_button">
+                <property name="icon-name">media-playback-pause-symbolic</property>
+                <property name="tooltip-text" translatable="yes">Pause RustInput</property>
+                <signal name="toggled" handler="handle_pause_toggled" swapped="true"/>
+              </object>
+            </child>
+          </object>
+        </child>
+        <!-- while paused: the mouse and keyboard stay here -->
+        <child>
+          <object class="GtkRevealer" id="pause_revealer">
+            <property name="transition-type">slide-down</property>
+            <property name="child">
+              <object class="GtkBox">
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkImage">
+                    <property name="icon-name">media-playback-pause-symbolic</property>
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label" translatable="yes">RustInput is paused: the mouse and keyboard stay on this computer, and no other computer controls it.</property>
+                    <property name="hexpand">true</property>
+                    <property name="xalign">0</property>
+                    <property name="wrap">true</property>
+                    <property name="valign">center</property>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkButton">
+                    <property name="label" translatable="yes">Resume</property>
+                    <property name="valign">center</property>
+                    <signal name="clicked" handler="handle_resume" swapped="true"/>
+                    <style><class name="suggested-action"/></style>
+                  </object>
+                </child>
+                <style><class name="pause-banner"/></style>
+              </object>
+            </property>
           </object>
         </child>
         <!-- asks whether to look for new versions, then tells of one -->

@@ -7,7 +7,7 @@ use input_event::{
     edge::{Edge, Span},
 };
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{CAP_CURSOR_POSITION, Position, ProtoEvent};
+use rustinput_proto::{CAP_CURSOR_POSITION, CAP_PAUSE, Position, ProtoEvent};
 use std::{
     cell::Cell,
     collections::{HashMap, HashSet},
@@ -85,6 +85,8 @@ enum EmulationRequest {
     /// place the pointer at a position along an edge
     Warp(Edge, f64),
     ChangePort(u16),
+    /// paused, no other device controls this one
+    Pause(bool),
     Terminate,
 }
 
@@ -129,6 +131,15 @@ impl Emulation {
             .expect("channel closed");
     }
 
+    /// Paused, no other device controls this one: one that does lets go of
+    /// it, and the others hear that this one is paused (`Pong(false)`, and
+    /// `Paused` for those that know it) and keep their pointer.
+    pub(crate) fn pause(&self, paused: bool) {
+        self.request_tx
+            .send(EmulationRequest::Pause(paused))
+            .expect("channel closed");
+    }
+
     pub(crate) fn request_port_change(&self, port: u16) {
         self.request_tx
             .send(EmulationRequest::ChangePort(port))
@@ -166,6 +177,8 @@ impl ListenTask {
         // devices currently controlling this one, the pointer is only placed
         // on the first of the (repeated) Enter events
         let mut entered = HashSet::new();
+        // paused by the user: nobody controls this device
+        let mut paused = false;
         loop {
             select! {
                 e = self.listener.next() => {match e {
@@ -173,6 +186,10 @@ impl ListenTask {
                         log::trace!("{event} <-<-<-<-<- {addr}");
                         last_response.insert(addr, Instant::now());
                         match event {
+                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if paused => {
+                                // the other device keeps its pointer
+                                self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                            }
                             ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) | ProtoEvent::EnterSpan { pos, .. } => {
                                 // the pointer is only placed on the first of
                                 // the (repeated) Enter events
@@ -201,8 +218,15 @@ impl ListenTask {
                                 self.emulation_proxy.remove(addr);
                                 self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                             }
+                            ProtoEvent::Input(_) if paused => {}
                             ProtoEvent::Input(event) => self.emulation_proxy.consume(event, addr),
-                            ProtoEvent::Ping => self.listener.reply(addr, ProtoEvent::Pong(self.emulation_proxy.emulation_active.get())).await,
+                            ProtoEvent::Ping => {
+                                let available = self.emulation_proxy.emulation_active.get() && !paused;
+                                self.listener.reply(addr, ProtoEvent::Pong(available)).await;
+                                if paused && self.listener.peer_capabilities(addr) & CAP_PAUSE != 0 {
+                                    self.listener.reply(addr, ProtoEvent::Paused(true)).await;
+                                }
+                            }
                             // Peer's version handshake. Echo our own
                             // commit back so the peer's connect-side
                             // receive_loop populates its `peer_commit`,
@@ -248,6 +272,18 @@ impl ListenTask {
                         self.listener.reply(addr, leave).await
                     }
                     EmulationRequest::Warp(edge, fraction) => self.emulation_proxy.warp(edge, fraction),
+                    EmulationRequest::Pause(pause) => {
+                        paused = pause;
+                        if paused {
+                            // the devices controlling this one let go of it,
+                            // and the keys they hold are let go here
+                            for addr in entered.drain() {
+                                log::info!("paused: {addr} no longer controls this device");
+                                self.emulation_proxy.remove(addr);
+                                self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                            }
+                        }
+                    }
                     EmulationRequest::ChangePort(port) => {
                         self.listener.request_port_change(port);
                         let result = self.listener.port_changed().await;
