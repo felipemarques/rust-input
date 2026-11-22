@@ -270,6 +270,35 @@ fn pair(a: &str, b: &str) -> [String; 2] {
 /// what is called when the user selects a computer
 type OnSelected = dyn Fn(Option<ClientHandle>);
 
+/// the pointer over the arrangement
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+enum Pointer {
+    #[default]
+    Elsewhere,
+    /// over a computer, which can be dragged
+    OverComputer,
+    Dragging,
+}
+
+/// The cursors over a computer and while dragging one. GTK on Windows has
+/// no "grab" nor "grabbing": it makes a cursor without an image for them,
+/// so the pointer disappears (its fallback cursor is never used). It has the
+/// hand ("pointer") and the arrows to move ("move") of Windows.
+#[cfg(windows)]
+const GRAB: [&str; 2] = ["pointer", "pointer"];
+#[cfg(windows)]
+const GRABBING: [&str; 2] = ["move", "move"];
+#[cfg(not(windows))]
+const GRAB: [&str; 2] = ["grab", "pointer"];
+#[cfg(not(windows))]
+const GRABBING: [&str; 2] = ["grabbing", "move"];
+
+/// the cursor `[name, fallback]`, the fallback for a theme without the name
+fn cursor([name, fallback]: [&str; 2]) -> Option<gdk::Cursor> {
+    let fallback = gdk::Cursor::from_name(fallback, None);
+    gdk::Cursor::from_name(name, fallback.as_ref())
+}
+
 mod imp {
     use super::*;
 
@@ -281,6 +310,7 @@ mod imp {
         /// called when the user selects a computer
         pub(super) selected: RefCell<Option<Box<OnSelected>>>,
         pub(super) last_size: Cell<(f64, f64)>,
+        pub(super) pointer: Cell<Pointer>,
     }
 
     #[glib::object_subclass]
@@ -297,7 +327,6 @@ mod imp {
             obj.set_focusable(true);
             obj.set_hexpand(true);
             obj.set_height_request(300);
-            obj.set_cursor_from_name(Some("grab"));
             obj.update_property(&[gtk::accessible::Property::Label(
                 "Arrangement of the computers: drag a computer next to another one, or select \
                  one and move it with the arrow keys",
@@ -644,9 +673,17 @@ impl ArrangementArea {
         drag.connect_drag_end(glib::clone!(
             #[weak(rename_to = area)]
             self,
-            move |_, _, _| area.drag_end()
+            move |_, dx, dy| area.drag_end(dx, dy)
         ));
         self.add_controller(drag);
+
+        let motion = gtk::EventControllerMotion::new();
+        motion.connect_motion(glib::clone!(
+            #[weak(rename_to = area)]
+            self,
+            move |_, x, y| area.hover(x, y)
+        ));
+        self.add_controller(motion);
 
         let keys = gtk::EventControllerKey::new();
         keys.connect_key_pressed(glib::clone!(
@@ -657,6 +694,37 @@ impl ArrangementArea {
             move |_, key, _, _| area.key(key)
         ));
         self.add_controller(keys);
+    }
+
+    /// the cursor for where the pointer is: a hand over a computer
+    fn set_pointer(&self, pointer: Pointer) {
+        if self.imp().pointer.replace(pointer) == pointer {
+            return;
+        }
+        let cursor = match pointer {
+            Pointer::Elsewhere => None,
+            Pointer::OverComputer => cursor(GRAB),
+            Pointer::Dragging => cursor(GRABBING),
+        };
+        self.set_cursor(cursor.as_ref());
+    }
+
+    /// the pointer moved to (`x`, `y`)
+    fn hover(&self, x: f64, y: f64) {
+        let over = {
+            let model = self.model();
+            if model.drag.is_some() {
+                return;
+            }
+            let (w, h) = self.size();
+            let (lx, ly) = model.transform(w, h).to_layout(x, y);
+            model.hit(lx, ly).is_some()
+        };
+        self.set_pointer(if over {
+            Pointer::OverComputer
+        } else {
+            Pointer::Elsewhere
+        });
     }
 
     fn size(&self) -> (f64, f64) {
@@ -680,7 +748,7 @@ impl ArrangementArea {
             });
             model.frozen = Some(t);
             drop(model);
-            self.set_cursor_from_name(Some("grabbing"));
+            self.set_pointer(Pointer::Dragging);
         } else {
             drop(model);
         }
@@ -706,10 +774,11 @@ impl ArrangementArea {
         self.queue_draw();
     }
 
-    fn drag_end(&self) {
+    fn drag_end(&self, dx: f64, dy: f64) {
         let mut model = self.model_mut();
         let drag = model.drag.take();
         let t = model.frozen.take();
+        let mut end = None;
         if let (Some(drag), Some(t)) = (drag, t) {
             if drag.moved {
                 let m = &model.items[drag.index].machine;
@@ -717,9 +786,13 @@ impl ArrangementArea {
                 let m = &mut model.items[drag.index].machine;
                 (m.x, m.y) = (x, y);
             }
+            end = Some((drag.start.0 + dx, drag.start.1 + dy));
         }
         drop(model);
-        self.set_cursor_from_name(Some("grab"));
+        self.set_pointer(Pointer::Elsewhere);
+        if let Some((x, y)) = end {
+            self.hover(x, y);
+        }
         self.changed();
     }
 
