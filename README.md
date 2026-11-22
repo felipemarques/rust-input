@@ -184,6 +184,14 @@ picks nothing.
 "Send copied files automatically" is in the menu of the tray icon and in Preferences. With more than eight actions
 (several computers), the wheel grows so their names keep their room.
 
+The wheel shows on the screen of the computer the pointer is on: the keys go there, and that computer shows it.
+The keys are only watched, never taken from the applications, so every shortcut with Ctrl+Alt keeps working: pressing
+another key with them keeps the wheel from showing, or closes it. The right Alt (AltGr on many keyboards) does not
+count. While the wheel shows the pointer stays inside it, and afterwards it goes back to where it was. The labels are
+in the language of RustInput (see [Languages](#languages)).
+
+The wheel needs X11 or Windows. To turn it off, set `radial_menu = false` in the [configuration](#configuration) file.
+
 ### Locking the screens
 
 Only an authorized computer can ask another to lock its screen, and it does even when that one is paused: locking only
@@ -197,14 +205,6 @@ so does `daemon.log`.
 - **Linux**: the screen locker of the desktop (Cinnamon, MATE, XFCE, LXQt), else `loginctl lock-session`, which GNOME,
   KDE and most others follow, else `xdg-screensaver lock`.
 - **macOS**: as "Lock Screen" in the Apple menu.
-
-The wheel shows on the screen of the computer the pointer is on: the keys go there, and that computer shows it.
-The keys are only watched, never taken from the applications, so every shortcut with Ctrl+Alt keeps working: pressing
-another key with them keeps the wheel from showing, or closes it. The right Alt (AltGr on many keyboards) does not
-count. While the wheel shows the pointer stays inside it, and afterwards it goes back to where it was. The labels are
-in the language of RustInput (see [Languages](#languages)).
-
-The wheel needs X11 or Windows. To turn it off, set `radial_menu = false` in the [configuration](#configuration) file.
 
 ## Pausing
 
