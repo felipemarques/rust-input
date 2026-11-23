@@ -18,3 +18,5 @@ mod pairing;
 mod radial;
 pub mod service;
 mod update;
+#[cfg(windows)]
+pub mod windows_system;

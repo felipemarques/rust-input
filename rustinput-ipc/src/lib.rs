@@ -42,6 +42,10 @@ pub fn human_size(bytes: u64) -> String {
 mod connect;
 mod connect_async;
 mod listen;
+#[cfg(windows)]
+mod windows_pipe;
+#[cfg(windows)]
+pub use windows_pipe::{pipe_exists_in, pipe_name, pipe_name_in};
 
 pub use connect::{FrontendEventReader, FrontendRequestWriter, connect, try_connect};
 pub use connect_async::{AsyncFrontendEventReader, AsyncFrontendRequestWriter, connect_async};
@@ -591,10 +595,18 @@ pub fn is_service_running() -> bool {
     std::os::unix::net::UnixStream::connect(socket_path).is_ok()
 }
 
-/// Check if a rustinput service is already running by probing the IPC socket.
+/// Check if a rustinput service is already running in this session: whether
+/// the named pipe of the session exists.
 #[cfg(windows)]
 pub fn is_service_running() -> bool {
-    std::net::TcpStream::connect("127.0.0.1:5252").is_ok()
+    let mut session = 0;
+    unsafe {
+        windows_sys::Win32::System::RemoteDesktop::ProcessIdToSessionId(
+            std::process::id(),
+            &mut session,
+        )
+    };
+    windows_pipe::pipe_exists_in(session)
 }
 
 /// the name of the Windows service (`rustinput windows-service`), installed
@@ -605,7 +617,7 @@ pub const WINDOWS_SERVICE: &str = "RustInput";
 /// Whether the Windows service runs, which starts the daemon in the session
 /// of the user at the screen, with the administrator rights of that user:
 /// the window then waits for that daemon instead of starting one of its own,
-/// which would have no such rights and keep the port from the right one.
+/// which would have no such rights and keep the pipe from the right one.
 #[cfg(windows)]
 pub fn windows_service_runs() -> bool {
     use windows_service::{

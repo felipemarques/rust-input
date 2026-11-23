@@ -1,42 +1,41 @@
-use futures::{Stream, StreamExt, stream::SelectAll};
+use futures::{Stream, StreamExt, future, stream::BoxStream, stream::SelectAll};
 #[cfg(unix)]
 use std::path::PathBuf;
 use std::{
-    io::ErrorKind,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use tokio::io::{AsyncBufReadExt, AsyncWrite, AsyncWriteExt, BufReader, ReadHalf};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc::{self, error::TrySendError};
 use tokio_stream::wrappers::LinesStream;
 
 #[cfg(unix)]
-use tokio::net::UnixListener;
+use std::io::ErrorKind;
 #[cfg(unix)]
-use tokio::net::UnixStream;
+use tokio::net::{UnixListener, UnixStream};
 
 #[cfg(windows)]
-use tokio::net::TcpListener;
-#[cfg(windows)]
-use tokio::net::TcpStream;
+use tokio::net::windows::named_pipe::NamedPipeServer;
 
 use crate::{FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError};
 
+/// what one frontend asked, tagged with its connection
+type Requests = BoxStream<'static, (u64, Result<FrontendRequest, IpcError>)>;
+
 pub struct AsyncFrontendListener {
-    #[cfg(windows)]
-    listener: TcpListener,
     #[cfg(unix)]
     listener: UnixListener,
     #[cfg(unix)]
     socket_path: PathBuf,
-    #[cfg(unix)]
-    line_streams: SelectAll<LinesStream<BufReader<ReadHalf<UnixStream>>>>,
+    /// the windows accepted by [`crate::windows_pipe::listen`]
     #[cfg(windows)]
-    line_streams: SelectAll<LinesStream<BufReader<ReadHalf<TcpStream>>>>,
+    incoming: mpsc::UnboundedReceiver<NamedPipeServer>,
+    requests: SelectAll<Requests>,
     /// the queues of the events to the frontends, see [`spawn_writer`]
-    tx_streams: Vec<mpsc::Sender<Arc<str>>>,
+    tx_streams: Vec<(u64, mpsc::Sender<Arc<str>>)>,
+    next_id: u64,
 }
 
 /// Events waiting for a frontend that does not read them, a frozen one: past
@@ -61,6 +60,32 @@ where
         let _ = tx.shutdown().await;
     });
     sender
+}
+
+/// The requests of one frontend, ending after the first that is not one:
+/// whatever sent it is no frontend of RustInput, and is disconnected.
+fn requests<R>(id: u64, rx: R) -> Requests
+where
+    R: AsyncRead + Send + 'static,
+{
+    LinesStream::new(BufReader::new(rx).lines())
+        .scan(true, |going, line| {
+            if !*going {
+                return future::ready(None);
+            }
+            let request = match line {
+                Ok(line) => serde_json::from_str(&line).map_err(IpcError::from),
+                // gone: the end of its stream
+                Err(e) => {
+                    log::debug!("a frontend went away: {e}");
+                    return future::ready(None);
+                }
+            };
+            *going = request.is_ok();
+            future::ready(Some(request))
+        })
+        .map(move |request| (id, request))
+        .boxed()
 }
 
 impl AsyncFrontendListener {
@@ -91,28 +116,39 @@ impl AsyncFrontendListener {
                 }
                 Err(e) => return Err(IpcListenerCreationError::Bind(e)),
             };
+            // only this user, whatever the umask
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Err(e) =
+                    std::fs::set_permissions(&socket_path, std::fs::Permissions::from_mode(0o600))
+                {
+                    log::warn!("{socket_path:?}: could not make it private: {e}");
+                }
+            }
             (socket_path, listener)
         };
 
         #[cfg(windows)]
-        let listener = match TcpListener::bind("127.0.0.1:5252").await {
-            Ok(ls) => ls,
-            // some other rustinput instance has bound the socket in the meantime
-            Err(e) if e.kind() == ErrorKind::AddrInUse => {
+        let incoming = match crate::windows_pipe::listen() {
+            Ok(incoming) => incoming,
+            // the pipe of this session exists: another daemon runs here
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
                 return Err(IpcListenerCreationError::AlreadyRunning);
             }
             Err(e) => return Err(IpcListenerCreationError::Bind(e)),
         };
 
-        let adapter = Self {
+        Ok(Self {
+            #[cfg(unix)]
             listener,
             #[cfg(unix)]
             socket_path,
-            line_streams: SelectAll::new(),
+            #[cfg(windows)]
+            incoming,
+            requests: SelectAll::new(),
             tx_streams: vec![],
-        };
-
-        Ok(adapter)
+            next_id: 0,
+        })
     }
 
     /// Queues `notify` for every frontend, without waiting for any of them.
@@ -121,7 +157,7 @@ impl AsyncFrontendListener {
         json.push('\n');
         let json: Arc<str> = json.into();
         self.tx_streams
-            .retain(|tx| match tx.try_send(json.clone()) {
+            .retain(|(_, tx)| match tx.try_send(json.clone()) {
                 Ok(()) => true,
                 Err(TrySendError::Full(_)) => {
                     log::warn!("a frontend does not read its events, disconnecting it");
@@ -135,6 +171,23 @@ impl AsyncFrontendListener {
     pub fn has_frontends(&self) -> bool {
         !self.tx_streams.is_empty()
     }
+
+    fn add<S>(&mut self, stream: S)
+    where
+        S: AsyncRead + AsyncWrite + Send + 'static,
+    {
+        let id = self.next_id;
+        self.next_id += 1;
+        let (rx, tx) = tokio::io::split(stream);
+        self.requests.push(requests(id, rx));
+        self.tx_streams.push((id, spawn_writer(tx)));
+    }
+}
+
+/// the user this process runs as
+#[cfg(unix)]
+fn own_uid() -> u32 {
+    unsafe { libc::getuid() }
 }
 
 #[cfg(unix)]
@@ -148,18 +201,28 @@ impl Drop for AsyncFrontendListener {
 impl Stream for AsyncFrontendListener {
     type Item = Result<FrontendRequest, IpcError>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Poll::Ready(Some(Ok(l))) = self.line_streams.poll_next_unpin(cx) {
-            let request = serde_json::from_str(l.as_str()).map_err(|e| e.into());
+        if let Poll::Ready(Some((id, request))) = self.requests.poll_next_unpin(cx) {
+            if request.is_err() {
+                // its stream ends with this; no more events for it either
+                self.tx_streams.retain(|(other, _)| *other != id);
+            }
             return Poll::Ready(Some(request));
         }
         let mut sync = false;
+        #[cfg(unix)]
         while let Poll::Ready(Ok((stream, _))) = self.listener.poll_accept(cx) {
-            let (rx, tx) = tokio::io::split(stream);
-            let buf_reader = BufReader::new(rx);
-            let lines = buf_reader.lines();
-            let lines = LinesStream::new(lines);
-            self.line_streams.push(lines);
-            self.tx_streams.push(spawn_writer(tx));
+            match stream.peer_cred() {
+                Ok(peer) if peer.uid() == own_uid() => {
+                    self.add(stream);
+                    sync = true;
+                }
+                Ok(peer) => log::warn!("refused a connection of the user {}", peer.uid()),
+                Err(e) => log::warn!("refused a connection of an unknown user: {e}"),
+            }
+        }
+        #[cfg(windows)]
+        while let Poll::Ready(Some(pipe)) = self.incoming.poll_recv(cx) {
+            self.add(pipe);
             sync = true;
         }
         if sync {

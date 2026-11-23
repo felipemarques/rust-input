@@ -1235,11 +1235,15 @@ impl Service {
             HookKind::Leave => self.client_manager.get_leave_cmd(handle),
         };
         let Some(cmd) = cmd else { return };
-        // as SYSTEM, a command of the configuration of the user would get
-        // the rights of Windows itself
+        // with administrator rights (as SYSTEM too) a command of the
+        // configuration, which any program of the user can change, would
+        // get them
         #[cfg(windows)]
-        if crate::lock::runs_as_system() {
-            log::warn!("the {kind} hook of client {handle} is not run: RustInput runs as SYSTEM");
+        if crate::windows_system::runs_elevated() {
+            log::warn!(
+                "the {kind} hook of client {handle} is not run: RustInput runs with \
+                 administrator rights"
+            );
             return;
         }
         tokio::task::spawn_local(async move {

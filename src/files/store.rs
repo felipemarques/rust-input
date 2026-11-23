@@ -15,16 +15,31 @@ use tokio::{fs::File, io::AsyncWriteExt};
 
 use super::wire::Entry;
 
+/// Whether `dir` and the folder it is in are folders and not links
+/// (symbolic links, junctions): the daemon may run as SYSTEM in the folder of
+/// its user, where a program of the user could put a junction to another
+/// folder, to have SYSTEM write or delete there.
+fn no_links(dir: &Path) -> bool {
+    let plain =
+        |path: &Path| fs::symlink_metadata(path).map_or(true, |m| !m.file_type().is_symlink());
+    plain(dir) && dir.parent().is_none_or(plain)
+}
+
 /// Removes all but the `keep` newest transfers below `dir`.
 pub(crate) fn cleanup(dir: &Path, keep: usize) {
+    if !no_links(dir) {
+        log::warn!("{dir:?} or the folder it is in is a link: nothing is removed");
+        return;
+    }
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
-    // the folder names start with the time they were created
+    // the folder names start with the time they were created; links among
+    // them are not followed
     let mut transfers: Vec<PathBuf> = entries
         .filter_map(Result::ok)
+        .filter(|e| fs::symlink_metadata(e.path()).is_ok_and(|m| m.is_dir()))
         .map(|e| e.path())
-        .filter(|p| p.is_dir())
         .collect();
     transfers.sort();
     let remove = transfers.len().saturating_sub(keep);
@@ -35,10 +50,17 @@ pub(crate) fn cleanup(dir: &Path, keep: usize) {
     }
 }
 
+/// the characters that change the direction of the text, which can make
+/// "photo\u{202e}gpj.exe" look like "photoexe.jpg"
+fn bidi(c: char) -> bool {
+    matches!(c, '\u{200e}' | '\u{200f}' | '\u{061c}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+}
+
 /// a file name that is valid on this system
 fn safe_name(name: &str) -> String {
     let mut name: String = name
         .chars()
+        .filter(|&c| !bidi(c))
         .map(|c| if c == '\0' { '_' } else { c })
         .collect();
     if cfg!(windows) {
@@ -56,11 +78,27 @@ fn safe_name(name: &str) -> String {
         while name.ends_with(['.', ' ']) {
             name.pop();
         }
-        let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
-        let reserved = matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-            || ((stem.starts_with("COM") || stem.starts_with("LPT"))
-                && stem.len() == 4
-                && stem.as_bytes()[3].is_ascii_digit());
+        // "con .txt" and "COM¹" are devices too
+        let stem = name
+            .split('.')
+            .next()
+            .unwrap_or("")
+            .trim_end_matches(' ')
+            .to_ascii_uppercase();
+        let device = |prefix: &str| {
+            stem.strip_prefix(prefix).is_some_and(|n| {
+                let mut digits = n.chars();
+                digits
+                    .next()
+                    .is_some_and(|c| c.is_ascii_digit() || matches!(c, '¹' | '²' | '³'))
+                    && digits.next().is_none()
+            })
+        };
+        let reserved = matches!(
+            stem.as_str(),
+            "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$"
+        ) || device("COM")
+            || device("LPT");
         if reserved {
             name.insert(0, '_');
         }
@@ -127,6 +165,12 @@ impl Receiving {
             .unwrap_or_default()
             .as_millis();
         let root = dir.join(format!("{created:015}-{id}"));
+        if !no_links(dir) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{dir:?} or the folder it is in is a link, not a folder"),
+            ));
+        }
         tokio::fs::create_dir_all(&root).await?;
         let files = checked.iter().filter(|(e, _)| !e.dir).count();
         let bytes = checked.iter().map(|(e, _)| e.size).sum();
@@ -286,6 +330,32 @@ mod tests {
         assert_eq!(safe_path("."), None);
         assert_eq!(safe_path(""), None);
         assert_eq!(safe_path("a\0b"), Some(PathBuf::from("a_b")));
+        // no text that runs the other way
+        assert_eq!(
+            safe_path("foto\u{202e}gpj.exe"),
+            Some(PathBuf::from("fotogpj.exe"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn links_are_not_cleaned_up() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        std::fs::create_dir(elsewhere.path().join("000000000000001-1")).unwrap();
+        // a link among the transfers
+        std::os::unix::fs::symlink(elsewhere.path(), dir.path().join("000000000000002-2")).unwrap();
+        cleanup(dir.path(), 0);
+        assert!(elsewhere.path().join("000000000000001-1").exists());
+        assert!(
+            !dir.path().join("000000000000002-2").exists()
+                || dir.path().join("000000000000002-2").is_symlink()
+        );
+        // the folder of the transfers is a link
+        let linked = dir.path().join("received");
+        std::os::unix::fs::symlink(elsewhere.path(), &linked).unwrap();
+        cleanup(&linked, 0);
+        assert!(elsewhere.path().join("000000000000001-1").exists());
     }
 
     #[cfg(windows)]
@@ -293,6 +363,10 @@ mod tests {
     fn names_valid_on_windows() {
         assert_eq!(safe_path("a:b?.txt"), Some(PathBuf::from("a_b_.txt")));
         assert_eq!(safe_path("con.txt"), Some(PathBuf::from("_con.txt")));
+        assert_eq!(safe_path("con .txt"), Some(PathBuf::from("_con .txt")));
+        assert_eq!(safe_path("COM¹"), Some(PathBuf::from("_COM¹")));
+        assert_eq!(safe_path("conout$"), Some(PathBuf::from("_conout$")));
+        assert_eq!(safe_path("COM10"), Some(PathBuf::from("COM10")));
         assert_eq!(safe_path("notas. "), Some(PathBuf::from("notas")));
         assert_eq!(safe_path("C:\\x"), Some(PathBuf::from("C__x")));
     }

@@ -79,6 +79,7 @@ use windows_sys::Win32::{
             ResumeThread, STARTUPINFOW, TerminateProcess, WaitForSingleObject,
         },
     },
+    UI::Shell::GetUserProfileDirectoryW,
 };
 
 /// the argument Windows starts the service with (windows_setup.rs, and
@@ -365,38 +366,49 @@ impl Supervisor {
                 })
             }));
         };
-        let mut environment = Environment::of(Some(&token))?;
+        let user_environment = Environment::of(Some(&token))?;
         let administrator = is_elevated(token.as_raw_handle() as HANDLE);
-        let local_app_data = environment.get("LOCALAPPDATA").map(PathBuf::from);
-        match local_app_data {
-            Some(local_app_data) if administrator && login_screen(&local_app_data) => {
+        if administrator {
+            let local_app_data = local_app_data_of(&token)?;
+            if login_screen(&local_app_data) {
                 self.remember(Some(&local_app_data));
+                if user_environment
+                    .get("LOCALAPPDATA")
+                    .is_some_and(|own| Path::new(&own) != local_app_data)
+                {
+                    log::warn!(
+                        "LOCALAPPDATA of the user points elsewhere; as SYSTEM RustInput uses \
+                         {local_app_data:?}, the folder of the profile"
+                    );
+                }
+                // Only the variables of the system and the folder of the
+                // profile: the ones of the user (HKCU\Environment) any
+                // program of the user may change, also to a folder other
+                // users may write, or PATH to load a DLL as SYSTEM.
+                let mut environment = Environment::of(None)?;
+                environment.set("LOCALAPPDATA", &local_app_data.to_string_lossy());
                 // as SYSTEM, Windows would tell RustInput the languages of
                 // the system
                 if let Some(languages) = user_languages(&token) {
                     environment.set(rustinput_i18n::USER_LANGUAGES, &languages);
                 }
-                Ok(Some(Wanted {
+                return Ok(Some(Wanted {
                     run_as: RunAs::System {
                         local_app_data,
                         logged_on: true,
                     },
                     token: None,
                     environment,
-                }))
+                }));
             }
-            _ => {
-                if administrator {
-                    // login_screen = false
-                    self.remember(None);
-                }
-                Ok(Some(Wanted {
-                    run_as: RunAs::User,
-                    token: Some(token),
-                    environment,
-                }))
-            }
+            // login_screen = false
+            self.remember(None);
         }
+        Ok(Some(Wanted {
+            run_as: RunAs::User,
+            token: Some(token),
+            environment: user_environment,
+        }))
     }
 
     /// logs `text` unless it is what was logged last
@@ -425,15 +437,13 @@ impl Supervisor {
             } else {
                 self.back_off();
             }
-            // before looking at the port: connecting to a closed one takes
-            // Windows a few seconds
             let wait = self
                 .next_start
                 .saturating_duration_since(Instant::now())
                 .as_secs_f64()
                 .ceil();
-            if ran < Duration::from_secs(10) && rustinput_ipc::is_service_running() {
-                // "service already running!": the port of the window is taken
+            if ran < Duration::from_secs(10) && rustinput_ipc::pipe_exists_in(daemon.session) {
+                // "service already running!": the pipe of the session is taken
                 self.note(format!(
                     "the daemon ended at once: another RustInput runs without the service, \
                      without administrator rights (close it from the tray icon); trying again \
@@ -777,6 +787,27 @@ impl Environment {
         }
         self.0 = block;
     }
+}
+
+/// `<profile>\AppData\Local` of the user of `token`, from the profile
+/// Windows keeps for that user (which only administrators can change), not
+/// from the environment or the folders the user can redirect.
+fn local_app_data_of(token: &OwnedHandle) -> io::Result<PathBuf> {
+    let handle = token.as_raw_handle() as HANDLE;
+    let mut size = 0u32;
+    unsafe { GetUserProfileDirectoryW(handle, ptr::null_mut(), &mut size) };
+    if size == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let mut buffer = vec![0u16; size as usize];
+    if unsafe { GetUserProfileDirectoryW(handle, buffer.as_mut_ptr(), &mut size) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let end = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
+    let profile = PathBuf::from(<OsString as std::os::windows::ffi::OsStringExt>::from_wide(
+        &buffer[..end],
+    ));
+    Ok(profile.join("AppData").join("Local"))
 }
 
 /// A primary token of SYSTEM (the one of the service) in `session`: a

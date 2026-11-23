@@ -341,6 +341,29 @@ function Get-Changes([string]$From, [string]$To) {
 # ---------------------------------------------------------------------------
 # download
 
+# A new folder for a download. As administrator only administrators and
+# SYSTEM may write in it: in %TEMP% a program of the user could swap the file
+# between its check and its run with administrator rights.
+function New-DownloadFolder {
+    $name = 'rustinput-update-{0}' -f [guid]::NewGuid().ToString('N')
+    if (-not (Test-Administrator)) {
+        $dir = Join-Path $env:TEMP $name
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        return $dir
+    }
+    $dir = Join-Path $env:SystemRoot (Join-Path 'Temp' $name)
+    $security = New-Object System.Security.AccessControl.DirectorySecurity
+    $security.SetAccessRuleProtection($true, $false)
+    foreach ($sid in @('S-1-5-18', 'S-1-5-32-544')) {
+        $who = New-Object System.Security.Principal.SecurityIdentifier($sid)
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($who, 'FullControl', 'ContainerInherit, ObjectInherit', 'None', 'Allow')
+        $security.AddAccessRule($rule)
+    }
+    # created with its permissions, not given them afterwards
+    [void][System.IO.Directory]::CreateDirectory($dir, $security)
+    return $dir
+}
+
 function Save-File([string]$Url, [string]$Path, [long]$ExpectedSize, [string]$Name) {
     # shown here only (see the top)
     $ProgressPreference = 'Continue'
@@ -475,7 +498,21 @@ function Stop-RustInput {
     Write-Ok ((T 'closed ({0} processes)' 'fechado ({0} processos)') -f $running.Count)
 }
 
-function Test-WindowPort {
+# whether the named pipe of the daemon of `Session` exists, listing the pipes
+# (opening it would take the instance waiting for the window)
+function Test-SessionPipe([int]$Session) {
+    $name = '\\.\pipe\rustinput-{0}' -f $Session
+    try {
+        return @([System.IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -ieq $name }).Count -gt 0
+    } catch {
+        return $false
+    }
+}
+
+# whether the daemon of `Session` waits for the window: on the named pipe of
+# its session since 0.32.1, on TCP 5252 before
+function Test-WindowPort([int]$Session) {
+    if (Test-SessionPipe $Session) { return $true }
     try {
         return (@(Get-NetTCPConnection -LocalPort 5252 -State Listen -ErrorAction Stop).Count -gt 0)
     } catch {
@@ -508,7 +545,7 @@ function Start-RustInputService([datetime]$Since) {
     $daemon = $null
     while ((Get-Date) -lt $deadline) {
         $daemon = Get-RustInputProcess | Where-Object { $_.Role -eq 'daemon' } | Select-Object -First 1
-        if ($daemon -and (Test-WindowPort)) { break }
+        if ($daemon -and (Test-WindowPort $daemon.Session)) { break }
         Start-Sleep -Milliseconds 300
     }
     if (-not $daemon) {
@@ -592,6 +629,11 @@ function Show-Ports($Running) {
     }
     foreach ($port in $udp) {
         Write-Ok ((T 'UDP {0}: keyboard, mouse and clipboard' 'UDP {0}: teclado, mouse e clipboard') -f $port)
+    }
+    foreach ($session in @($Running | Where-Object { $_.Role -eq 'daemon' } | ForEach-Object { $_.Session } | Sort-Object -Unique)) {
+        if (Test-SessionPipe $session) {
+            Write-Ok ((T '{0}: the RustInput window (this session only)' '{0}: a janela do RustInput (só nesta sessão)') -f ('\\.\pipe\rustinput-{0}' -f $session))
+        }
     }
     foreach ($port in $tcp) {
         if ($port -eq 5252) {
@@ -1236,12 +1278,14 @@ function Invoke-Update {
     }
 
     Write-Step ((T 'Downloading {0}' 'Baixando {0}') -f $asset.name)
-    $zip = Join-Path $env:TEMP ('rustinput-{0}-{1}' -f $target, $asset.name)
+    $downloads = New-DownloadFolder
+    $zip = Join-Path $downloads ('rustinput-{0}-{1}' -f $target, $asset.name)
     $download = Save-File $asset.browser_download_url $zip ([long]$asset.size) $asset.name
     Write-Ok ('{0} {1} {2:N1} s ({3}/s)' -f (Format-Size $download.Bytes), (T 'in' 'em'), $download.Seconds, (Format-Size ($download.Bytes / [Math]::Max($download.Seconds, 0.001))))
 
     Write-Step (T 'Checking the download' 'Conferindo o download')
     if ($download.Bytes -ne [long]$asset.size) {
+        Remove-Item -LiteralPath $downloads -Recurse -Force -ErrorAction SilentlyContinue
         throw ((T 'the download is incomplete: {0} of {1}' 'o download veio incompleto: {0} de {1}') -f (Format-Size $download.Bytes), (Format-Size $asset.size))
     }
     $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $zip).Hash.ToLowerInvariant()
@@ -1251,22 +1295,24 @@ function Invoke-Update {
     }
     if ($digest) {
         if ($hash -ne $digest) {
+            Remove-Item -LiteralPath $downloads -Recurse -Force -ErrorAction SilentlyContinue
             throw ((T 'the SHA-256 does not match GitHub ({0} instead of {1}): the download is damaged' 'o SHA-256 não confere com o GitHub ({0} em vez de {1}): o download veio estragado') -f $hash, $digest)
         }
         Write-Ok ((T 'SHA-256 matches GitHub: {0}' 'SHA-256 confere com o GitHub: {0}') -f $hash)
     } else {
-        Write-Warn ((T 'GitHub does not list the SHA-256 of this file; SHA-256: {0}' 'o GitHub não informa o SHA-256 deste arquivo; SHA-256: {0}') -f $hash)
+        Remove-Item -LiteralPath $downloads -Recurse -Force -ErrorAction SilentlyContinue
+        throw ((T 'GitHub does not list the SHA-256 of {0}: an unchecked file is not installed' 'o GitHub não informa o SHA-256 de {0}: um arquivo não conferido não é instalado') -f $asset.name)
     }
     if ($withSetup) {
         try {
             Complete-SetupInstall $installed $target $zip $moving
         } finally {
-            Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $downloads -Recurse -Force -ErrorAction SilentlyContinue
         }
         return
     }
     [void](Expand-Release $zip)
-    Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $downloads -Recurse -Force -ErrorAction SilentlyContinue
 
     Complete-Install $installed $target $moving
 }

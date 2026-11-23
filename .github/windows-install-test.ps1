@@ -12,7 +12,10 @@
 #   7. forward again, then the uninstaller of Settings > Apps; before it,
 #      the lock screen (0.31.0): the daemon runs as SYSTEM for the
 #      administrator at the screen, as that user with login_screen = false,
-#      and follows the input to the lock screen once it is locked
+#      and follows the input to the lock screen once it is locked; and
+#      (0.32.1) only the user at the screen talks to it, on the named pipe
+#      of the session, and a junction in the folders of the user does not
+#      make it delete elsewhere
 #   8. update-rustinput.ps1 -Uninstall with nothing installed
 param(
     [Parameter(Mandatory = $true)][string]$Setup
@@ -233,6 +236,96 @@ if (Get-Remembered) { Fail "7a: with login_screen = false the service still reme
 if ((Get-Content -LiteralPath $config -Raw) -notmatch '(?m)^login_screen = false') { Fail '7a: login_screen = false left the configuration' }
 [System.IO.File]::WriteAllText($config, $before)
 Wait-DaemonOwner '7a, login_screen again' 'SYSTEM'
+
+Write-Stage '7d. only the user at the screen talks to the daemon (0.32.1)'
+$session = (Get-Daemon | Select-Object -First 1).SessionId
+$pipe = "rustinput-$session"
+if (@(Get-NetTCPConnection -LocalPort 5252 -State Listen -ErrorAction SilentlyContinue).Count -gt 0) {
+    Fail '7d: something listens on TCP 5252, the port of the window before 0.32.1'
+}
+if (@([System.IO.Directory]::GetFiles('\\.\pipe\') | Where-Object { $_ -ieq "\\.\pipe\$pipe" }).Count -ne 1) {
+    Fail "7d: no named pipe \\.\pipe\$pipe"
+}
+# opens the pipe like a window would and tells what the daemon sent first
+$probe = Join-Path $env:PUBLIC 'rustinput-probe.ps1'
+Set-Content -LiteralPath $probe -Encoding ASCII -Value @'
+param([string]$Pipe, [string]$Out)
+try {
+    $client = New-Object System.IO.Pipes.NamedPipeClientStream('.', $Pipe, [System.IO.Pipes.PipeDirection]::InOut, [System.IO.Pipes.PipeOptions]::None, [System.Security.Principal.TokenImpersonationLevel]::Identification)
+    $client.Connect(5000)
+    $reader = New-Object System.IO.StreamReader($client)
+    $line = $reader.ReadLineAsync()
+    if ($line.Wait(5000) -and $line.Result) {
+        $text = 'answered: ' + $line.Result.Substring(0, [Math]::Min(50, $line.Result.Length))
+    } else {
+        $text = 'no answer'
+    }
+} catch {
+    $text = 'refused: ' + $_.Exception.Message
+}
+Set-Content -LiteralPath $Out -Value $text
+'@
+$mine = Join-Path $env:PUBLIC 'rustinput-probe-mine.txt'
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $probe -Pipe $pipe -Out $mine
+$answer = Get-Content -LiteralPath $mine -Raw -ErrorAction SilentlyContinue
+Write-Host "  the user at the screen: $answer"
+if ($answer -notmatch '^answered: \{') { Fail "7d: the user at the screen got no answer from the daemon: $answer" }
+# another user of this computer, in this session
+$other = 'rustinputprobe'
+$password = 'Ri!' + [guid]::NewGuid().ToString('N').Substring(0, 20)
+cmd /c "net user $other $password /add 2>&1" | Out-Host
+$theirs = Join-Path $env:PUBLIC 'rustinput-probe-theirs.txt'
+Remove-Item -LiteralPath $theirs -ErrorAction SilentlyContinue
+try {
+    $credential = New-Object System.Management.Automation.PSCredential($other, (ConvertTo-SecureString $password -AsPlainText -Force))
+    Start-Process -FilePath powershell.exe -Credential $credential -WorkingDirectory $env:PUBLIC -WindowStyle Hidden -Wait `
+        -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probe, '-Pipe', $pipe, '-Out', $theirs)
+    $answer = Get-Content -LiteralPath $theirs -Raw -ErrorAction SilentlyContinue
+    Write-Host "  another user: $answer"
+    if (-not $answer) {
+        Fail '7d: the process of another user did not run'
+    } elseif ($answer -match '^answered') {
+        Fail "7d: the daemon answered another user: $answer"
+    }
+    $refused = Select-String -LiteralPath $daemonLog -SimpleMatch 'refused a connection: it runs as another user' -Quiet
+    if ($answer -notmatch '^refused' -and -not $refused) { Fail "7d: no 'refused a connection' in $daemonLog" }
+} catch {
+    Fail "7d: could not run a process as another user: $($_.Exception.Message)"
+} finally {
+    cmd /c "net user $other /delete 2>&1" | Out-Host
+}
+
+Write-Stage '7e. a junction in the folders of the user: SYSTEM removes nothing elsewhere'
+$victim = Join-Path $env:SystemDrive 'rustinput-victim'
+New-Item -ItemType Directory -Force -Path (Join-Path $victim '000000000000001-1') | Out-Null
+$received = Join-Path $env:LOCALAPPDATA 'rustinput\received'
+Remove-Item -LiteralPath $received -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $received) | Out-Null
+cmd /c "mklink /J `"$received`" `"$victim`" 2>&1" | Out-Host
+# a new daemon removes the transfers of the one before
+$daemon = @(Get-Daemon)
+cmd /c "taskkill.exe /F /PID $($daemon[0].ProcessId) 2>&1" | Out-Host
+$deadline = (Get-Date).AddSeconds(20)
+do {
+    Start-Sleep -Milliseconds 500
+    $again = @(Get-Daemon | Where-Object { $_.ProcessId -ne $daemon[0].ProcessId })
+} while ($again.Count -eq 0 -and (Get-Date) -lt $deadline)
+$noted = $false
+$deadline = (Get-Date).AddSeconds(15)
+while (-not $noted -and (Get-Date) -lt $deadline) {
+    Start-Sleep -Milliseconds 500
+    $noted = (Test-Path -LiteralPath $daemonLog) -and (Select-String -LiteralPath $daemonLog -SimpleMatch 'is a link: nothing is removed' -Quiet)
+}
+if ($again.Count -eq 0) { Fail '7e: the service did not start the daemon again' }
+if (-not (Test-Path -LiteralPath (Join-Path $victim '000000000000001-1'))) {
+    Fail '7e: the daemon removed a folder through the junction'
+} else {
+    Write-Host '  [ok] the folder behind the junction is still there'
+}
+if (-not $noted) { Fail "7e: no 'is a link: nothing is removed' in $daemonLog" }
+$guard = Select-String -LiteralPath $daemonLog -Pattern 'Redirection Guard' | Select-Object -Last 1
+Write-Host "  $($guard.Line)"
+cmd /c "rmdir `"$received`" 2>&1" | Out-Host
 
 Write-Stage '7b. locked: the daemon follows the input to the lock screen'
 $line = 'following the input to the desktop Winlogon of Windows'
