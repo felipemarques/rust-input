@@ -9,6 +9,7 @@
 //! Not looked for on Wayland and macOS yet.
 
 /// the formats that mark the content as secret by being there
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 const SECRET_FORMATS: &[&str] = &[
     "x-kde-passwordManagerHint",
     "ExcludeClipboardContentFromMonitorProcessing",
@@ -16,7 +17,9 @@ const SECRET_FORMATS: &[&str] = &[
     "org.nspasteboard.ConcealedType",
 ];
 
-/// whether the clipboard offering the format `name` holds a secret
+/// whether the clipboard offering the format `name` holds a secret (X11;
+/// Windows asks for each of [`SECRET_FORMATS`])
+#[cfg_attr(not(all(unix, not(target_os = "macos"))), allow(dead_code))]
 fn is_secret_format(name: &str) -> bool {
     SECRET_FORMATS.contains(&name)
 }
