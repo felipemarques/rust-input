@@ -859,6 +859,27 @@ links.
 `clipboard-noauth.sh` (end to end) checks the first: without authorizing B, A sends B nothing,
 logs it and its window asks with the fingerprint of B; authorized, the mouse goes through.
 
+### The dependencies (0.33.1)
+
+`cargo audit` (RustSec) found 9 vulnerabilities in `Cargo.lock`; 8 had a fix in a compatible
+version: rustls 0.23.46 and rustls-webpki 0.103.17 (TLS of the pairing, the arrangement and the
+check for new versions), tokio 1.54.1, rustix 1.1.6, and libz-sys 1.1.33 and url 2.5.9, which only
+libgit2 of `shadow-rs` uses while building. tokio 1.54 marks `AsyncFd::new` unsound, for taking a
+bare descriptor without making sure it stays open: the capture on X11 and on Wayland
+(`layer_shell.rs`) now calls `AsyncFd::register`, which says so (`unsafe`, with the reason
+next to it). `rustinput-proto` no longer needs `paste`, which is unmaintained.
+
+Accepted, in `.cargo/audit.toml`: crypto-bigint 0.5 (RUSTSEC-2026-0387, operations not
+constant in time) comes with p256 and p384 of `webrtc-dtls` 0.12.0, the latest version, which
+pins them. In DTLS it computes only the ephemeral ECDHE key, a new one in every handshake, so
+its timing cannot be measured over many uses; the certificates sign and check with `ring`.
+Remove the line when `webrtc-dtls` moves to crypto-bigint 0.7. The warnings left (unmaintained
+crates of `webrtc-dtls`, `zbus` and `ab_glyph`; git2, unsound only in blame and in listing
+remotes, which `shadow-rs` does not do) have no fixed version and do not fail the check.
+
+`.github/workflows/audit.yml` runs `cargo audit` every Monday and on every change of the
+dependencies, so a new advisory fails a run instead of waiting for someone to look.
+
 ## The Windows installer
 
 `rustinput-windows-x86_64-setup.exe`, built with Inno Setup 6 from

@@ -1,0 +1,41 @@
+name: Audit
+
+# cargo audit checks Cargo.lock against the RustSec advisories: every Monday,
+# so a new advisory about a dependency fails a run, and on every change of the
+# dependencies. Accepted advisories are in .cargo/audit.toml, with the reason.
+
+on:
+  schedule:
+    - cron: "23 9 * * 1"
+  push:
+    branches: [ "main" ]
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".cargo/audit.toml"
+      - ".github/workflows/audit.yml"
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - ".cargo/audit.toml"
+      - ".github/workflows/audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: install cargo-audit
+        run: cargo install cargo-audit --locked --version 0.23.0
+      - name: cargo audit
+        run: cargo audit

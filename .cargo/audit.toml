@@ -1,0 +1,12 @@
+# cargo audit (RustSec): advisories accepted, each with the reason.
+# See DOC.md, "The dependencies (0.33.1)".
+
+[advisories]
+ignore = [
+    # crypto-bigint 0.5, operations not constant in time. It comes with p256
+    # and p384 of webrtc-dtls 0.12.0, the latest, which pins them; in DTLS it
+    # computes only the ephemeral ECDHE key, a new one in every handshake, and
+    # the certificates sign and check with ring. Remove when webrtc-dtls moves
+    # to crypto-bigint 0.7.
+    "RUSTSEC-2026-0387",
+]
