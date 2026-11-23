@@ -415,35 +415,35 @@ msgstr "إصداره: {peer} · الإصدار نفسه"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "إصداره: {peer} · هذا الكمبيوتر: {local}"
 
-#: rustinput-gtk/src/lib.rs:261
+#: rustinput-gtk/src/lib.rs:262
 msgid "Quit"
 msgstr "إنهاء"
 
-#: rustinput-gtk/src/lib.rs:262
+#: rustinput-gtk/src/lib.rs:263
 msgid "_File"
 msgstr "_ملف"
 
-#: rustinput-gtk/src/lib.rs:453
+#: rustinput-gtk/src/lib.rs:472
 msgid "{name} and this computer authorized each other"
 msgstr "تم التخويل المتبادل بين {name} وهذا الكمبيوتر"
 
-#: rustinput-gtk/src/lib.rs:458
+#: rustinput-gtk/src/lib.rs:477
 msgid "Not authorized: {error}"
 msgstr "لم يتم التخويل: {error}"
 
-#: rustinput-gtk/src/lib.rs:465
+#: rustinput-gtk/src/lib.rs:484
 msgid "{address} connected"
 msgstr "اتصل {address}"
 
-#: rustinput-gtk/src/lib.rs:472
+#: rustinput-gtk/src/lib.rs:491
 msgid "The mouse came from {address}"
 msgstr "جاء الماوس من {address}"
 
-#: rustinput-gtk/src/lib.rs:478
+#: rustinput-gtk/src/lib.rs:497
 msgid "{address} disconnected"
 msgstr "انقطع اتصال {address}"
 
-#: rustinput-gtk/src/lib.rs:522
+#: rustinput-gtk/src/lib.rs:559
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "الملفات المستلمة من {name}: {count}، جاهزة للصق"
 
@@ -484,6 +484,14 @@ msgstr "إنهاء RustInput"
 #: rustinput-gtk/src/macos_status_item.rs:309
 msgid "Resume RustInput"
 msgstr "استئناف RustInput"
+
+#: rustinput-gtk/src/notification.rs:36
+msgid "RustInput {version} is out"
+msgstr "صدر RustInput {version}"
+
+#: rustinput-gtk/src/notification.rs:42
+msgid "This computer has {current}"
+msgstr "الإصدار على هذا الكمبيوتر: {current}"
 
 #: rustinput-gtk/src/transfers.rs:35
 msgid "{count} file"
@@ -609,59 +617,59 @@ msgstr "فتح المجلد المؤقت الذي يحتوي على الملفا
 msgid "Mouse and keyboard sharing"
 msgstr "مشاركة الماوس ولوحة المفاتيح"
 
-#: rustinput-gtk/src/tray/linux.rs:121
+#: rustinput-gtk/src/tray/linux.rs:124
 msgid "Cancel transfers"
 msgstr "إلغاء عمليات النقل"
 
-#: rustinput-gtk/src/tray/linux.rs:136
+#: rustinput-gtk/src/tray/linux.rs:139
 msgid "Send copied files automatically"
 msgstr "إرسال الملفات المنسوخة تلقائيًا"
 
-#: rustinput-gtk/src/tray/linux.rs:143
+#: rustinput-gtk/src/tray/linux.rs:146
 msgid "File transfers…"
 msgstr "نقل الملفات…"
 
-#: rustinput-gtk/src/tray/linux.rs:154
+#: rustinput-gtk/src/tray/linux.rs:157
 msgid "Show RustInput"
 msgstr "إظهار RustInput"
 
-#: rustinput-gtk/src/tray/mod.rs:88
+#: rustinput-gtk/src/tray/mod.rs:97
 msgid "Update to RustInput {version}…"
 msgstr "التحديث إلى RustInput {version}…"
 
-#: rustinput-gtk/src/tray/mod.rs:201
+#: rustinput-gtk/src/tray/mod.rs:212
 msgid "Paused: the mouse and keyboard stay on this computer"
 msgstr "متوقف مؤقتًا: تبقى الفأرة ولوحة المفاتيح على هذا الحاسوب"
 
-#: rustinput-gtk/src/tray/mod.rs:236
+#: rustinput-gtk/src/tray/mod.rs:247
 msgid "{files} waiting for {name}"
 msgstr "{files} بانتظار {name}"
 
-#: rustinput-gtk/src/tray/mod.rs:250
+#: rustinput-gtk/src/tray/mod.rs:261
 msgid "{file} ({done}/{total}) to {name}: {percent}%"
 msgstr "{file} ({done}/{total}) إلى {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:251
+#: rustinput-gtk/src/tray/mod.rs:262
 msgid "{file} ({done}/{total}) from {name}: {percent}%"
 msgstr "{file} ({done}/{total}) من {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:258
+#: rustinput-gtk/src/tray/mod.rs:269
 msgid "{files} to {name}: {percent}%"
 msgstr "{files} إلى {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:259
+#: rustinput-gtk/src/tray/mod.rs:270
 msgid "{files} from {name}: {percent}%"
 msgstr "{files} من {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:275
+#: rustinput-gtk/src/tray/mod.rs:286
 msgid "{files} from {name}, ready to paste"
 msgstr "{files} من {name}، بانتظار اللصق"
 
-#: rustinput-gtk/src/tray/mod.rs:284
+#: rustinput-gtk/src/tray/mod.rs:295
 msgid "{files} from {name}, pasted"
 msgstr "{files} من {name}، تم اللصق"
 
-#: rustinput-gtk/src/tray/mod.rs:293
+#: rustinput-gtk/src/tray/mod.rs:304
 msgid "{files} from {name}, not pasted"
 msgstr "{files} من {name}، لم يتم اللصق"
 
@@ -808,10 +816,6 @@ msgstr "صدر RustInput {version}؛ والإصدار على هذا الكمبي
 #: rustinput-gtk/src/window.rs:1023
 msgid "{version} is the latest version"
 msgstr "{version} هو أحدث إصدار"
-
-#: rustinput-gtk/src/window.rs:1025
-msgid "This computer has {current}"
-msgstr "الإصدار على هذا الكمبيوتر: {current}"
 
 #: rustinput-gtk/src/window.rs:1034
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."

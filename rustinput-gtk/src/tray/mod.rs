@@ -4,7 +4,9 @@
 //! sharing mouse, keyboard and clipboard, and the icon brings the window back
 //! or quits. Without a system tray closing the window quits, as before. The
 //! menu of the icon also pauses RustInput (the icon then turns grey with a
-//! pause sign) and lists the file transfers.
+//! pause sign) and lists the file transfers. A new version of RustInput
+//! shows as a green sign with an arrow up on the icon, a line in the tooltip
+//! and an item of the menu that gets it.
 
 mod action;
 mod icon;
@@ -77,15 +79,24 @@ impl Tray {
         self.refresh();
     }
 
+    /// Shows `title` and `text` as a balloon of the icon, which Windows 10
+    /// and 11 show as a notification; clicking it shows the window.
+    #[cfg(windows)]
+    pub(crate) fn notify(&self, title: &str, text: &str) {
+        if let Some(handle) = self.handle.borrow().as_ref() {
+            handle.notify(title, text);
+        }
+    }
+
     fn refresh(&self) {
         if let Some(handle) = self.handle.borrow().as_ref() {
             let now = crate::transfers::now_ms();
             let mut summary = summary(&self.transfers.borrow(), self.options.get(), now);
-            summary.update = self
-                .update
-                .borrow()
-                .as_ref()
-                .map(|version| trf("Update to RustInput {version}…", &[("version", version)]));
+            if let Some(version) = self.update.borrow().as_ref() {
+                let values: [(&str, &dyn std::fmt::Display); 1] = [("version", version)];
+                summary.update = Some(trf("Update to RustInput {version}…", &values));
+                summary.update_status = Some(crate::notification::title(version));
+            }
             summary.paused = self.paused.get();
             handle.show(summary);
         }
@@ -333,6 +344,7 @@ pub(crate) fn summary(
         cancellable: sorted.iter().any(|t| rank(t) < 2),
         send_copied: options.filter(|o| o.available).map(|o| o.send_copied),
         update: None,
+        update_status: None,
         paused: None,
     }
 }

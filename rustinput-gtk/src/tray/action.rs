@@ -36,6 +36,9 @@ pub(crate) struct Summary {
     pub(crate) send_copied: Option<bool>,
     /// the item that gets a new version of RustInput, when there is one
     pub(crate) update: Option<String>,
+    /// the line of the tooltip about the new version, when there is one;
+    /// the icon then has a green sign with an arrow up
+    pub(crate) update_status: Option<String>,
     /// whether RustInput is paused, `None` until the service said
     pub(crate) paused: Option<bool>,
 }

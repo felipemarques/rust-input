@@ -436,9 +436,13 @@ impl Window {
         }
     }
 
-    /// opens a web page or a folder the way the system does
+    /// Opens a web page or a folder the way the system does. A window not
+    /// on screen is no parent: one never shown (RustInput started into the
+    /// tray) has no surface yet, and GTK crashed on X11 asking for it (the
+    /// tray icon and the notification open pages without the window).
     pub(super) fn open_uri(&self, uri: &str) {
-        gtk::show_uri(Some(self), uri, gtk::gdk::CURRENT_TIME);
+        let parent = self.is_mapped().then_some(self);
+        gtk::show_uri(parent, uri, gtk::gdk::CURRENT_TIME);
     }
 
     fn clients(&self) -> gio::ListStore {
@@ -1547,7 +1551,7 @@ fn show_status(
 
 /// what the button that gets a new version says: on Windows it installs
 /// it, elsewhere it opens the page to download it
-fn install_label() -> &'static str {
+pub(crate) fn install_label() -> &'static str {
     #[cfg(windows)]
     if updater_script().is_some() {
         return tr("Update now");

@@ -82,6 +82,9 @@ struct ConfigToml {
     /// whether RustInput asks GitHub for its latest version; not asked yet
     /// when missing (the window asks)
     check_updates: Option<bool>,
+    /// the new version the user was told about with a notification of the
+    /// system, so once per version
+    update_notified: Option<String>,
     /// RustInput is paused on this computer: the mouse and keyboard stay
     /// here and no other computer controls it (from the tray icon, the
     /// window or the radial menu)
@@ -653,6 +656,18 @@ impl Config {
     pub fn set_check_updates(&mut self, check: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.check_updates = Some(check);
+    }
+
+    /// the new version the user was told about (`update_notified`)
+    pub fn update_notified(&self) -> Option<String> {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.update_notified.clone())
+    }
+
+    pub fn set_update_notified(&mut self, version: String) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.update_notified = Some(version);
     }
 
     /// whether RustInput is paused on this computer (`paused`)

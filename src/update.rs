@@ -29,6 +29,12 @@ const MAX_HEAD: usize = 64 * 1024;
 /// The latest version of RustInput on GitHub ("0.27.0"), or why it is not
 /// known.
 pub(crate) async fn latest() -> Result<String, String> {
+    // the end-to-end tests pretend a version is out, without GitHub; only
+    // in debug builds
+    #[cfg(debug_assertions)]
+    if let Ok(version) = std::env::var("RUSTINPUT_TEST_LATEST") {
+        return Ok(version);
+    }
     timeout(TIMEOUT, ask())
         .await
         .map_err(|_| "GitHub did not answer".to_owned())?
