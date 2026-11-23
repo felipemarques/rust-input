@@ -6,6 +6,9 @@
 
 use std::{borrow::Cow, io::Cursor, path::PathBuf, sync::mpsc};
 
+use rustinput_ipc::{
+    CLIPBOARD_PEEK_FILES, CLIPBOARD_PEEK_TEXT, CLIPBOARD_THUMBNAIL, ClipboardPeek,
+};
 use rustinput_proto::{
     ClipboardKind,
     clipboard::{decode_html, encode_html},
@@ -14,7 +17,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::sync::oneshot;
 
-use super::Content;
+use super::{Content, secret::Marks};
 use crate::files::files_key;
 
 /// decoded images larger than this are refused (8192 x 8192 RGBA)
@@ -49,8 +52,19 @@ pub(crate) enum LocalContent {
     Files { paths: Vec<PathBuf>, key: u64 },
 }
 
+/// what the clipboard holds as the Clipboard tab of the computers shows it
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum Peeked {
+    /// still what the hash asked about stands for
+    Unchanged,
+    /// `hash` is that of the [`Content`] (of the files: [`files_key`]), 0
+    /// for an empty clipboard
+    Holds { hash: u64, peek: ClipboardPeek },
+}
+
 enum Request {
     Read(oneshot::Sender<Option<LocalContent>>),
+    Peek(Option<u64>, oneshot::Sender<Peeked>),
     Write(Content),
     WriteFiles(Vec<PathBuf>),
 }
@@ -80,6 +94,15 @@ impl LocalClipboard {
         content.await.ok().flatten()
     }
 
+    /// What the clipboard holds, shortened for the Clipboard tab:
+    /// [`Peeked::Unchanged`] when it still holds what `known` (a hash)
+    /// stands for. `None` when the clipboard can not be read.
+    pub(crate) async fn peek(&self, known: Option<u64>) -> Option<Peeked> {
+        let (reply, peeked) = oneshot::channel();
+        self.requests.send(Request::Peek(known, reply)).ok()?;
+        peeked.await.ok()
+    }
+
     /// replaces the content of the clipboard
     pub(crate) fn write(&self, content: Content) {
         let _ = self.requests.send(Request::Write(content));
@@ -93,6 +116,7 @@ impl LocalClipboard {
 
 fn worker(requests: mpsc::Receiver<Request>) {
     let mut clipboard: Option<arboard::Clipboard> = None;
+    let mut marks = Marks::default();
     let mut warned = false;
     for request in requests {
         if clipboard.is_none() {
@@ -108,6 +132,11 @@ fn worker(requests: mpsc::Receiver<Request>) {
         match request {
             Request::Read(reply) => {
                 let _ = reply.send(clipboard.as_mut().and_then(read));
+            }
+            Request::Peek(known, reply) => {
+                if let Some(clipboard) = clipboard.as_mut() {
+                    let _ = reply.send(peek(clipboard, &mut marks, known));
+                }
             }
             Request::WriteFiles(paths) => write_files(clipboard.as_mut(), paths),
             Request::Write(content) => {
@@ -202,6 +231,129 @@ fn read(clipboard: &mut arboard::Clipboard) -> Option<LocalContent> {
             None
         }
     }
+}
+
+/// What [`read`] would take, shortened: the start of a text, a thumbnail of
+/// an image, the names of files. Nothing of a secret (see [`Marks`]).
+fn peek(clipboard: &mut arboard::Clipboard, marks: &mut Marks, known: Option<u64>) -> Peeked {
+    let holds = |hash: u64, peek: ClipboardPeek| match known {
+        Some(known) if known == hash => Peeked::Unchanged,
+        _ => Peeked::Holds { hash, peek },
+    };
+    if let Ok(paths) = clipboard.get().file_list() {
+        if !paths.is_empty() {
+            let names = paths
+                .iter()
+                .take(CLIPBOARD_PEEK_FILES)
+                .map(|p| {
+                    p.file_name()
+                        .unwrap_or(p.as_os_str())
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .collect();
+            let count = paths.len() as u64;
+            return holds(files_key(&paths), ClipboardPeek::Files { names, count });
+        }
+    }
+    let secret = marks.secret();
+    let text = clipboard.get_text().ok().filter(|t| !t.is_empty());
+    if let Ok(html) = clipboard.get().html() {
+        if !html_to_text(&html).trim().is_empty() {
+            let text = text.unwrap_or_else(|| html_to_text(&html));
+            let hash = html_hash(&html, &text);
+            return holds(hash, text_peek(&text, true, secret));
+        }
+    }
+    if let Some(text) = text {
+        return holds(text_hash(text.as_bytes()), text_peek(&text, false, secret));
+    }
+    match clipboard.get_image() {
+        Ok(image) if image.bytes.len() == image.width * image.height * 4 => {
+            let hash = image_hash(image.width, image.height, &image.bytes);
+            if known == Some(hash) {
+                return Peeked::Unchanged;
+            }
+            let peek = image_peek(image.width, image.height, &image.bytes).unwrap_or_else(|e| {
+                log::debug!("no thumbnail of the image on the clipboard: {e}");
+                ClipboardPeek::Image {
+                    width: image.width as u32,
+                    height: image.height as u32,
+                    thumbnail: Vec::new(),
+                }
+            });
+            holds(hash, peek)
+        }
+        _ => holds(0, ClipboardPeek::Empty),
+    }
+}
+
+fn text_peek(text: &str, formatted: bool, secret: bool) -> ClipboardPeek {
+    if secret {
+        return ClipboardPeek::Secret;
+    }
+    ClipboardPeek::Text {
+        start: text_start(text, CLIPBOARD_PEEK_TEXT).to_owned(),
+        chars: text.chars().count() as u64,
+        lines: text.lines().count().max(1) as u64,
+        formatted,
+    }
+}
+
+/// the longest start of `text` of at most `max` bytes, whole characters
+fn text_start(text: &str, max: usize) -> &str {
+    if text.len() <= max {
+        return text;
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
+fn image_peek(width: usize, height: usize, rgba: &[u8]) -> Result<ClipboardPeek, ClipboardError> {
+    let (w, h, small) = thumbnail(width, height, rgba, CLIPBOARD_THUMBNAIL as usize);
+    Ok(ClipboardPeek::Image {
+        width: u32::try_from(width).map_err(|_| ClipboardError::ImageTooLarge)?,
+        height: u32::try_from(height).map_err(|_| ClipboardError::ImageTooLarge)?,
+        thumbnail: encode_png(w, h, &small)?,
+    })
+}
+
+/// The image shrunk to fit in `max` pixels each way, keeping its shape, each
+/// pixel the average of those it covers. Small images stay as they are.
+fn thumbnail(width: usize, height: usize, rgba: &[u8], max: usize) -> (usize, usize, Vec<u8>) {
+    if width <= max && height <= max {
+        return (width, height, rgba.to_vec());
+    }
+    let (w, h) = if width >= height {
+        (max, (height * max / width).max(1))
+    } else {
+        ((width * max / height).max(1), max)
+    };
+    let mut small = Vec::with_capacity(w * h * 4);
+    for y in 0..h {
+        let (top, bottom) = (
+            y * height / h,
+            ((y + 1) * height / h).max(y * height / h + 1),
+        );
+        for x in 0..w {
+            let (left, right) = (x * width / w, ((x + 1) * width / w).max(x * width / w + 1));
+            let mut sum = [0u64; 4];
+            for row in top..bottom {
+                let start = (row * width + left) * 4;
+                for pixel in rgba[start..start + (right - left) * 4].as_chunks::<4>().0 {
+                    for (s, &c) in sum.iter_mut().zip(pixel) {
+                        *s += c as u64;
+                    }
+                }
+            }
+            let count = ((bottom - top) * (right - left)) as u64;
+            small.extend(sum.iter().map(|s| (s / count) as u8));
+        }
+    }
+    (w, h, small)
 }
 
 fn write(clipboard: &mut arboard::Clipboard, content: Content) -> Result<(), ClipboardError> {
@@ -453,6 +605,71 @@ mod tests {
         }
         assert!(matches!(decode_png(&png), Err(ClipboardError::ImageFormat)));
         assert!(decode_png(b"not a png").is_err());
+    }
+
+    #[test]
+    fn the_start_of_a_text_keeps_whole_characters() {
+        assert_eq!(text_start("abc", 10), "abc");
+        assert_eq!(text_start("abcdef", 4), "abcd");
+        // "é" takes two bytes: not cut in half
+        assert_eq!(text_start("aé", 2), "a");
+        assert_eq!(text_start("aé", 3), "aé");
+        match text_peek("um\ndois\ntrês", false, false) {
+            ClipboardPeek::Text {
+                start,
+                chars,
+                lines,
+                formatted,
+            } => {
+                assert_eq!(start, "um\ndois\ntrês");
+                assert_eq!((chars, lines, formatted), (12, 3, false));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(text_peek("senha", false, true), ClipboardPeek::Secret);
+    }
+
+    #[test]
+    fn thumbnails_keep_the_shape_and_the_colors() {
+        // small images stay as they are
+        let rgba = gradient(30, 20);
+        assert_eq!(thumbnail(30, 20, &rgba, 320), (30, 20, rgba.clone()));
+        // wide and tall ones fit in the square
+        let wide = vec![200; 1000 * 500 * 4];
+        let (w, h, small) = thumbnail(1000, 500, &wide, 320);
+        assert_eq!((w, h), (320, 160));
+        assert_eq!(small.len(), w * h * 4);
+        assert!(
+            small.iter().all(|&c| c == 200),
+            "a plain color stays the same"
+        );
+        let (w, h, _) = thumbnail(10, 4000, &vec![0; 10 * 4000 * 4], 320);
+        assert_eq!((w, h), (1, 320));
+        // half black, half white: the halves stay apart
+        let halves: Vec<u8> = (0..400 * 400)
+            .flat_map(|i| {
+                if i % 400 < 200 {
+                    [0, 0, 0, 255]
+                } else {
+                    [255; 4]
+                }
+            })
+            .collect();
+        let (w, _, small) = thumbnail(400, 400, &halves, 100);
+        assert_eq!(&small[..4], &[0, 0, 0, 255]);
+        assert_eq!(&small[(w - 1) * 4..w * 4], &[255; 4]);
+        match image_peek(400, 400, &halves).expect("thumbnail") {
+            ClipboardPeek::Image {
+                width,
+                height,
+                thumbnail,
+            } => {
+                assert_eq!((width, height), (400, 400));
+                let (w, h, _) = decode_png(&thumbnail).expect("a PNG");
+                assert_eq!((w, h), (320, 320));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 
     #[test]

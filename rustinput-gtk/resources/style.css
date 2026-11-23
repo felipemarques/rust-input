@@ -38,6 +38,32 @@ label.version-badge {
     color: @warning_color;
 }
 
+/* a computer in the Clipboards tab */
+.clipboard-card {
+    padding: 14px 16px;
+}
+
+/* "This computer" next to its name in the Clipboards tab */
+label.clipboard-here {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background-color: alpha(@accent_bg_color, 0.15);
+    color: @accent_color;
+    font-weight: bold;
+}
+
+/* what a computer copied: a text or the names of files */
+label.clipboard-text {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background-color: alpha(currentColor, 0.06);
+}
+
+/* the thumbnail of a copied image */
+picture.clipboard-image {
+    border-radius: 8px;
+}
+
 /* RustInput paused on this computer */
 .pause-banner {
     padding: 8px 16px;

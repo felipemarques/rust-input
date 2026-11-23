@@ -9,6 +9,8 @@ pub(crate) enum TrayAction {
     CancelTransfers,
     /// open the window with the file transfers
     ShowTransfers,
+    /// open the Clipboards tab of the window
+    ShowClipboards,
     /// turn sending copied files along with the pointer on or off
     ToggleSendCopied,
     /// get the new version of RustInput

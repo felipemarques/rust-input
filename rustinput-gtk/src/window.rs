@@ -1,3 +1,4 @@
+mod clipboard;
 mod imp;
 
 use std::collections::HashMap;
@@ -750,6 +751,7 @@ impl Window {
         if self.clients().n_items() == 0 {
             self.update_placeholder_visibility();
         }
+        self.forget_clipboard(handle);
     }
 
     pub(super) fn update_client_config(&self, handle: ClientHandle, client: ClientConfig) {

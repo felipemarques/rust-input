@@ -543,6 +543,13 @@ fn build_ui(app: &Application) {
                         window.set_paused(paused);
                     }
                     FrontendEvent::ShowWindow => window.present(),
+                    FrontendEvent::Clipboard { handle, name, seen } => {
+                        window.clipboard_seen(handle, &name, seen)
+                    }
+                    FrontendEvent::ClipboardBrought { name, files, error } => {
+                        window.clipboard_brought(&name, files, error.as_deref())
+                    }
+                    FrontendEvent::ShowClipboard(show) => window.set_show_clipboard(show),
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {
                         window.set_file_options(options);

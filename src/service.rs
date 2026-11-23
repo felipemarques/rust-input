@@ -1,3 +1,5 @@
+mod clipboard_view;
+
 use crate::{
     arrangement::{self, ArrangeError, Arrangement, ArrangementEvent, Description},
     capture::{Capture, CaptureType, ICaptureEvent},
@@ -15,13 +17,14 @@ use crate::{
     radial::{self, Action, Item, Menu, Texts},
     update,
 };
+use clipboard_view::ClipboardResult;
 use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, DEFAULT_PORT, EdgeLink, FileOptions, FrontendEvent,
-    FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span, Status, Theme,
-    TransferInfo, UpdateState,
+    AsyncFrontendListener, ClientHandle, ClipboardSeen, DEFAULT_PORT, EdgeLink, FileOptions,
+    FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span,
+    Status, Theme, TransferInfo, UpdateState,
     layout::{ArrangementView, Layout, Machine, Monitor, Peer as ArrangedPeer},
 };
 use std::{
@@ -137,6 +140,17 @@ pub struct Service {
     /// the clients that answered with a certificate not authorized here,
     /// with it and when the window was told
     not_authorized: HashMap<ClientHandle, (String, std::time::Instant)>,
+    /// whether the authorized computers see the clipboard of this one
+    show_clipboard: bool,
+    /// what the clipboards of the clients (of this computer: `None`) held
+    /// the last time, with their names, as the window knows it
+    clipboard_seen: HashMap<Option<ClientHandle>, (String, ClipboardSeen)>,
+    /// the clipboards being asked about
+    clipboard_peeking: HashSet<Option<ClientHandle>>,
+    /// the certificates the clients answered with about their clipboard
+    clipboard_fingerprints: HashMap<ClientHandle, String>,
+    clipboard_results: Receiver<ClipboardResult>,
+    clipboard_results_tx: Sender<ClipboardResult>,
 }
 
 /// the window is told again about a client whose certificate is not
@@ -268,6 +282,8 @@ impl Service {
             ..Default::default()
         };
         let (update_results_tx, update_results) = channel();
+        let (clipboard_results_tx, clipboard_results) = channel();
+        let show_clipboard = config.show_clipboard();
         let service = Self {
             config,
             capture,
@@ -316,6 +332,12 @@ impl Service {
             update_results,
             update_results_tx,
             not_authorized: HashMap::new(),
+            show_clipboard,
+            clipboard_seen: HashMap::new(),
+            clipboard_peeking: HashSet::new(),
+            clipboard_fingerprints: HashMap::new(),
+            clipboard_results,
+            clipboard_results_tx,
         };
         Ok(service)
     }
@@ -367,6 +389,7 @@ impl Service {
                 Some((handle, result)) = self.pair_results.recv() => self.pairing_done(handle, result),
                 Some(event) = self.arrangement_events.recv() => self.handle_arrangement_event(event),
                 Some(result) = self.arrange_results.recv() => self.arrange_done(result),
+                Some(result) = self.clipboard_results.recv() => self.clipboard_result(result),
                 () = self.update_due.as_mut(), if self.updates.check == Some(true) => {
                     self.check_updates();
                 }
@@ -407,6 +430,7 @@ impl Service {
             }
             FrontendRequest::Delete(handle) => {
                 self.remove_client(handle);
+                self.forget_clipboard(handle);
                 self.save_config();
             }
             FrontendRequest::EnableCapture => self.capture.reenable(),
@@ -501,6 +525,9 @@ impl Service {
                 }
             }
             FrontendRequest::Pair { handle, code } => self.pair(handle, code),
+            FrontendRequest::PeekClipboards { all } => self.peek_clipboards(all),
+            FrontendRequest::BringClipboard { handle, hash } => self.bring_clipboard(handle, hash),
+            FrontendRequest::SetShowClipboard(show) => self.set_show_clipboard(show),
             FrontendRequest::RemoveReceivedFiles => {
                 if let Some(files) = &self.files {
                     files.remove_received();
@@ -590,6 +617,7 @@ impl Service {
             self.theme = theme;
             self.notify_frontend(FrontendEvent::Theme(theme));
         }
+        self.show_clipboard = self.config.show_clipboard();
         self.sync_frontend();
     }
 
@@ -791,6 +819,7 @@ impl Service {
         self.notify_frontend(FrontendEvent::Theme(self.theme));
         self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
         self.notify_frontend(FrontendEvent::Paused(self.paused));
+        self.notify_frontend(FrontendEvent::ShowClipboard(self.show_clipboard));
     }
 
     /// Pauses RustInput on this computer, or lets it go on: paused, the
@@ -1591,6 +1620,10 @@ impl Service {
             ArrangementEvent::Identify { addr } => {
                 log::info!("{addr} asks to show the numbers of the monitors");
                 crate::identify::show(self.name.clone());
+                return;
+            }
+            event @ (ArrangementEvent::Peek { .. } | ArrangementEvent::Fetch { .. }) => {
+                self.clipboard_asked(event);
                 return;
             }
             ArrangementEvent::Lock { addr, done } => {

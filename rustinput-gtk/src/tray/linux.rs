@@ -154,6 +154,13 @@ impl ksni::Tray for RustInputTray {
         }
         menu.extend([
             StandardItem {
+                label: tr("Clipboards…").into(),
+                icon_name: "edit-paste".into(),
+                activate: Box::new(|tray: &mut Self| tray.send(TrayAction::ShowClipboards)),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
                 label: tr("Show RustInput").into(),
                 activate: Box::new(|tray: &mut Self| tray.send(TrayAction::Show)),
                 ..Default::default()

@@ -31,7 +31,7 @@
   <template class="RustInputWindow" parent="AdwApplicationWindow">
     <property name="width-request">820</property>
     <property name="height-request">560</property>
-    <property name="default-width">1080</property>
+    <property name="default-width">1200</property>
     <property name="default-height">720</property>
     <property name="title">RustInput</property>
     <property name="show-menubar">True</property>
@@ -459,6 +459,50 @@
                   </object>
                 </child>
 
+                <!-- Clipboards ============================================ -->
+                <child>
+                  <object class="AdwViewStackPage" id="clipboards_page">
+                    <property name="name">clipboards</property>
+                    <property name="title" translatable="yes">Clipboards</property>
+                    <property name="icon-name">edit-paste-symbolic</property>
+                    <property name="child">
+                      <object class="GtkScrolledWindow">
+                        <property name="hscrollbar-policy">never</property>
+                        <property name="child">
+                          <object class="AdwClamp">
+                            <property name="maximum-size">860</property>
+                            <property name="child">
+                              <object class="GtkBox">
+                                <property name="orientation">vertical</property>
+                                <property name="spacing">14</property>
+                                <property name="margin-top">20</property>
+                                <property name="margin-bottom">24</property>
+                                <property name="margin-start">24</property>
+                                <property name="margin-end">24</property>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="label" translatable="yes">What each computer has copied, kept up to date while this tab is open. “Copy here” puts it on the clipboard of this computer.</property>
+                                    <property name="xalign">0</property>
+                                    <property name="wrap">true</property>
+                                    <style><class name="dim-label"/></style>
+                                  </object>
+                                </child>
+                                <child>
+                                  <!-- the cards, filled in by the window (window/clipboard.rs) -->
+                                  <object class="GtkBox" id="clipboard_list">
+                                    <property name="orientation">vertical</property>
+                                    <property name="spacing">12</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </property>
+                          </object>
+                        </property>
+                      </object>
+                    </property>
+                  </object>
+                </child>
+
                 <!-- Preferences ========================================== -->
                 <child>
                   <object class="AdwViewStackPage">
@@ -524,6 +568,24 @@
                                     <property name="valign">center</property>
                                     <property name="label" translatable="yes">Check now</property>
                                     <signal name="clicked" handler="handle_check_updates" swapped="true"/>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
+                        <child>
+                          <object class="AdwPreferencesGroup">
+                            <property name="title" translatable="yes">Clipboards</property>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Show this clipboard to the other computers</property>
+                                <property name="subtitle" translatable="yes">In their Clipboards tab, to the computers authorized here, which can also copy it from there. Passwords marked by a password manager are never shown.</property>
+                                <property name="activatable-widget">show_clipboard_switch</property>
+                                <child>
+                                  <object class="GtkSwitch" id="show_clipboard_switch">
+                                    <property name="valign">center</property>
+                                    <property name="active">true</property>
                                   </object>
                                 </child>
                               </object>

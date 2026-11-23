@@ -126,6 +126,16 @@ pub struct Window {
     /// asks about other computers, shown after the open one: it is never
     /// swapped under the user for another
     pub authorization_queue: RefCell<std::collections::VecDeque<AuthorizationWindow>>,
+    /// the cards of the Clipboards tab, this computer first
+    #[template_child]
+    pub clipboard_list: TemplateChild<gtk::Box>,
+    pub clipboard_cards: RefCell<Vec<super::clipboard::Card>>,
+    /// asks the service about the clipboards while the tab is shown
+    pub clipboard_timer: RefCell<Option<glib::SourceId>>,
+    #[template_child]
+    pub show_clipboard_switch: TemplateChild<gtk::Switch>,
+    /// the switch is being set to what the service has
+    pub updating_show_clipboard: Cell<bool>,
 }
 
 #[glib::object_subclass]
@@ -346,6 +356,7 @@ impl ObjectImpl for Window {
         obj.setup_arrangement();
         obj.setup_language();
         obj.setup_updates();
+        obj.setup_clipboards();
     }
 }
 

@@ -104,6 +104,9 @@ struct ConfigToml {
     /// the new version the user was told about with a notification of the
     /// system, so once per version
     update_notified: Option<String>,
+    /// whether the authorized computers see what the clipboard of this one
+    /// holds, in their Clipboard tab (on when not set)
+    show_clipboard: Option<bool>,
     /// RustInput is paused on this computer: the mouse and keyboard stay
     /// here and no other computer controls it (from the tray icon, the
     /// window or the radial menu)
@@ -687,6 +690,20 @@ impl Config {
     pub fn set_check_updates(&mut self, check: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.check_updates = Some(check);
+    }
+
+    /// whether the authorized computers see what the clipboard of this one
+    /// holds (`show_clipboard`, on when not set)
+    pub fn show_clipboard(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.show_clipboard)
+            .unwrap_or(true)
+    }
+
+    pub fn set_show_clipboard(&mut self, show: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.show_clipboard = Some(show);
     }
 
     /// the new version the user was told about (`update_notified`)
