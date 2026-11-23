@@ -5,7 +5,7 @@ use std::{
     time::Duration,
 };
 
-use futures::{Stream, StreamExt};
+use futures::StreamExt;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, ReadHalf, WriteHalf};
 use tokio_stream::wrappers::LinesStream;
 
@@ -13,23 +13,22 @@ use tokio_stream::wrappers::LinesStream;
 use tokio::net::UnixStream;
 
 #[cfg(windows)]
-use tokio::net::TcpStream;
+use tokio::net::windows::named_pipe::NamedPipeClient;
+
+#[cfg(unix)]
+type Stream = UnixStream;
+#[cfg(windows)]
+type Stream = NamedPipeClient;
 
 pub struct AsyncFrontendEventReader {
-    #[cfg(unix)]
-    lines_stream: LinesStream<BufReader<ReadHalf<UnixStream>>>,
-    #[cfg(windows)]
-    lines_stream: LinesStream<BufReader<ReadHalf<TcpStream>>>,
+    lines_stream: LinesStream<BufReader<ReadHalf<Stream>>>,
 }
 
 pub struct AsyncFrontendRequestWriter {
-    #[cfg(unix)]
-    tx: WriteHalf<UnixStream>,
-    #[cfg(windows)]
-    tx: WriteHalf<TcpStream>,
+    tx: WriteHalf<Stream>,
 }
 
-impl Stream for AsyncFrontendEventReader {
+impl futures::Stream for AsyncFrontendEventReader {
     type Item = Result<FrontendEvent, IpcError>;
 
     fn poll_next(
@@ -66,10 +65,7 @@ pub async fn connect_async(
     } else {
         wait_for_service().await?
     };
-    #[cfg(unix)]
-    let (rx, tx): (ReadHalf<UnixStream>, WriteHalf<UnixStream>) = tokio::io::split(stream);
-    #[cfg(windows)]
-    let (rx, tx): (ReadHalf<TcpStream>, WriteHalf<TcpStream>) = tokio::io::split(stream);
+    let (rx, tx): (ReadHalf<Stream>, WriteHalf<Stream>) = tokio::io::split(stream);
     let buf_reader = BufReader::new(rx);
     let lines = buf_reader.lines();
     let lines_stream = LinesStream::new(lines);
@@ -93,14 +89,17 @@ async fn wait_for_service() -> Result<UnixStream, ConnectionError> {
     }
 }
 
+/// wait for the named pipe of the session to come online
 #[cfg(windows)]
-async fn wait_for_service() -> Result<TcpStream, ConnectionError> {
+async fn wait_for_service() -> Result<NamedPipeClient, ConnectionError> {
     let mut duration = Duration::from_millis(10);
     loop {
-        if let Ok(stream) = TcpStream::connect("127.0.0.1:5252").await {
-            break Ok(stream);
+        match crate::windows_pipe::open() {
+            Ok(pipe) => break Ok(pipe),
+            // a pipe of someone else: waiting does not help
+            Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => break Err(e.into()),
+            Err(_) => tokio::time::sleep(exponential_back_off(&mut duration)).await,
         }
-        tokio::time::sleep(exponential_back_off(&mut duration)).await;
     }
 }
 

@@ -45,12 +45,27 @@ enum RustInputError {
 }
 
 fn main() {
+    // as SYSTEM, before the log file in the folder of the user is opened
+    #[cfg(windows)]
+    let guarded = rustinput::windows_system::guard_redirections();
+
     // init logging
     let env = Env::default().filter_or("RUSTINPUT_LOG_LEVEL", "info");
     let mut logger = env_logger::Builder::from_env(env);
     #[cfg(windows)]
     windows_log::setup(&mut logger);
     logger.init();
+    #[cfg(windows)]
+    match guarded {
+        Some(Ok(())) => {
+            log::info!("Redirection Guard: no junction of a user is followed as SYSTEM")
+        }
+        Some(Err(e)) => log::warn!(
+            "no Redirection Guard ({e}): this Windows does not have it, so junctions in the \
+             folders of the user are followed as SYSTEM"
+        ),
+        None => {}
+    }
 
     // what the installer asks, as administrator, and the Windows service:
     // before the configuration, which is that of a user

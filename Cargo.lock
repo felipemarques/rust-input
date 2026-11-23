@@ -2994,6 +2994,7 @@ version = "0.3.0"
 dependencies = [
  "futures",
  "input-event",
+ "libc",
  "log",
  "serde",
  "serde_json",
@@ -3001,6 +3002,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "windows-service",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

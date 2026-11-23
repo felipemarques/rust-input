@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::env::{self, VarError};
 use std::fmt::Display;
-use std::fs::{self, File};
+use std::fs;
 use std::io::Write;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -58,6 +58,25 @@ fn default_path() -> Result<PathBuf, VarError> {
         format!("{app_data}\\rustinput\\")
     };
     Ok(PathBuf::from(default_path))
+}
+
+/// Writes `contents` to a new file next to `path` and renames it over
+/// `path`: never through a hard link someone put at `path` (the daemon may
+/// run as SYSTEM in the folder of its user), and never half a file.
+#[cfg(windows)]
+fn write_replacing(path: &Path, contents: &[u8]) -> io::Result<()> {
+    let mut name = path.file_name().unwrap_or_default().to_owned();
+    name.push(".new");
+    let new = path.with_file_name(name);
+    let _ = fs::remove_file(&new);
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&new)?;
+    f.write_all(contents)?;
+    f.sync_all()?;
+    drop(f);
+    fs::rename(&new, path)
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -444,11 +463,23 @@ impl Config {
             Ok(c) => Some(c),
         };
 
-        // --cert-path <file> overrules default location
+        // --cert-path <file> overrules default location. As SYSTEM the one
+        // of the configuration is not taken: any program of the user could
+        // write it there and have SYSTEM create a file anywhere.
+        #[cfg(windows)]
+        let from_config = !crate::lock::runs_as_system();
+        #[cfg(not(windows))]
+        let from_config = true;
+        if !from_config && config_toml.as_ref().is_some_and(|c| c.cert_path.is_some()) {
+            log::warn!("cert_path of {config_path:?} is not used: RustInput runs as SYSTEM");
+        }
         let cert_path = args
             .cert_path
             .clone()
-            .or(config_toml.as_ref().and_then(|c| c.cert_path.clone()))
+            .or(config_toml
+                .as_ref()
+                .filter(|_| from_config)
+                .and_then(|c| c.cert_path.clone()))
             .unwrap_or(default_path()?.join(CERT_FILE_NAME));
 
         let (tx, watch_rx) = tokio::sync::mpsc::channel(16);
@@ -788,8 +819,13 @@ impl Config {
         if let Some(p) = self.config_path().parent() {
             fs::create_dir_all(p)?;
         }
+        // in place elsewhere, so a config.toml that is a link (to dotfiles)
+        // stays one
+        #[cfg(windows)]
+        write_replacing(self.config_path(), new_config.as_bytes())?;
+        #[cfg(not(windows))]
         {
-            let mut f = File::create(self.config_path())?;
+            let mut f = fs::File::create(self.config_path())?;
             f.write_all(new_config.as_bytes())?;
             f.sync_all()?;
         }

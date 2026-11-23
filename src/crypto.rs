@@ -57,7 +57,11 @@ pub(crate) fn generate_key_and_cert(path: &Path) -> Result<Certificate, Error> {
     let serialized = cert.serialize_pem();
     let parent = path.parent().expect("is a path");
     fs::create_dir_all(parent)?;
-    let f = File::create(path)?;
+    // never into a file that is there, which could be a link to another one
+    let f = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
     #[cfg(unix)]
     {
         let mut perm = f.metadata()?.permissions();

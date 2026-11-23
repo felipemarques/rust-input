@@ -582,7 +582,7 @@ impl Task {
         // listing large folders takes a while, the input must not wait for it
         let internal = self.internal_tx.clone();
         spawn_local(async move {
-            let manifest = tokio::task::spawn_blocking(move || manifest::scan(&paths))
+            let manifest = tokio::task::spawn_blocking(move || as_user(|| manifest::scan(&paths)))
                 .await
                 .map_err(|e| e.to_string())
                 .and_then(|r| r.map_err(|e| e.to_string()));
@@ -1430,9 +1430,12 @@ async fn stream(
             .unwrap_or(&entry.path)
             .to_owned();
         progress.borrow_mut().current = Some(name.clone());
-        let mut file = tokio::fs::File::open(source)
+        let path = source.clone();
+        let mut file = tokio::task::spawn_blocking(move || as_user(|| std::fs::File::open(&path)))
             .await
-            .map_err(|e| format!("{name}: {e}"))?;
+            .map_err(|e| e.to_string())
+            .and_then(|opened| opened.map_err(|e| format!("{name}: {e}")))
+            .map(tokio::fs::File::from_std)?;
         let mut remaining = entry.size;
         while remaining > 0 {
             let mut chunk = vec![0; remaining.min(CHUNK_SIZE as u64) as usize];
@@ -1602,4 +1605,18 @@ async fn read_loop(
         receiving.discard().await;
     }
     let _ = internal.send(Internal::Closed { conn });
+}
+
+/// Runs `f` with the rights of the user logged on: when RustInput runs as
+/// SYSTEM, the files it sends are listed and opened as that user, so no
+/// program can have it send what the user may not read.
+fn as_user<T>(f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
+    #[cfg(windows)]
+    {
+        crate::windows_system::as_session_user(f)
+    }
+    #[cfg(not(windows))]
+    {
+        f()
+    }
 }

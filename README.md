@@ -538,7 +538,16 @@ keeping its settings. Run `Get-Help` on the script for the others.
 > could also drive RustInput to reach programs run as administrator: Microsoft does not treat the step from a user to
 > the same user as administrator as a security boundary. Synergy and Deskflow run their Windows service the same way.
 > Run as SYSTEM for an administrator (0.31.0), RustInput writes its settings, logs and received files in the folders
-> of that user, and runs none of the commands of the configuration (`enter_hook` and `leave_hook`).
+> of that user, and runs none of the commands of the configuration (`enter_hook` and `leave_hook`), nor does it with
+> administrator rights.
+>
+> Since 0.32.1 the window talks to the daemon on a named pipe of its session (`\\.\pipe\rustinput-<session>`), which
+> only the user logged on in that session can use: until 0.32.0 it was TCP port 5252 on `127.0.0.1`, which any user or
+> program of the computer could reach to authorize a certificate, have files sent or set commands. As SYSTEM, the
+> daemon also follows no junction a user put in those folders (Redirection Guard, Windows 11), sends only files that
+> user may read, and takes the folders from the profile of the user, not from variables any of its programs can
+> change. The updater downloads into a folder only administrators may write and installs only files whose SHA-256
+> GitHub lists.
 
 Or by hand:
 - Download `rustinput-windows-x86_64.zip` from the releases page

@@ -50,10 +50,16 @@ pub(super) fn setup(logger: &mut env_logger::Builder) {
     let path = dir.join(name);
     let previous = path.with_extension("old.log");
     let too_large = fs::metadata(&path).is_ok_and(|m| m.len() > MAX_APPENDED);
-    if !append || too_large {
+    let file = if !append || too_large {
         let _ = fs::rename(&path, &previous);
-    }
-    let file = OpenOptions::new().create(true).append(true).open(&path);
+        // A new file, never one that is there: the daemon may run as SYSTEM
+        // in the folder of its user, where a program of the user could have
+        // put a hard link to another file in its place.
+        let _ = fs::remove_file(&path);
+        OpenOptions::new().create_new(true).append(true).open(&path)
+    } else {
+        OpenOptions::new().create(true).append(true).open(&path)
+    };
     if let Ok(file) = file {
         logger.target(env_logger::Target::Pipe(Box::new(file)));
     }

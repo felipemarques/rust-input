@@ -753,6 +753,71 @@ the session got "access denied" for all of it while locked.
 `login_screen = false`, and follows the input once the runner is locked
 (`LockWorkStation`).
 
+### The boundaries of the daemon (0.32.1)
+
+A review of security (`/security-review` and two read-only reviews of the code, network and
+local) found that the daemon, which runs as SYSTEM or with administrator rights, trusted
+whatever reached it on this computer. 0.32.1 closes that:
+
+- **The window and the daemon** talk on a named pipe of the session,
+  `\\.\pipe\rustinput-<session>` (`rustinput-ipc/src/windows_pipe.rs`), no longer on TCP
+  `127.0.0.1:5252`, which every user, every session, services and even web pages (a `POST`
+  whose body lines are requests) could reach, to send `AuthorizeKey`, `SendFiles` or hooks.
+  - The pipe: `PIPE_REJECT_REMOTE_CLIENTS`, the first instance created with
+    `FILE_FLAG_FIRST_PIPE_INSTANCE`, the DACL `D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)` and the
+    label `S:(ML;;NWNR;;;ME)` (nothing below medium integrity reads or writes it).
+  - Every client is checked before it reads or sends anything: impersonating it at
+    identification level (`ImpersonateNamedPipeClient`, `OpenThreadToken`; the process id of a
+    client can be faked, its token not), its user must be the one the daemon runs as, the one
+    logged on in the session of the daemon (`WTSQueryUserToken`, as SYSTEM) or SYSTEM; its
+    session that of the daemon, its integrity at least medium, and no app container. Refused:
+    "refused a connection: …" in `daemon.log`.
+  - The windows open the pipe at identification level (the default of Tokio), so a fake daemon
+    cannot act as them, and refuse a pipe whose owner is not SYSTEM, the administrators or
+    themselves (created first by another user).
+  - A connection that sends a line that is no request is closed. On Linux and macOS the socket
+    gets mode 0600 and the daemon refuses a peer of another user (`SO_PEERCRED`).
+  - `is_service_running` and the supervisor look whether the pipe exists (`WaitNamedPipeW`),
+    without taking the instance waiting for a window; `update-rustinput.ps1` lists the pipes
+    (and still looks at TCP 5252 for older versions).
+- **SYSTEM in the folders of the user** (`src/windows_system.rs`): a program of the user
+  without administrator rights could replace `%LOCALAPPDATA%\rustinput\received` by a junction
+  to `C:\ProgramData` and have SYSTEM delete the folders there at the next start.
+  - Redirection Guard (`ProcessRedirectionTrustPolicy`, Windows 11, Server 2022), turned on
+    before the log file is opened: no junction made by a user who is not an administrator is
+    followed. On older Windows a warning in `daemon.log`.
+  - The cleanup and new transfers refuse a `received` folder (or the folder it is in) that is
+    a link, and links among the transfers are skipped (`files/store.rs`).
+  - The files to send are listed and opened as the user logged on (`as_session_user`:
+    `ImpersonateLoggedOnUser` on the token of the session around the blocking call), so nothing
+    the user may not read is sent; with nobody logged on nothing is.
+  - `config.toml` (on Windows) is written to `config.toml.new` and renamed over it, the
+    certificate is created with `create_new`, `daemon.log` is always a new file: none follows a
+    hard link planted in their place.
+  - `cert_path` of `config.toml` is ignored as SYSTEM (it would create a file anywhere).
+- **The environment of the daemon as SYSTEM** is that of the system plus `LOCALAPPDATA` from
+  the profile of the user (`GetUserProfileDirectoryW`, kept by Windows in a place only
+  administrators change) and the languages: the variables of the user (`HKCU\Environment`,
+  `Volatile Environment`) could point `LOCALAPPDATA` at a folder any user writes, which the
+  service also remembers for the screen to log on, or `PATH` at DLLs.
+- **Hooks** (`enter_hook`, `leave_hook`) run no longer with administrator rights at all, not
+  only as SYSTEM: any program of the user can change the configuration.
+- **The updater** downloads into a new folder in `%SystemRoot%\Temp` created with a DACL of
+  SYSTEM and administrators only (in `%TEMP%` a program of the user could swap the file between
+  the check of its SHA-256 and its run as administrator), and refuses a file whose SHA-256
+  GitHub does not list.
+- **Received file names** lose the characters that turn the direction of the text
+  ("foto\u{202e}gpj.exe"), and `CON .txt`, `COM¹`, `CONIN$`, `CONOUT$` are no devices.
+
+`windows-install-test.ps1` checks on a runner (stages 7d and 7e): nothing listens on TCP 5252,
+the pipe of the session exists, the user at the screen gets the state of the daemon on it, a
+process of another local user in the same session gets nothing, and a junction from `received`
+to another folder leaves that folder as it was.
+
+The review also found problems on the network side, for 0.33.0: the side that sends the input
+does not check the certificate of the one receiving it (inherited from Lan Mouse), the code of
+pairing can be guessed by trying, the clipboard can be pulled with `Leave`, and more.
+
 ## The Windows installer
 
 `rustinput-windows-x86_64-setup.exe`, built with Inno Setup 6 from
