@@ -228,7 +228,9 @@ impl ListenTask {
                                 self.emulation_proxy.remove(addr);
                                 self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                             }
-                            ProtoEvent::Input(_) if paused => {}
+                            // input only from a device that entered (and was
+                            // let in): not around Enter, paused or locked
+                            ProtoEvent::Input(_) if paused || !entered.contains(&addr) => {}
                             ProtoEvent::Input(event) => {
                                 let locked = lock_looked.elapsed() >= LOCK_LOOK && {
                                     lock_looked = Instant::now();

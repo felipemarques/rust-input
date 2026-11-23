@@ -18,7 +18,7 @@ use rustinput_proto::{CAP_CURSOR_POSITION, CAP_EDGE_SPAN, ProtoEvent};
 use tokio::task::{JoinHandle, spawn_local};
 use tokio_util::sync::CancellationToken;
 
-use crate::connect::RustInputConnection;
+use crate::connect::{Received, RustInputConnection};
 
 pub(crate) struct Capture {
     cancellation_token: CancellationToken,
@@ -55,6 +55,9 @@ pub(crate) enum ICaptureEvent {
     /// The capture is released after another device entered this one: the
     /// pointer can be placed where that device entered.
     PlacePointer(Edge, f64),
+    /// The client answered with a certificate (its fingerprint) that is not
+    /// authorized here: no input goes to it.
+    NotAuthorized(u64, String),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -380,7 +383,16 @@ impl CaptureTask {
                     Some(event) => self.handle_capture_event(capture, event?).await?,
                     None => return Ok(()),
                 },
-                (handle, event) = self.conn.recv() => {
+                received = self.conn.recv() => {
+                    let (handle, event) = match received {
+                        Received::Event(handle, event) => (handle, event),
+                        Received::NotAuthorized(handle, fingerprint) => {
+                            self.event_tx
+                                .send(ICaptureEvent::NotAuthorized(handle, fingerprint))
+                                .expect("channel closed");
+                            continue;
+                        }
+                    };
                     if let Some(active) = self.active_client {
                         if handle != active {
                             // we only care about events coming from the client we are currently connected to

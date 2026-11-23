@@ -31,6 +31,9 @@ use crate::config::local_commit;
 use crate::crypto;
 use crate::netstats::NetStats;
 
+/// the connection attempts of strangers kept for the window, the latest
+const MAX_ATTEMPTS_KEPT: usize = 16;
+
 #[derive(Error, Debug)]
 pub enum ListenerCreationError {
     #[error(transparent)]
@@ -115,23 +118,22 @@ impl RustInputListener {
             let connection_attempts = connection_attempts.clone();
             Some(Arc::new(
                 move |certs: &[Vec<u8>], _chains: &[CertificateDer<'static>]| {
-                    assert!(certs.len() == 1);
-                    let fingerprints = certs
-                        .iter()
-                        .map(|c| crypto::generate_fingerprint(c))
-                        .collect::<Vec<_>>();
-                    if authorized
-                        .read()
-                        .expect("lock")
-                        .contains_key(&fingerprints[0])
-                    {
+                    // exactly one certificate: anything else is refused (it
+                    // was an assert, which anyone could trip to end the
+                    // daemon)
+                    let [cert] = certs else {
+                        return Err(webrtc_dtls::Error::ErrVerifyDataMismatch);
+                    };
+                    let fingerprint = crypto::generate_fingerprint(cert);
+                    if authorized.read().expect("lock").contains_key(&fingerprint) {
                         Ok(())
                     } else {
-                        let fingerprint = fingerprints.into_iter().next().expect("fingerprint");
-                        connection_attempts
-                            .lock()
-                            .expect("lock")
-                            .push_back(fingerprint);
+                        let mut attempts = connection_attempts.lock().expect("lock");
+                        // the latest ones; strangers can try without end
+                        if attempts.len() >= MAX_ATTEMPTS_KEPT {
+                            attempts.pop_front();
+                        }
+                        attempts.push_back(fingerprint);
                         Err(webrtc_dtls::Error::ErrVerifyDataMismatch)
                     }
                 },
@@ -314,6 +316,8 @@ async fn read_loop(
         .await
         .unwrap_or_default();
     let mut b = [0u8; MAX_DATAGRAM_SIZE];
+    // whether the peer controls this device now (entered and did not leave)
+    let mut entered = false;
 
     while let Ok(len) = conn.recv(&mut b).await {
         match Datagram::decode(&b[..len]) {
@@ -342,10 +346,21 @@ async fn read_loop(
                 });
             }
             Ok(Datagram::Event(event)) => {
-                if let ProtoEvent::Leave(_) = event {
-                    // the peer stopped controlling this device: whatever
-                    // was copied here in the meantime goes back with it
-                    clipboard.push(peer);
+                match event {
+                    ProtoEvent::Enter(_)
+                    | ProtoEvent::EnterAt(..)
+                    | ProtoEvent::EnterSpan { .. } => entered = true,
+                    // The peer stopped controlling this device: whatever
+                    // was copied here in the meantime goes back with it.
+                    // Only then: a Leave at any time would let it pull
+                    // every new copy (a password from a password manager).
+                    ProtoEvent::Leave(_) => {
+                        let controlled = std::mem::take(&mut entered);
+                        if controlled {
+                            clipboard.push(peer);
+                        }
+                    }
+                    _ => {}
                 }
                 dtls_tx
                     .send(ListenEvent::Msg { event, addr })

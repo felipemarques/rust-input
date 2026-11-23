@@ -13,6 +13,8 @@ use gtk::{
 #[template(resource = "/io/github/felipemarques/RustInput/authorization_window.ui")]
 pub struct AuthorizationWindow {
     #[template_child]
+    pub intro: TemplateChild<Label>,
+    #[template_child]
     pub fingerprint: TemplateChild<Label>,
     #[template_child]
     pub code: TemplateChild<Label>,

@@ -383,6 +383,14 @@ msgstr "غير متصل"
 msgid "mouse here"
 msgstr "الماوس هنا"
 
+#: rustinput-gtk/src/authorization_window.rs:25
+msgid "Certificate not authorized"
+msgstr "شهادة غير مخوّلة"
+
+#: rustinput-gtk/src/authorization_window.rs:26
+msgid "{name} answered with a certificate this computer has not authorized, so the mouse and keyboard do not go to it. Authorize it if this fingerprint is the one RustInput shows on {name}, or pair the two with “Enter code…” next to {name}."
+msgstr "ردّ {name} بشهادة لم يخوّلها هذا الكمبيوتر، لذا لا تذهب إليه الفأرة ولوحة المفاتيح. خوّلها إذا كانت هذه البصمة هي التي يعرضها RustInput على {name}، أو خوّل الجهازين معًا عبر «إدخال الرمز…» بجانب {name}."
+
 #: rustinput-gtk/src/client_row.rs:68
 msgid "no name or address"
 msgstr "بلا اسم أو عنوان"
@@ -415,35 +423,35 @@ msgstr "إصداره: {peer} · الإصدار نفسه"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "إصداره: {peer} · هذا الكمبيوتر: {local}"
 
-#: rustinput-gtk/src/lib.rs:262
+#: rustinput-gtk/src/lib.rs:264
 msgid "Quit"
 msgstr "إنهاء"
 
-#: rustinput-gtk/src/lib.rs:263
+#: rustinput-gtk/src/lib.rs:265
 msgid "_File"
 msgstr "_ملف"
 
-#: rustinput-gtk/src/lib.rs:472
+#: rustinput-gtk/src/lib.rs:479
 msgid "{name} and this computer authorized each other"
 msgstr "تم التخويل المتبادل بين {name} وهذا الكمبيوتر"
 
-#: rustinput-gtk/src/lib.rs:477
+#: rustinput-gtk/src/lib.rs:484
 msgid "Not authorized: {error}"
 msgstr "لم يتم التخويل: {error}"
 
-#: rustinput-gtk/src/lib.rs:484
+#: rustinput-gtk/src/lib.rs:491
 msgid "{address} connected"
 msgstr "اتصل {address}"
 
-#: rustinput-gtk/src/lib.rs:491
+#: rustinput-gtk/src/lib.rs:498
 msgid "The mouse came from {address}"
 msgstr "جاء الماوس من {address}"
 
-#: rustinput-gtk/src/lib.rs:497
+#: rustinput-gtk/src/lib.rs:504
 msgid "{address} disconnected"
 msgstr "انقطع اتصال {address}"
 
-#: rustinput-gtk/src/lib.rs:559
+#: rustinput-gtk/src/lib.rs:566
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "الملفات المستلمة من {name}: {count}، جاهزة للصق"
 
@@ -673,7 +681,7 @@ msgstr "{files} من {name}، تم اللصق"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} من {name}، لم يتم اللصق"
 
-#: rustinput-gtk/src/window/imp.rs:236
+#: rustinput-gtk/src/window/imp.rs:239
 msgid "Failed to relaunch RustInput"
 msgstr "تعذّرت إعادة تشغيل RustInput"
 
@@ -789,175 +797,175 @@ msgstr "{part}، حيث يتلامسان: الحافة مشتركة"
 msgid "Whole edge, in proportion"
 msgstr "الحافة بأكملها، بالتناسب"
 
-#: rustinput-gtk/src/window.rs:916
+#: rustinput-gtk/src/window.rs:920
 msgid "As the system ({language})"
 msgstr "حسب النظام ({language})"
 
-#: rustinput-gtk/src/window.rs:939
+#: rustinput-gtk/src/window.rs:943
 msgid "The windows change language when RustInput starts again"
 msgstr "تتغير لغة النوافذ عند إعادة تشغيل RustInput"
 
-#: rustinput-gtk/src/window.rs:942
+#: rustinput-gtk/src/window.rs:946
 msgid "Restart now"
 msgstr "إعادة التشغيل الآن"
 
-#: rustinput-gtk/src/window.rs:1014
+#: rustinput-gtk/src/window.rs:1018
 msgid "Asking GitHub…"
 msgstr "جارٍ الاستعلام من GitHub…"
 
-#: rustinput-gtk/src/window.rs:1016
+#: rustinput-gtk/src/window.rs:1020
 msgid "Could not ask GitHub: {error}"
 msgstr "تعذّر الاستعلام من GitHub: {error}"
 
-#: rustinput-gtk/src/window.rs:1018
+#: rustinput-gtk/src/window.rs:1022
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr "صدر RustInput {version}؛ والإصدار على هذا الكمبيوتر {current}"
 
-#: rustinput-gtk/src/window.rs:1023
+#: rustinput-gtk/src/window.rs:1027
 msgid "{version} is the latest version"
 msgstr "{version} هو أحدث إصدار"
 
-#: rustinput-gtk/src/window.rs:1034
+#: rustinput-gtk/src/window.rs:1038
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr "هل تريد أن يبحث RustInput عن إصدارات جديدة؟ يسأل GitHub عن رقم أحدث إصدار عند بدء تشغيله وكل 12 ساعة؛ ولا يُرسَل أي شيء عنك أو عن أجهزة الكمبيوتر الخاصة بك."
 
-#: rustinput-gtk/src/window.rs:1040
+#: rustinput-gtk/src/window.rs:1044
 msgid "No"
 msgstr "لا"
 
-#: rustinput-gtk/src/window.rs:1041
+#: rustinput-gtk/src/window.rs:1045
 msgid "Yes, look for them"
 msgstr "نعم، ابحث عنها"
 
-#: rustinput-gtk/src/window.rs:1045
+#: rustinput-gtk/src/window.rs:1049
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr "صدر RustInput {version}؛ والإصدار على هذا الكمبيوتر {current}."
 
-#: rustinput-gtk/src/window.rs:1049
+#: rustinput-gtk/src/window.rs:1053
 msgid "Later"
 msgstr "لاحقًا"
 
-#: rustinput-gtk/src/window.rs:1098
+#: rustinput-gtk/src/window.rs:1102
 msgid "The update starts: Windows asks for administrator rights"
 msgstr "يبدأ التحديث: سيطلب Windows امتيازات المسؤول"
 
-#: rustinput-gtk/src/window.rs:1123
+#: rustinput-gtk/src/window.rs:1127
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr "تنتقل الملفات المنسوخة في مدير الملفات مع المؤشر. عند إيقاف هذا الخيار، لا تُرسَل إلا الملفات المحددة باستخدام «نسخ إلى RustInput»"
 
-#: rustinput-gtk/src/window.rs:1129
+#: rustinput-gtk/src/window.rs:1133
 msgid "“Copy to RustInput” in the file manager"
 msgstr "«نسخ إلى RustInput» في مدير الملفات"
 
-#: rustinput-gtk/src/window.rs:1130
+#: rustinput-gtk/src/window.rs:1134
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr "في قائمة الملفات والمجلدات: Explorer وNemo وNautilus"
 
-#: rustinput-gtk/src/window.rs:1133
+#: rustinput-gtk/src/window.rs:1137
 msgid "Show the transfers window"
 msgstr "إظهار نافذة عمليات النقل"
 
-#: rustinput-gtk/src/window.rs:1134
+#: rustinput-gtk/src/window.rs:1138
 msgid "With the progress, when files are sent or received"
 msgstr "مع التقدم، عند إرسال الملفات أو استلامها"
 
-#: rustinput-gtk/src/window.rs:1138
+#: rustinput-gtk/src/window.rs:1142
 msgid "Progress, history and log"
 msgstr "التقدم والمحفوظات والسجل"
 
-#: rustinput-gtk/src/window.rs:1141
+#: rustinput-gtk/src/window.rs:1145
 msgid "Open"
 msgstr "فتح"
 
-#: rustinput-gtk/src/window.rs:1258
+#: rustinput-gtk/src/window.rs:1262
 msgid "Sharing the mouse and keyboard"
 msgstr "مشاركة الماوس ولوحة المفاتيح"
 
-#: rustinput-gtk/src/window.rs:1259
+#: rustinput-gtk/src/window.rs:1263
 msgid "Capture and emulation are on"
 msgstr "الالتقاط والمحاكاة قيد التشغيل"
 
-#: rustinput-gtk/src/window.rs:1262
+#: rustinput-gtk/src/window.rs:1266
 msgid "Input capture is off"
 msgstr "التقاط الإدخال متوقف"
 
-#: rustinput-gtk/src/window.rs:1263
+#: rustinput-gtk/src/window.rs:1267
 msgid "Needed for every connection"
 msgstr "مطلوب لكل اتصال"
 
-#: rustinput-gtk/src/window.rs:1279
+#: rustinput-gtk/src/window.rs:1283
 msgid "Sending"
 msgstr "الإرسال"
 
-#: rustinput-gtk/src/window.rs:1280
+#: rustinput-gtk/src/window.rs:1284
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "بعد تجاوز حافة الشاشة، ينتقل الماوس ولوحة المفاتيح إلى الكمبيوتر التالي"
 
-#: rustinput-gtk/src/window.rs:1293
+#: rustinput-gtk/src/window.rs:1297
 msgid "Receiving"
 msgstr "الاستلام"
 
-#: rustinput-gtk/src/window.rs:1294
+#: rustinput-gtk/src/window.rs:1298
 msgid "The other computers can control this one"
 msgstr "يمكن لأجهزة الكمبيوتر الأخرى التحكم في هذا الكمبيوتر"
 
-#: rustinput-gtk/src/window.rs:1297
+#: rustinput-gtk/src/window.rs:1301
 msgid "Input emulation is off"
 msgstr "محاكاة الإدخال متوقفة"
 
-#: rustinput-gtk/src/window.rs:1298
+#: rustinput-gtk/src/window.rs:1302
 msgid "Needed for the other computers to control this one"
 msgstr "مطلوبة لتتمكن أجهزة الكمبيوتر الأخرى من التحكم في هذا الكمبيوتر"
 
-#: rustinput-gtk/src/window.rs:1315
+#: rustinput-gtk/src/window.rs:1319
 msgid "Paused: no other computer controls this one"
 msgstr "متوقف مؤقتًا: لا يتحكم أي حاسوب آخر في هذا الحاسوب"
 
-#: rustinput-gtk/src/window.rs:1339
+#: rustinput-gtk/src/window.rs:1343
 msgid "Relaunch required"
 msgstr "يلزم إعادة التشغيل"
 
-#: rustinput-gtk/src/window.rs:1340
+#: rustinput-gtk/src/window.rs:1344
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "تم منح إذن «تسهيلات الاستخدام»: أعد التشغيل لتفعيل الالتقاط والمحاكاة"
 
-#: rustinput-gtk/src/window.rs:1343
+#: rustinput-gtk/src/window.rs:1347
 msgid "Relaunch"
 msgstr "إعادة التشغيل"
 
-#: rustinput-gtk/src/window.rs:1347
+#: rustinput-gtk/src/window.rs:1351
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "امنح إذن «تسهيلات الاستخدام» للتفعيل"
 
-#: rustinput-gtk/src/window.rs:1348
+#: rustinput-gtk/src/window.rs:1352
 msgid "Grant"
 msgstr "منح"
 
-#: rustinput-gtk/src/window.rs:1388
+#: rustinput-gtk/src/window.rs:1392
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "عندما يحاول هذا الكمبيوتر الاتصال، يسأل {name} عمّا إذا كان سيخوّله ويعرض رمزًا. أدخله هنا للتخويل المتبادل بين الكمبيوترين: للتحكم والحافظة والملفات."
 
-#: rustinput-gtk/src/window.rs:1394
+#: rustinput-gtk/src/window.rs:1398
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "عندما يحاول هذا الكمبيوتر الاتصال، يسأل الكمبيوتر الآخر عمّا إذا كان سيخوّله ويعرض رمزًا. أدخله هنا للتخويل المتبادل بين الكمبيوترين: للتحكم والحافظة والملفات."
 
-#: rustinput-gtk/src/window.rs:1435
+#: rustinput-gtk/src/window.rs:1439
 msgid "Authorize with {name}"
 msgstr "التخويل مع {name}"
 
-#: rustinput-gtk/src/window.rs:1436
+#: rustinput-gtk/src/window.rs:1440
 msgid "Authorize with the other computer"
 msgstr "التخويل مع الكمبيوتر الآخر"
 
-#: rustinput-gtk/src/window.rs:1473
+#: rustinput-gtk/src/window.rs:1477
 msgid "Authorizing…"
 msgstr "جارٍ التخويل…"
 
-#: rustinput-gtk/src/window.rs:1553
+#: rustinput-gtk/src/window.rs:1601
 msgid "Update now"
 msgstr "التحديث الآن"
 
-#: rustinput-gtk/src/window.rs:1555
+#: rustinput-gtk/src/window.rs:1603
 msgid "Download"
 msgstr "تنزيل"
 

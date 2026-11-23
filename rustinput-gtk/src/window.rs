@@ -1484,6 +1484,10 @@ impl Window {
 
     /// the other device entered the code shown here
     pub(super) fn paired(&self, fingerprint: &str, name: &str) {
+        self.imp()
+            .authorization_queue
+            .borrow_mut()
+            .retain(|w| w.fingerprint() != fingerprint);
         let shown = self.imp().authorization_window.borrow().clone();
         if let Some(w) = shown.filter(|w| w.fingerprint() == fingerprint) {
             w.close();
@@ -1495,11 +1499,51 @@ impl Window {
     }
 
     pub(super) fn request_authorization(&self, fingerprint: &str, code: Option<&str>) {
-        if let Some(w) = self.imp().authorization_window.borrow_mut().take() {
-            w.close();
+        self.ask_authorization(AuthorizationWindow::new(fingerprint, code));
+    }
+
+    /// the computer `name` answered with a certificate not authorized here
+    pub(super) fn server_not_authorized(&self, name: &str, fingerprint: &str) {
+        self.ask_authorization(AuthorizationWindow::for_server(name, fingerprint));
+    }
+
+    /// Shows `window`. One about another computer than the open one waits
+    /// for it: someone trying to connect at the moment the user authorizes
+    /// a computer must not swap the fingerprint under the user's eyes. One
+    /// about the same computer (a new code) takes its place.
+    fn ask_authorization(&self, window: AuthorizationWindow) {
+        let imp = self.imp();
+        let open = imp.authorization_window.borrow().clone();
+        if let Some(open) = open {
+            if open.fingerprint() != window.fingerprint() {
+                let mut queue = imp.authorization_queue.borrow_mut();
+                queue.retain(|w| w.fingerprint() != window.fingerprint());
+                queue.push_back(window);
+                return;
+            }
+            // closing it shows no other: it is no longer the open one
+            imp.authorization_window.replace(None);
+            open.close();
         }
-        let window = AuthorizationWindow::new(fingerprint, code);
         window.set_transient_for(Some(self));
+        window.connect_close_request(clone!(
+            #[weak(rename_to = parent)]
+            self,
+            #[upgrade_or]
+            glib::Propagation::Proceed,
+            move |closing| {
+                let imp = parent.imp();
+                let current = imp.authorization_window.borrow().clone();
+                if current.as_ref() == Some(closing) {
+                    imp.authorization_window.replace(None);
+                    let next = imp.authorization_queue.borrow_mut().pop_front();
+                    if let Some(next) = next {
+                        parent.ask_authorization(next);
+                    }
+                }
+                glib::Propagation::Proceed
+            }
+        ));
         window.connect_closure(
             "confirm-clicked",
             false,

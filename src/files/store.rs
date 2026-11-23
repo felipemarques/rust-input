@@ -172,6 +172,15 @@ impl Receiving {
             ));
         }
         tokio::fs::create_dir_all(&root).await?;
+        // only this user may look into the received files (the folder it is
+        // in may let others through)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if let Err(e) = fs::set_permissions(dir, fs::Permissions::from_mode(0o700)) {
+                log::warn!("{dir:?}: could not make it private: {e}");
+            }
+        }
         let files = checked.iter().filter(|(e, _)| !e.dir).count();
         let bytes = checked.iter().map(|(e, _)| e.size).sum();
         let mut receiving = Self {
@@ -210,6 +219,17 @@ impl Receiving {
                 .create_new(true)
                 .open(&path)
                 .await?;
+            // Windows: from another computer, like a download, so Windows
+            // (SmartScreen, Office) warns before it runs or opens it; the
+            // mark goes along when the file is pasted on the same drive
+            #[cfg(windows)]
+            {
+                let mut mark = path.clone().into_os_string();
+                mark.push(":Zone.Identifier");
+                if let Err(e) = tokio::fs::write(&mark, "[ZoneTransfer]\r\nZoneId=3\r\n").await {
+                    log::debug!("{path:?}: no mark of another computer: {e}");
+                }
+            }
             let current = Current {
                 file,
                 path,

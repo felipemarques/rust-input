@@ -414,6 +414,14 @@ pub enum FrontendEvent {
     ShowWindow,
     /// show the window of the file transfers (picked in the radial menu)
     ShowTransfers,
+    /// The computer `name` (the client `handle`) answered with a certificate
+    /// that is not authorized here: no input goes to it until `fingerprint`
+    /// is authorized (or the two are paired with a code).
+    ServerNotAuthorized {
+        handle: ClientHandle,
+        name: String,
+        fingerprint: String,
+    },
     /// failed connection attempt (approval for fingerprint required)
     ConnectionAttempt {
         fingerprint: String,

@@ -370,8 +370,11 @@ tray icon.
 ## Authorizing computers
 
 Every computer has a certificate fingerprint, shown in its window. Connections are encrypted and only accepted from
-authorized fingerprints: to control a computer, that computer has to authorize the one controlling it, and to share
-the clipboard and files both have to authorize each other.
+authorized fingerprints, both ways (since 0.33.0): to control a computer, that computer has to authorize the one
+controlling it, and the controlling one has to authorize it too. Otherwise whoever answered at its address, a computer
+that took the address of one that is off, or one in between, would get every key typed for it; the window then shows
+the fingerprint it answered with and asks whether to authorize it. Clipboard and files go only between computers that
+authorized each other as well.
 
 **With a code, from the controlling computer** (both need RustInput 0.18.0 or newer):
 
@@ -383,6 +386,8 @@ the clipboard and files both have to authorize each other.
 Both computers are then authorized on each other, for control, clipboard and files. The code never goes over the
 network: both sides prove they know it with SPAKE2, a password authenticated key exchange, bound to the certificates
 they see. Someone in between the two computers can not take part, and a code works for three tries and ten minutes.
+A computer takes at most ten codes in ten minutes, from all computers together (since 0.33.0): guessing the six
+digits by trying would take about a year.
 The implementation uses the [spake2](https://crates.io/crates/spake2) crate, which has not had an independent audit.
 
 <p align="center">
@@ -392,14 +397,16 @@ The implementation uses the [spake2](https://crates.io/crates/spake2) crate, whi
 </p>
 
 **On each computer**: the window of the computer being controlled asks whether to authorize the one trying to
-connect; for the clipboard, the controlling computer also has to authorize the controlled one with the "Authorize"
-button and its fingerprint.
+connect, and the window of the controlling computer asks whether to authorize the certificate the other one answered
+with (compare its fingerprint with the one shown in RustInput on that computer).
 
 ## Compatibility with Lan Mouse
 
 RustInput uses the network protocol of Lan Mouse and can be mixed with it.
 Controlling a Lan Mouse 0.11.0 device from RustInput is tested; RustInput only uses its newer protocol events
-(build identification, clipboard, pointer position) after the other side showed that it knows them.
+(build identification, clipboard, pointer position) after the other side showed that it knows them. Since 0.33.0
+RustInput sends input only to a device whose certificate it authorized: authorize the fingerprint the Lan Mouse
+window shows (RustInput asks when it first connects).
 
 ## OS Support
 
