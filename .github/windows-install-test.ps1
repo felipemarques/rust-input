@@ -272,7 +272,8 @@ Write-Host "  the user at the screen: $answer"
 if ($answer -notmatch '^answered: \{') { Fail "7d: the user at the screen got no answer from the daemon: $answer" }
 # another user of this computer, in this session
 $other = 'rustinputprobe'
-$password = 'Ri!' + [guid]::NewGuid().ToString('N').Substring(0, 20)
+# 14 characters at most: net user asks about longer ones
+$password = 'Ri!' + [guid]::NewGuid().ToString('N').Substring(0, 11)
 cmd /c "net user $other $password /add 2>&1" | Out-Host
 $theirs = Join-Path $env:PUBLIC 'rustinput-probe-theirs.txt'
 Remove-Item -LiteralPath $theirs -ErrorAction SilentlyContinue
