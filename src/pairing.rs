@@ -18,7 +18,7 @@
 
 use std::{
     cell::RefCell,
-    collections::HashMap,
+    collections::{HashMap, VecDeque},
     fmt, io,
     net::SocketAddr,
     rc::Rc,
@@ -45,6 +45,15 @@ pub(crate) const MAGIC: [u8; 4] = *b"RIP1";
 const CODE_LIFETIME: Duration = Duration::from_secs(10 * 60);
 /// tries per code, right or wrong: a new code is made after that
 const MAX_ATTEMPTS: u32 = 3;
+/// Codes tried on this device, all devices together, in [`TRIES_WINDOW`]:
+/// past this pairing waits. A wrong code gets a new one after
+/// [`MAX_ATTEMPTS`], and anyone can have codes made by trying to connect,
+/// so without this six digits could be guessed in some hours; with it, in
+/// about a year.
+const MAX_TRIES: usize = 10;
+const TRIES_WINDOW: Duration = Duration::from_secs(10 * 60);
+/// codes kept for devices that tried to connect, the newest
+const MAX_PENDING: usize = 32;
 const MAX_MESSAGE: u32 = 64 * 1024;
 const TIMEOUT: Duration = Duration::from_secs(15);
 const PROOF_ACCEPTING: &[u8] = b"rustinput pairing: accepting side";
@@ -124,6 +133,8 @@ fn new_code() -> String {
 #[derive(Clone)]
 pub(crate) struct Pairing {
     pending: Rc<RefCell<HashMap<String, Pending>>>,
+    /// when codes were tried, see [`MAX_TRIES`]
+    tries: Rc<RefCell<VecDeque<Instant>>>,
     events: Sender<PairingEvent>,
     name: String,
 }
@@ -133,6 +144,7 @@ impl Pairing {
     pub(crate) fn new(name: String, events: Sender<PairingEvent>) -> Self {
         Self {
             pending: Default::default(),
+            tries: Default::default(),
             events,
             name,
         }
@@ -143,6 +155,15 @@ impl Pairing {
     pub(crate) fn code_for(&self, fingerprint: &str) -> String {
         let mut pending = self.pending.borrow_mut();
         pending.retain(|_, p| p.valid());
+        if pending.len() >= MAX_PENDING && !pending.contains_key(fingerprint) {
+            let oldest = pending
+                .iter()
+                .min_by_key(|(_, p)| p.created)
+                .map(|(fp, _)| fp.clone());
+            if let Some(oldest) = oldest {
+                pending.remove(&oldest);
+            }
+        }
         pending
             .entry(fingerprint.to_owned())
             .or_insert_with(Pending::new)
@@ -159,6 +180,27 @@ impl Pairing {
         let Message::Request { name, spake } = read(stream).await? else {
             return Err(invalid("expected a request"));
         };
+        // every try counts, before its outcome: many at once count too
+        let waits = {
+            let mut tries = self.tries.borrow_mut();
+            while tries.front().is_some_and(|t| t.elapsed() >= TRIES_WINDOW) {
+                tries.pop_front();
+            }
+            let waits = tries.len() >= MAX_TRIES;
+            if !waits {
+                tries.push_back(Instant::now());
+            }
+            waits
+        };
+        if waits {
+            log::warn!(
+                "pairing: too many codes tried on this device, {} waits",
+                short(peer)
+            );
+            let reason = "too many codes were tried on this computer: wait ten minutes and try \
+                          again";
+            return write(stream, &refused(reason)).await;
+        }
         // counted before the outcome: giving up halfway is a try as well
         let code = self
             .pending
@@ -436,13 +478,10 @@ mod tests {
                 },
             )
             .await?;
-            let Message::Challenge {
-                name,
-                spake,
-                proof: theirs,
-            } = read(&mut a).await?
-            else {
-                return Err(PairError::Refused("refused".into()));
+            let (name, spake, theirs) = match read(&mut a).await? {
+                Message::Challenge { name, spake, proof } => (name, spake, proof),
+                Message::Refused { reason } => return Err(PairError::Refused(reason)),
+                _ => return Err(PairError::Refused("refused".into())),
             };
             let key = state.finish(&spake).expect("key");
             if theirs != proof(&key, PROOF_ACCEPTING) {
@@ -533,6 +572,43 @@ mod tests {
         // the old code no longer works, even if it was right
         let (connected, _) = exchange(&pairing, &code, ("fp-a", "fp-b"), ("fp-a", "fp-b")).await;
         assert!(connected.is_err() || code == fresh);
+    }
+
+    #[tokio::test]
+    async fn guessing_waits_after_ten_tries() {
+        let (pairing, _events) = pairing();
+        // codes made by trying to connect with ever new certificates
+        for n in 0..MAX_TRIES {
+            let fingerprint = format!("fp-{n}");
+            let code = pairing.code_for(&fingerprint);
+            let wrong = if code == "000000" { "000001" } else { "000000" };
+            let (connected, _) = exchange(
+                &pairing,
+                wrong,
+                (&fingerprint, "fp-b"),
+                (&fingerprint, "fp-b"),
+            )
+            .await;
+            assert!(connected.is_err());
+        }
+        // now even the right code waits
+        let code = pairing.code_for("fp-late");
+        let (connected, accepted) =
+            exchange(&pairing, &code, ("fp-late", "fp-b"), ("fp-late", "fp-b")).await;
+        accepted.expect("accepting side");
+        match connected {
+            Err(PairError::Refused(reason)) => assert!(reason.contains("too many"), "{reason}"),
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn codes_of_strangers_are_limited() {
+        let (pairing, _events) = pairing();
+        for n in 0..MAX_PENDING * 2 {
+            pairing.code_for(&format!("fp-{n}"));
+        }
+        assert_eq!(pairing.pending.borrow().len(), MAX_PENDING);
     }
 
     #[tokio::test]

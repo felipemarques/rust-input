@@ -464,6 +464,11 @@ fn build_ui(app: &Application) {
                     FrontendEvent::EmulationStatus(s) => window.set_emulation(s.into()),
                     FrontendEvent::AuthorizedUpdated(keys) => window.set_authorized_keys(keys),
                     FrontendEvent::PublicKeyFingerprint(fp) => window.set_pk_fp(&fp),
+                    FrontendEvent::ServerNotAuthorized {
+                        handle: _,
+                        name,
+                        fingerprint,
+                    } => window.server_not_authorized(&name, &fingerprint),
                     FrontendEvent::ConnectionAttempt { fingerprint, code } => {
                         window.request_authorization(&fingerprint, code.as_deref());
                     }

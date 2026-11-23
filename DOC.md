@@ -818,6 +818,47 @@ The review also found problems on the network side, for 0.33.0: the side that se
 does not check the certificate of the one receiving it (inherited from Lan Mouse), the code of
 pairing can be guessed by trying, the clipboard can be pulled with `Leave`, and more.
 
+### The network side (0.33.0)
+
+The same review found on the network side:
+
+- **The connecting side checks the certificate of the one it sends input to**
+  (`connect.rs`). Lan Mouse connects with `insecure_skip_verify` and checked nothing: whoever
+  answered at the address of a client (a computer that took the address of one that is off,
+  ARP or name poisoning, one in between) got every key typed for it, also the password of a
+  lock screen. Now the fingerprint of the certificate the client answered with must be in
+  `authorized_fingerprints`; if not, the connection is closed, nothing is sent (the edge acts
+  like an unreachable client) and the window shows `FrontendEvent::ServerNotAuthorized`: the
+  fingerprint, to authorize (`AuthorizationWindow::for_server`) or pair with a code; at most
+  once a minute per client. A Lan Mouse device needs its fingerprint authorized here too.
+- **Pairing codes** (`pairing.rs`): a wrong code gets a new one after three tries, and anyone
+  gets a code by trying to connect with a new certificate, so six digits could be guessed in
+  some hours. A device now takes at most ten tries in ten minutes from all devices together
+  (counted before their outcome, so many at once count too), then refuses with "too many
+  codes"; at most 32 codes wait for devices.
+- **No crash from the network**: the verifier of the DTLS listener asserted one certificate;
+  a client sending two ended the daemon (`panic = "abort"`). Now it is refused. The connection
+  attempts of strangers kept for the window are the latest 16.
+- **The clipboard goes back on `Leave` only from a device that entered** (`listen.rs`): any
+  authorized device could pull every new copy by sending `Leave`. And `Input` is emulated only
+  for a device that entered (`emulation.rs`).
+- **Describe, Lock, Identify, Arrange**: a description is taken only from an authorized
+  certificate (`ArrangeResult::Described`): the fingerprint becomes the one the later messages
+  are pinned to. The revision of the arrangement no longer wraps (`saturating_add`).
+- **The window asks about one computer at a time**: a new request about another computer waits
+  for the open one instead of replacing it, so someone trying to connect while the user
+  authorizes a computer cannot swap the fingerprint under the user's eyes.
+- **Received files**: on Windows they get the mark of the web (`Zone.Identifier`, zone 3), so
+  SmartScreen and Office warn before they run or open; on Linux and macOS their folder is
+  private (0700).
+
+Not changed: an authorized device can still offer clipboard contents at any time (it is
+trusted to control the computer, which is more); pasted HTML is not cleaned of `file:` and UNC
+links.
+
+`clipboard-noauth.sh` (end to end) checks the first: without authorizing B, A sends B nothing,
+logs it and its window asks with the fingerprint of B; authorized, the mouse goes through.
+
 ## The Windows installer
 
 `rustinput-windows-x86_64-setup.exe`, built with Inno Setup 6 from

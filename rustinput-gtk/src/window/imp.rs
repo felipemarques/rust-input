@@ -123,6 +123,9 @@ pub struct Window {
     pub capture_active: Cell<bool>,
     pub emulation_active: Cell<bool>,
     pub authorization_window: RefCell<Option<AuthorizationWindow>>,
+    /// asks about other computers, shown after the open one: it is never
+    /// swapped under the user for another
+    pub authorization_queue: RefCell<std::collections::VecDeque<AuthorizationWindow>>,
 }
 
 #[glib::object_subclass]

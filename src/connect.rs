@@ -45,6 +45,8 @@ pub(crate) enum RustInputConnectionError {
     TargetEmulationDisabled,
     #[error("Connection timed out")]
     Timeout,
+    #[error("its certificate is not authorized on this device")]
+    NotAuthorized,
 }
 
 const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
@@ -100,6 +102,15 @@ async fn connect_any(
 
 type Conns = Rc<Mutex<HashMap<SocketAddr, Arc<dyn Conn + Send + Sync>>>>;
 
+/// what came from the connections to the clients
+pub(crate) enum Received {
+    /// an event of the client
+    Event(ClientHandle, ProtoEvent),
+    /// The client answered with a certificate (its fingerprint) that is not
+    /// authorized here: no input goes to it.
+    NotAuthorized(ClientHandle, String),
+}
+
 /// sends raw datagrams over the connections to the clients
 #[derive(Clone)]
 pub(crate) struct OutgoingLinks {
@@ -128,6 +139,8 @@ struct Shared {
     conns: Conns,
     tx: Sender<(ClientHandle, ProtoEvent)>,
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
+    /// clients that answered with a certificate not authorized here
+    refused: Sender<(ClientHandle, String)>,
 }
 
 /// what a connection needs to take part in clipboard synchronization
@@ -148,6 +161,8 @@ pub(crate) struct RustInputConnection {
     ping_response: Rc<RefCell<HashSet<SocketAddr>>>,
     clipboard: ClipboardContext,
     netstats: NetStats,
+    refused_rx: Receiver<(ClientHandle, String)>,
+    refused_tx: Sender<(ClientHandle, String)>,
 }
 
 impl RustInputConnection {
@@ -159,6 +174,7 @@ impl RustInputConnection {
         netstats: NetStats,
     ) -> Self {
         let (recv_tx, recv_rx) = channel();
+        let (refused_tx, refused_rx) = channel();
         Self {
             cert,
             client_manager,
@@ -172,6 +188,8 @@ impl RustInputConnection {
                 authorized_keys,
             },
             netstats,
+            refused_rx,
+            refused_tx,
         }
     }
 
@@ -187,8 +205,17 @@ impl RustInputConnection {
         }
     }
 
-    pub(crate) async fn recv(&mut self) -> (ClientHandle, ProtoEvent) {
-        self.recv_rx.recv().await.expect("channel closed")
+    pub(crate) async fn recv(&mut self) -> Received {
+        tokio::select! {
+            refused = self.refused_rx.recv() => {
+                let (handle, fingerprint) = refused.expect("channel closed");
+                Received::NotAuthorized(handle, fingerprint)
+            }
+            event = self.recv_rx.recv() => {
+                let (handle, event) = event.expect("channel closed");
+                Received::Event(handle, event)
+            }
+        }
     }
 
     /// The client is connected and answers, but takes no input: it is
@@ -236,6 +263,7 @@ impl RustInputConnection {
                 conns: self.conns.clone(),
                 tx: self.recv_tx.clone(),
                 ping_response: self.ping_response.clone(),
+                refused: self.refused_tx.clone(),
             };
             spawn_local(connect_to_handle(
                 shared,
@@ -262,6 +290,7 @@ async fn connect_to_handle(
         client_manager,
         conns,
         ping_response,
+        refused,
         ..
     } = shared.clone();
     log::info!("client {handle} connecting ...");
@@ -281,6 +310,31 @@ async fn connect_to_handle(
                 return Err(e);
             }
         };
+        // The input goes only to the device whose certificate is authorized
+        // here: whoever answers at the address of the client (a computer
+        // that took the address of one that is off, or one in the middle)
+        // would get every key typed for it. Lan Mouse did not check this.
+        let fingerprint = peer_fingerprint(&conn).await;
+        let authorized = fingerprint.as_ref().is_some_and(|fp| {
+            clipboard
+                .authorized_keys
+                .read()
+                .expect("lock")
+                .contains_key(fp)
+        });
+        if !authorized {
+            log::warn!(
+                "client {handle} @ {addr} answered with the certificate {}, not authorized on \
+                 this device: nothing is sent to it",
+                fingerprint.as_deref().unwrap_or("(none)")
+            );
+            let _ = conn.close().await;
+            connecting.lock().await.remove(&handle);
+            if let Some(fingerprint) = fingerprint {
+                let _ = refused.send((handle, fingerprint));
+            }
+            return Err(RustInputConnectionError::NotAuthorized);
+        }
         log::info!("client ({handle}) connected @ {addr}");
         let conn = netstats.meter(addr, conn);
         client_manager.set_active_addr(handle, Some(addr));
@@ -297,26 +351,6 @@ async fn connect_to_handle(
             log::debug!("handshake probe to {addr} failed: {e}");
         }
 
-        // Optional features. The clipboard is only shared with a peer
-        // whose certificate is authorized here: the connect side does
-        // not verify who answers at the configured address, and the
-        // clipboard must not go to (or come from) a stranger. The
-        // peer learns this from the flags and will not offer its own.
-        let fingerprint = peer_fingerprint(&conn).await;
-        let trusted = fingerprint.as_ref().is_some_and(|fp| {
-            clipboard
-                .authorized_keys
-                .read()
-                .expect("lock")
-                .contains_key(fp)
-        });
-        if !trusted && clipboard.clipboard.capabilities() != 0 {
-            log::info!(
-                "clipboard is not shared with client {handle} @ {addr}: \
-                 its fingerprint is not authorized on this device"
-            );
-        }
-
         // poll connection for active
         spawn_local(ping_pong(addr, conn.clone(), ping_response.clone()));
 
@@ -326,7 +360,9 @@ async fn connect_to_handle(
             handle,
             addr,
             conn,
-            trusted.then_some(clipboard.clipboard).zip(fingerprint),
+            // the clipboard too: the certificate of the peer is authorized
+            // here (checked above)
+            fingerprint.map(|fingerprint| (clipboard.clipboard, fingerprint)),
         ));
         return Ok(());
     }
@@ -396,6 +432,7 @@ async fn receive_loop(
         conns,
         tx,
         ping_response,
+        ..
     } = shared;
     let peer = Peer::Outgoing(handle);
     let flags = CAP_CURSOR_POSITION

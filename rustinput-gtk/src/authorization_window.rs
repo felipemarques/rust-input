@@ -1,7 +1,7 @@
 mod imp;
 
 use glib::Object;
-use gtk::{gio, glib, subclass::prelude::ObjectSubclassIsExt};
+use gtk::{gio, glib, prelude::GtkWindowExt, subclass::prelude::ObjectSubclassIsExt};
 
 glib::wrapper! {
     pub struct AuthorizationWindow(ObjectSubclass<imp::AuthorizationWindow>)
@@ -15,6 +15,20 @@ impl AuthorizationWindow {
         let window: Self = Object::builder().build();
         window.imp().set_fingerprint(fingerprint);
         window.imp().set_code(code);
+        window
+    }
+
+    /// Asks about the certificate the computer `name` answered with, which
+    /// is not authorized here: no input goes to it until it is.
+    pub(crate) fn for_server(name: &str, fingerprint: &str) -> Self {
+        let window = Self::new(fingerprint, None);
+        window.set_title(Some(crate::i18n::tr("Certificate not authorized")));
+        window.imp().intro.set_text(&crate::i18n::trf(
+            "{name} answered with a certificate this computer has not authorized, so the mouse \
+             and keyboard do not go to it. Authorize it if this fingerprint is the one RustInput \
+             shows on {name}, or pair the two with “Enter code…” next to {name}.",
+            &[("name", &name)],
+        ));
         window
     }
 

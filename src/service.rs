@@ -134,7 +134,14 @@ pub struct Service {
     /// the latest version, or why it is not known
     update_results: Receiver<Result<String, String>>,
     update_results_tx: Sender<Result<String, String>>,
+    /// the clients that answered with a certificate not authorized here,
+    /// with it and when the window was told
+    not_authorized: HashMap<ClientHandle, (String, std::time::Instant)>,
 }
+
+/// the window is told again about a client whose certificate is not
+/// authorized here after this
+const NOT_AUTHORIZED_AGAIN: Duration = Duration::from_secs(60);
 
 /// the first question for the latest version, after the start: the network
 /// may come up only after RustInput at login
@@ -308,6 +315,7 @@ impl Service {
             update_due: Box::pin(tokio::time::sleep(UPDATE_FIRST)),
             update_results,
             update_results_tx,
+            not_authorized: HashMap::new(),
         };
         Ok(service)
     }
@@ -724,6 +732,23 @@ impl Service {
                 self.clipboard.push(Peer::Outgoing(handle));
             }
             ICaptureEvent::PlacePointer(edge, fraction) => self.emulation.warp(edge, fraction),
+            ICaptureEvent::NotAuthorized(handle, fingerprint) => {
+                // once a minute at most: every crossing tries again
+                let now = std::time::Instant::now();
+                let told = self.not_authorized.get(&handle).is_some_and(|(fp, when)| {
+                    *fp == fingerprint && now.duration_since(*when) < NOT_AUTHORIZED_AGAIN
+                });
+                if !told {
+                    self.not_authorized
+                        .insert(handle, (fingerprint.clone(), now));
+                    let name = self.client_name(handle);
+                    self.notify_frontend(FrontendEvent::ServerNotAuthorized {
+                        handle,
+                        name,
+                        fingerprint,
+                    });
+                }
+            }
         }
     }
 
@@ -1446,7 +1471,7 @@ impl Service {
 
     /// arranges the computers as the window says, here and on the others
     fn arrange(&mut self, mut layout: Layout) {
-        layout.revision = layout.revision.max(self.layout.revision) + 1;
+        layout.revision = layout.revision.max(self.layout.revision).saturating_add(1);
         // this computer as it is now
         let own = self.own_machine();
         if let Some(me) = layout
@@ -1609,6 +1634,25 @@ impl Service {
     fn arrange_done(&mut self, result: ArrangeResult) {
         match result {
             ArrangeResult::Described(handle, result) => {
+                // Only a computer whose certificate is authorized here: its
+                // fingerprint becomes the one Lock, Identify and Arrange are
+                // sent to, and whoever answered at the address of the client
+                // could be another one (that took the address of one that is
+                // off), which would get the arrangement and could answer
+                // that its screen locked.
+                let result = result.and_then(|(fingerprint, description)| {
+                    match self
+                        .authorized_keys
+                        .read()
+                        .expect("lock")
+                        .contains_key(&fingerprint)
+                    {
+                        true => Ok((fingerprint, description)),
+                        false => Err(ArrangeError::Refused(format!(
+                            "its certificate {fingerprint} is not authorized here"
+                        ))),
+                    }
+                });
                 if let Err(e) = &result {
                     log::info!("client {handle} did not describe itself: {e}");
                 }
