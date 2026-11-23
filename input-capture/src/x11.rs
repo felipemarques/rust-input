@@ -345,7 +345,13 @@ impl X11InputCapture {
         let blank_cursor = create_blank_cursor(&conn, root)?;
         conn.flush()?;
 
-        let fd = AsyncFd::with_interest(conn.stream().as_raw_fd(), Interest::READABLE)?;
+        // SAFETY: the socket belongs to `conn`, which is kept next to `fd` in
+        // the struct and declared after it, so it is closed only once `fd` is
+        // dropped (deregistered); a `RawFd` always gives the same number.
+        let fd = unsafe {
+            AsyncFd::register_with_interest(conn.stream().as_raw_fd(), Interest::READABLE)
+        }
+        .map_err(std::io::Error::from)?;
 
         let mut capture = Self {
             fd,
