@@ -245,6 +245,49 @@ Every transfer is written to a log (`transfers.log` in
 `$XDG_STATE_HOME/rustinput`, `%LOCALAPPDATA%\rustinput` or
 `~/Library/Logs/rustinput`) with its files and sizes.
 
+## The Clipboards tab (0.34.0)
+
+The tab shows what every computer copied, one card each (`rustinput-gtk/src/window/clipboard.rs`).
+While it is shown (the stack shows `clipboards` and the window is visible) the window sends
+`FrontendRequest::PeekClipboards` every 2 s, `all: true` when it starts asking; nothing is asked
+otherwise. The service (`src/service/clipboard_view.rs`) asks its own clipboard and, over the TCP
+port, every client (`arrangement::peek`, `Message::Peek { known }` on the RIA1 channel), at most
+one question per computer at a time. `known` is the hash of what the computer held the last time:
+an unchanged clipboard answers `Peeked { seen: None }`, a few bytes, and the window hears only what
+changed (`FrontendEvent::Clipboard`).
+
+What travels is short (`ClipboardPeek`, `clipboard/local.rs::peek`): the start of a text (4 KiB at
+a whole character), its characters and lines, whether it is formatted; an image as its size and a
+thumbnail of at most 320 pixels each way (each pixel the average of those it covers, as PNG after
+the JSON message, `attachment` bytes, at most 4 MiB); the first 12 names of copied files with their
+number. The hash is the one the clipboard synchronization uses (`Content::hash`, `files_key`), so
+"Copy here" (`FrontendRequest::BringClipboard { hash }`, `Message::Fetch`) gets exactly what was
+shown or "the clipboard changed meanwhile". Text and images come after `Message::Fetched` (at most
+64 MiB, 120 s) and are written with the hash checked; files go as a file transfer to the asker
+(`Fetched::Files`, the peer with its fingerprint in the clipboard task), which needs the two
+computers connected. Either way the content is recorded as synced with that peer, so moving the
+pointer there does not send it back.
+
+Reading an image can take seconds (arboard gives up after 4), longer than the tab takes to ask
+again. The clipboard task reads for one question at a time and answers every question that came
+meanwhile with that read (`start_peek`); a question whose asker gave up (the answer waits 8 s) is
+dropped before reading.
+
+Who sees what: only authorized devices are answered (like Describe and Lock), and the asker
+believes only a certificate authorized on its side, the one the client described itself with or
+the first one it answered with (`clipboard_fingerprints`). `show_clipboard = false` (Preferences,
+"Show this clipboard to the other computers") answers `Hidden` and refuses `Fetch`. Passwords: a
+password manager adds a format of its own next to what it copies (`clipboard/secret.rs`):
+`x-kde-passwordManagerHint` (KeePassXC, KDE) is looked for in the TARGETS of the owner of the X11
+clipboard, `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ignore` and
+`CanIncludeInClipboardHistory` = 0 on Windows (KeePass, 1Password, the clipboard history of
+Windows). Such a text is shown as `Secret`: the hash travels, the text does not, and "Copy here"
+still brings it, as the pointer would. Not recognized on Wayland and macOS yet.
+
+The window grew to 1200 pixels wide by default, so the five tabs fit with their names in every
+language. `clipboard-view.sh` (end to end) checks text, image, a password (with `clip_owner.py`
+as the password manager), files and switching it off; `clipboard-shot.sh` takes pictures of it.
+
 ## Pairing
 
 Two devices can authorize each other from the controlling one (see

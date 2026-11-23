@@ -175,6 +175,7 @@ pub(crate) fn setup(
                     TrayAction::Quit => app.quit(),
                     TrayAction::CancelTransfers => window.request_cancel_transfers(),
                     TrayAction::ShowTransfers => transfers.present(),
+                    TrayAction::ShowClipboards => window.show_clipboards(),
                     TrayAction::Update => window.install_update(),
                     TrayAction::TogglePause => window.request_pause(!window.is_paused()),
                     TrayAction::ToggleSendCopied => {

@@ -12,6 +12,7 @@
 //! file channel (see [`crate::files`]).
 
 mod local;
+mod secret;
 mod transfer;
 #[cfg(windows)]
 mod windows_files;
@@ -33,15 +34,17 @@ use rustinput_ipc::ClientHandle;
 use rustinput_proto::{
     CAP_CLIPBOARD, CAP_CLIPBOARD_HTML, CAP_FILES, ClipboardFrame, ClipboardKind,
 };
-use tokio::task::spawn_local;
+use tokio::{sync::oneshot, task::spawn_local};
 
 use crate::{
     connect::OutgoingLinks,
     files::{FilesHandle, PeerInfo},
     listen::IncomingLinks,
 };
+pub(crate) use local::Peeked;
 use local::{LocalClipboard, LocalContent};
-use transfer::{Incoming, MAX_CONTENT_SIZE, Outgoing, Progress};
+pub(crate) use transfer::MAX_CONTENT_SIZE;
+use transfer::{Incoming, Outgoing, Progress};
 
 /// interval at which running transfers are checked for resends and timeouts
 const TICK: Duration = Duration::from_millis(50);
@@ -114,6 +117,43 @@ pub(crate) enum ClipboardMsg {
         paths: Vec<PathBuf>,
         key: u64,
     },
+    /// what the clipboard holds, for the Clipboard tab of a computer; no
+    /// answer when it can not be read
+    Peek {
+        known: Option<u64>,
+        reply: oneshot::Sender<Peeked>,
+    },
+    /// what the clipboard holds for the device with the certificate
+    /// `fingerprint`, if it still holds `hash`: text and images in the
+    /// answer, files as a file transfer to that device
+    Fetch {
+        hash: u64,
+        fingerprint: String,
+        reply: oneshot::Sender<Result<Fetched, String>>,
+    },
+    /// the clipboard was read for the questions of [`ClipboardMsg::Peek`]
+    PeekRead(Option<Peeked>),
+    /// the clipboard was read for [`ClipboardMsg::Fetch`]
+    FetchRead {
+        hash: u64,
+        fingerprint: String,
+        content: Option<LocalContent>,
+        reply: oneshot::Sender<Result<Fetched, String>>,
+    },
+    /// what the clipboard of the device with the certificate `fingerprint`
+    /// held, brought here from the Clipboard tab
+    Bring {
+        content: Content,
+        fingerprint: String,
+    },
+}
+
+/// what the clipboard gave for [`ClipboardMsg::Fetch`]
+#[derive(Debug)]
+pub(crate) enum Fetched {
+    Data(Content),
+    /// that many files and folders go as a file transfer
+    Files(usize),
 }
 
 /// what the rest of the service uses to talk to the clipboard task
@@ -156,6 +196,11 @@ impl ClipboardHandle {
             (true, false) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML,
             _ => 0,
         }
+    }
+
+    /// whether the clipboard is shared at all (`clipboard`)
+    pub(crate) fn enabled(&self) -> bool {
+        self.enabled
     }
 
     /// whether copied files are sent to the peers
@@ -215,6 +260,8 @@ pub(crate) fn spawn(
         peers: HashMap::new(),
         pending: HashMap::new(),
         next_transfer: 0,
+        peek_waiting: Vec::new(),
+        peek_running: None,
     };
     spawn_local(manager.run());
 }
@@ -231,6 +278,8 @@ struct PeerState {
     files: bool,
     /// the peer takes formatted text
     html: bool,
+    /// fingerprint of the certificate of the peer
+    fingerprint: String,
 }
 
 struct Manager {
@@ -248,7 +297,15 @@ struct Manager {
     /// pushes requested before the peer announced its capabilities
     pending: HashMap<Peer, Instant>,
     next_transfer: u32,
+    /// questions of [`ClipboardMsg::Peek`] waiting for the next read
+    peek_waiting: Vec<PeekQuestion>,
+    /// the questions the running read is for, if one runs
+    peek_running: Option<Vec<PeekQuestion>>,
 }
+
+/// a question of [`ClipboardMsg::Peek`]: the hash the asker knows, where the
+/// answer goes
+type PeekQuestion = (Option<u64>, oneshot::Sender<Peeked>);
 
 impl Manager {
     async fn run(mut self) {
@@ -293,6 +350,7 @@ impl Manager {
                 });
                 state.files = flags & CAP_FILES != 0 && self.files.is_some();
                 state.html = flags & CAP_CLIPBOARD_HTML != 0;
+                state.fingerprint = fingerprint.clone();
                 if let Some(files) = &self.files {
                     if state.files {
                         files.add_peer(PeerInfo {
@@ -351,6 +409,135 @@ impl Manager {
             }
             ClipboardMsg::Frame { peer, frame } => self.handle_frame(peer, frame).await,
             ClipboardMsg::Disconnected { peer } => self.forget(peer),
+            ClipboardMsg::Peek { known, reply } => {
+                self.peek_waiting.push((known, reply));
+                self.start_peek();
+            }
+            ClipboardMsg::PeekRead(peeked) => {
+                for (known, reply) in self.peek_running.take().unwrap_or_default() {
+                    let answer = match &peeked {
+                        Some(Peeked::Holds { hash, .. }) if known == Some(*hash) => {
+                            Peeked::Unchanged
+                        }
+                        Some(peeked) => peeked.clone(),
+                        // unreadable: no answer
+                        None => continue,
+                    };
+                    let _ = reply.send(answer);
+                }
+                self.start_peek();
+            }
+            ClipboardMsg::Fetch {
+                hash,
+                fingerprint,
+                reply,
+            } => {
+                let (local, tx) = (self.local.clone(), self.tx.clone());
+                spawn_local(async move {
+                    let content = local.read().await;
+                    let _ = tx.send(ClipboardMsg::FetchRead {
+                        hash,
+                        fingerprint,
+                        content,
+                        reply,
+                    });
+                });
+            }
+            ClipboardMsg::FetchRead {
+                hash,
+                fingerprint,
+                content,
+                reply,
+            } => {
+                let _ = reply.send(self.fetched(hash, &fingerprint, content));
+            }
+            ClipboardMsg::Bring {
+                content,
+                fingerprint,
+            } => {
+                // it came from there: it does not go back
+                for state in self.peers_with(&fingerprint) {
+                    state.synced = Some(content.hash);
+                }
+                log::info!(
+                    "clipboard brought here: {:?}, {} bytes",
+                    content.kind,
+                    content.data.len()
+                );
+                self.local.write(content);
+            }
+        }
+    }
+
+    /// One read of the clipboard at a time answers every question that came
+    /// meanwhile: reading an image can take longer than the Clipboard tabs
+    /// take to ask again, and the questions must not pile up. Those whose
+    /// asker stopped waiting are dropped.
+    fn start_peek(&mut self) {
+        if self.peek_running.is_some() {
+            return;
+        }
+        let mut questions = std::mem::take(&mut self.peek_waiting);
+        questions.retain(|(_, reply)| !reply.is_closed());
+        let Some((first, _)) = questions.first() else {
+            return;
+        };
+        // what they all know may be left out; otherwise everything
+        let known = first.filter(|_| questions.iter().all(|(known, _)| known == first));
+        self.peek_running = Some(questions);
+        let (local, tx) = (self.local.clone(), self.tx.clone());
+        spawn_local(async move {
+            let peeked = local.peek(known).await;
+            let _ = tx.send(ClipboardMsg::PeekRead(peeked));
+        });
+    }
+
+    /// the peers with the certificate `fingerprint` (one, unless it both
+    /// connects here and is connected to)
+    fn peers_with<'a>(
+        &'a mut self,
+        fingerprint: &'a str,
+    ) -> impl Iterator<Item = &'a mut PeerState> {
+        self.peers
+            .values_mut()
+            .filter(move |state| state.fingerprint == fingerprint)
+    }
+
+    /// what goes to the device with the certificate `fingerprint`, which
+    /// asked for the clipboard if it still holds `hash`
+    fn fetched(
+        &mut self,
+        hash: u64,
+        fingerprint: &str,
+        content: Option<LocalContent>,
+    ) -> Result<Fetched, String> {
+        match content {
+            Some(LocalContent::Data(content)) if content.hash == hash => {
+                // it has it now: not sent again when the pointer moves there
+                for state in self.peers_with(fingerprint) {
+                    state.synced = Some(hash);
+                }
+                Ok(Fetched::Data(content))
+            }
+            Some(LocalContent::Files { paths, key }) if key == hash => {
+                let files = self.files.clone();
+                let peer = self
+                    .peers
+                    .iter_mut()
+                    .find(|(_, state)| state.fingerprint == fingerprint && state.files);
+                match (files, peer) {
+                    (Some(files), Some((&peer, state))) => {
+                        state.synced = Some(key);
+                        let count = paths.len();
+                        log::info!("sending the {count} copied item(s) to {peer}, as it asked");
+                        files.send(peer, paths);
+                        Ok(Fetched::Files(count))
+                    }
+                    _ => Err("files go only to a computer connected with file transfers on".into()),
+                }
+            }
+            Some(_) => Err("the clipboard changed meanwhile".into()),
+            None => Err("the clipboard is empty".into()),
         }
     }
 

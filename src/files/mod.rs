@@ -1320,7 +1320,7 @@ impl Accept {
                     .serve(&mut stream, &fingerprint, authorized, addr)
                     .await
             };
-            if let Err(e) = timeout(HANDSHAKE_TIMEOUT, answer)
+            if let Err(e) = timeout(arrangement::SERVE_TIMEOUT, answer)
                 .await
                 .unwrap_or_else(|_| Err(io::Error::new(io::ErrorKind::TimedOut, "timed out")))
             {

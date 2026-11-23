@@ -64,6 +64,7 @@ const QUIT: &str = "quit";
 const CANCEL: &str = "cancel";
 const SEND_COPIED: &str = "send-copied";
 const TRANSFERS: &str = "transfers";
+const CLIPBOARDS: &str = "clipboards";
 const UPDATE: &str = "update";
 const PAUSE: &str = "pause";
 
@@ -196,6 +197,12 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
         ))?;
         add(&PredefinedMenuItem::separator())?;
     }
+    add(&MenuItem::with_id(
+        CLIPBOARDS,
+        tr("Clipboards…"),
+        true,
+        None,
+    ))?;
     add(&MenuItem::with_id(SHOW, tr("Show RustInput"), true, None))?;
     add(&PredefinedMenuItem::separator())?;
     add(&MenuItem::with_id(QUIT, tr("Quit RustInput"), true, None))?;
@@ -285,6 +292,7 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
             CANCEL => TrayAction::CancelTransfers,
             SEND_COPIED => TrayAction::ToggleSendCopied,
             TRANSFERS => TrayAction::ShowTransfers,
+            CLIPBOARDS => TrayAction::ShowClipboards,
             UPDATE => TrayAction::Update,
             PAUSE => TrayAction::TogglePause,
             _ => return,

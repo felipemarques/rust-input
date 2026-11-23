@@ -291,6 +291,56 @@ pub struct FileOptions {
     pub file_manager_menu: bool,
 }
 
+/// What the clipboard of a computer holds, as the Clipboard tab shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClipboardPeek {
+    /// nothing, or nothing RustInput takes along
+    Empty,
+    /// text: its start (at most [`CLIPBOARD_PEEK_TEXT`] bytes), how many
+    /// characters and lines it has, and whether it is formatted (HTML)
+    Text {
+        start: String,
+        chars: u64,
+        lines: u64,
+        formatted: bool,
+    },
+    /// an image: its size and a small PNG of it (at most
+    /// [`CLIPBOARD_THUMBNAIL`] pixels each way)
+    Image {
+        width: u32,
+        height: u32,
+        #[serde(default)]
+        thumbnail: Vec<u8>,
+    },
+    /// copied files and folders: the names of the first ones (at most
+    /// [`CLIPBOARD_PEEK_FILES`]) and how many there are
+    Files { names: Vec<String>, count: u64 },
+    /// something a password manager marked as secret: not shown, but it can
+    /// be brought here
+    Secret,
+}
+
+/// longest start of a text shown of a clipboard, in bytes
+pub const CLIPBOARD_PEEK_TEXT: usize = 4096;
+/// largest thumbnail of an image on a clipboard, in pixels each way
+pub const CLIPBOARD_THUMBNAIL: u32 = 320;
+/// most names of copied files shown of a clipboard
+pub const CLIPBOARD_PEEK_FILES: usize = 12;
+
+/// The clipboard of a computer, as far as this one can see it
+/// ([`FrontendEvent::Clipboard`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClipboardSeen {
+    /// it holds `peek`; [`FrontendRequest::BringClipboard`] with `hash`
+    /// brings it here
+    Holds { hash: u64, peek: ClipboardPeek },
+    /// it does not show its clipboard: switched off there, or no clipboard
+    /// sharing at all
+    Hidden,
+    /// it could not be asked, and why
+    Unavailable(String),
+}
+
 /// Whether the windows are light or dark.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Theme {
@@ -466,6 +516,24 @@ pub enum FrontendEvent {
     /// the screen of the computer `name` (this one too) was to lock, from
     /// the radial menu, and did not (`error`)
     ScreenNotLocked { name: String, error: String },
+    /// what the clipboard of the client (of this computer: `None`) holds,
+    /// answering [`FrontendRequest::PeekClipboards`]
+    Clipboard {
+        handle: Option<ClientHandle>,
+        name: String,
+        seen: ClipboardSeen,
+    },
+    /// the clipboard of the computer `name` was brought here
+    /// ([`FrontendRequest::BringClipboard`]), or not (`error`); `files`
+    /// when it held files, which come as a file transfer
+    ClipboardBrought {
+        name: String,
+        files: bool,
+        error: Option<String>,
+    },
+    /// whether the other computers see the clipboard of this one
+    /// (`show_clipboard` in the configuration)
+    ShowClipboard(bool),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -549,6 +617,17 @@ pub enum FrontendRequest {
     /// authorize this device and the client on each other with the code the
     /// client shows
     Pair { handle: ClientHandle, code: String },
+    /// What the clipboards of this computer and of the clients hold
+    /// ([`FrontendEvent::Clipboard`]): only what changed since the last
+    /// time, or everything (`all`). The Clipboard tab asks every few seconds
+    /// while it is shown.
+    PeekClipboards { all: bool },
+    /// bring what the clipboard of the client holds here, if it still holds
+    /// `hash` ([`FrontendEvent::ClipboardBrought`])
+    BringClipboard { handle: ClientHandle, hash: u64 },
+    /// whether the other computers see the clipboard of this one, kept in
+    /// the configuration ([`FrontendEvent::ShowClipboard`])
+    SetShowClipboard(bool),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]

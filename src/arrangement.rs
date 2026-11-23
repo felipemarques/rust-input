@@ -13,15 +13,28 @@
 //!   RustInput does not know it and closes the connection.
 //! - [`Message::Lock`]: the other device locks its screen ([`crate::lock`]),
 //!   and answers once it did, or why not.
+//! - [`Message::Peek`]: the other device tells what its clipboard holds, for
+//!   the Clipboard tab: the start of a text, a thumbnail of an image (after
+//!   the message), the names of files; nothing when it still holds what
+//!   `known` stands for, or when it does not show its clipboard
+//!   (`show_clipboard`).
+//! - [`Message::Fetch`]: the other device sends what its clipboard holds,
+//!   if it still holds `hash`: text and images after the answer, files as a
+//!   file transfer.
 //!
 //! All are answered only to authorized devices: an arrangement changes
 //! where the pointer goes, the monitors are no business of strangers, and
-//! only a device allowed to control this one may lock it.
+//! only a device allowed to control this one may lock it or read its
+//! clipboard.
 
 use std::{cell::RefCell, fmt, io, net::SocketAddr, rc::Rc, sync::Arc, time::Duration};
 
 use local_channel::mpsc::Sender;
-use rustinput_ipc::layout::{Layout, Monitor};
+use rustinput_ipc::{
+    ClipboardPeek, ClipboardSeen,
+    layout::{Layout, Monitor},
+};
+use rustinput_proto::ClipboardKind;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -32,7 +45,10 @@ use tokio::{
 use tokio_rustls::TlsConnector;
 use webrtc_dtls::crypto::Certificate;
 
-use crate::files::tls;
+use crate::{
+    clipboard::{Content, Fetched, MAX_CONTENT_SIZE},
+    files::tls,
+};
 
 /// first bytes of a connection about the arrangement, both ways
 pub(crate) const MAGIC: [u8; 4] = *b"RIA1";
@@ -43,6 +59,21 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_NAME: usize = 64;
 /// longest the screen may take to lock, within [`TIMEOUT`]
 const LOCK_TIMEOUT: Duration = Duration::from_secs(7);
+/// longest the clipboard may take to be read for [`Message::Peek`], within
+/// [`TIMEOUT`] of the asker: arboard gives up on an image after 4 s
+const PEEK_TIMEOUT: Duration = Duration::from_secs(8);
+/// longest the clipboard may take to be read for [`Message::Fetch`]
+const FETCH_READ_TIMEOUT: Duration = Duration::from_secs(20);
+/// connecting, asking for the clipboard and receiving it, up to
+/// [`MAX_CONTENT_SIZE`]
+const FETCH_TIMEOUT: Duration = Duration::from_secs(120);
+/// longest the question may take to arrive
+const QUESTION_TIMEOUT: Duration = Duration::from_secs(10);
+/// longest a connection is served, the answer to [`Message::Fetch`] being the
+/// longest
+pub(crate) const SERVE_TIMEOUT: Duration = Duration::from_secs(130);
+/// largest thumbnail of an image after [`Message::Peeked`]
+const MAX_THUMBNAIL: u32 = 4 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Message {
@@ -62,6 +93,32 @@ enum Message {
     },
     Refused {
         reason: String,
+    },
+    /// what the clipboard holds, unless it still holds what `known` (a
+    /// hash) stands for
+    Peek {
+        known: Option<u64>,
+    },
+    /// `None`: it still holds what `known` stands for; the thumbnail of an
+    /// image follows the message (`attachment` bytes)
+    Peeked {
+        seen: Option<ClipboardSeen>,
+        attachment: u32,
+    },
+    /// what the clipboard holds, if it still holds `hash`
+    Fetch {
+        hash: u64,
+    },
+    /// `size` bytes of [`ClipboardKind`] `kind` follow the message
+    Fetched {
+        kind: u8,
+        hash: u64,
+        size: u32,
+    },
+    /// the clipboard held `count` files and folders, which go as a file
+    /// transfer
+    FilesSent {
+        count: u64,
     },
 }
 
@@ -96,6 +153,21 @@ pub(crate) enum ArrangementEvent {
     Lock {
         addr: SocketAddr,
         done: oneshot::Sender<Result<(), String>>,
+    },
+    /// an authorized device asks what the clipboard holds, unless it still
+    /// holds what `known` stands for (then `None`)
+    Peek {
+        addr: SocketAddr,
+        known: Option<u64>,
+        done: oneshot::Sender<Option<ClipboardSeen>>,
+    },
+    /// the authorized device with the certificate `from` asks for what the
+    /// clipboard holds, if it still holds `hash`
+    Fetch {
+        addr: SocketAddr,
+        hash: u64,
+        from: String,
+        done: oneshot::Sender<Result<Fetched, String>>,
     },
 }
 
@@ -162,7 +234,9 @@ impl Arrangement {
     where
         S: AsyncRead + AsyncWrite + Unpin,
     {
-        let message = read(stream).await?;
+        let message = timeout(QUESTION_TIMEOUT, read(stream))
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "no question"))??;
         if !authorized {
             let reason = "this computer is not authorized there".to_owned();
             return write(stream, &Message::Refused { reason }).await;
@@ -196,6 +270,51 @@ impl Arrangement {
                     Err(_) => Some("the screen did not lock in time".into()),
                 };
                 Message::Locked { error }
+            }
+            Message::Peek { known } => {
+                let (done, result) = oneshot::channel();
+                let _ = self
+                    .events
+                    .send(ArrangementEvent::Peek { addr, known, done });
+                let seen = match timeout(PEEK_TIMEOUT, result).await {
+                    Ok(Ok(seen)) => seen,
+                    // nobody to read it: the clipboard is not shared here
+                    Ok(Err(_)) => Some(ClipboardSeen::Hidden),
+                    Err(_) => Some(ClipboardSeen::Unavailable(
+                        "its clipboard did not answer in time".into(),
+                    )),
+                };
+                return write_peeked(stream, seen).await;
+            }
+            Message::Fetch { hash } => {
+                let (done, result) = oneshot::channel();
+                let from = peer.to_owned();
+                let _ = self.events.send(ArrangementEvent::Fetch {
+                    addr,
+                    hash,
+                    from,
+                    done,
+                });
+                match timeout(FETCH_READ_TIMEOUT, result).await {
+                    Ok(Ok(Ok(Fetched::Data(content)))) => {
+                        log::info!(
+                            "clipboard sent to {addr} as it asked: {:?}, {} bytes",
+                            content.kind,
+                            content.data.len()
+                        );
+                        return write_fetched(stream, content).await;
+                    }
+                    Ok(Ok(Ok(Fetched::Files(count)))) => Message::FilesSent {
+                        count: count as u64,
+                    },
+                    Ok(Ok(Err(reason))) => Message::Refused { reason },
+                    Ok(Err(_)) => Message::Refused {
+                        reason: "this computer does not show its clipboard".into(),
+                    },
+                    Err(_) => Message::Refused {
+                        reason: "its clipboard did not answer in time".into(),
+                    },
+                }
             }
             _ => Message::Refused {
                 reason: "unexpected message".into(),
@@ -294,6 +413,60 @@ pub(crate) async fn lock(
     }
 }
 
+/// What the clipboard of the device at one of `addrs` holds, with the
+/// fingerprint of the device that answered; `None` when it still holds what
+/// `known` stands for.
+pub(crate) async fn peek(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+    known: Option<u64>,
+) -> Result<(String, Option<ClipboardSeen>), ArrangeError> {
+    match ask_within(cert, addrs, expected, Message::Peek { known }, TIMEOUT).await {
+        Ok((peer, Message::Peeked { seen, .. }, _)) => Ok((peer, seen)),
+        Ok((_, Message::Refused { reason }, _)) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// what came for [`fetch`]
+#[derive(Debug)]
+pub(crate) enum FetchedHere {
+    Data(Content),
+    /// that many files and folders come as a file transfer
+    Files(u64),
+}
+
+/// What the clipboard of the device at one of `addrs` holds, if it still
+/// holds `hash`, with the fingerprint of the device that answered.
+pub(crate) async fn fetch(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+    hash: u64,
+) -> Result<(String, FetchedHere), ArrangeError> {
+    match ask_within(
+        cert,
+        addrs,
+        expected,
+        Message::Fetch { hash },
+        FETCH_TIMEOUT,
+    )
+    .await
+    {
+        Ok((peer, Message::Fetched { kind, hash, .. }, data)) => {
+            let kind = ClipboardKind::try_from(kind)
+                .map_err(|_| ArrangeError::Failed("unknown kind of content".into()))?;
+            Ok((peer, FetchedHere::Data(Content { kind, data, hash })))
+        }
+        Ok((peer, Message::FilesSent { count }, _)) => Ok((peer, FetchedHere::Files(count))),
+        Ok((_, Message::Refused { reason }, _)) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
 /// An older RustInput closes the connection on a message it does not know:
 /// said so instead of the end of the connection.
 fn older(e: ArrangeError) -> ArrangeError {
@@ -312,6 +485,20 @@ async fn ask(
     expected: Option<String>,
     message: Message,
 ) -> Result<(String, Message), ArrangeError> {
+    ask_within(cert, addrs, expected, message, TIMEOUT)
+        .await
+        .map(|(peer, answer, _)| (peer, answer))
+}
+
+/// `message` to the first of `addrs` that answers within `limit` each, and
+/// its answer with the bytes after it
+async fn ask_within(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+    message: Message,
+    limit: Duration,
+) -> Result<(String, Message, Vec<u8>), ArrangeError> {
     let config = match &expected {
         Some(fingerprint) => tls::client_config(&cert, fingerprint.clone()),
         None => tls::any_server_config(&cert),
@@ -319,7 +506,7 @@ async fn ask(
     .map_err(|e| ArrangeError::Unreachable(format!("TLS: {e}")))?;
     let mut last = ArrangeError::Unreachable("its address is not known yet".into());
     for addr in addrs {
-        match timeout(TIMEOUT, attempt(config.clone(), addr, &message)).await {
+        match timeout(limit, attempt(config.clone(), addr, &message)).await {
             Ok(Ok(answer)) => return Ok(answer),
             Ok(Err(e)) => last = e.into(),
             Err(_) => last = ArrangeError::Unreachable(format!("{addr} does not answer")),
@@ -332,7 +519,7 @@ async fn attempt(
     config: Arc<rustls::ClientConfig>,
     addr: SocketAddr,
     message: &Message,
-) -> io::Result<(String, Message)> {
+) -> io::Result<(String, Message, Vec<u8>)> {
     let tcp = TcpStream::connect(addr).await?;
     tcp.set_nodelay(true)?;
     let mut stream = TlsConnector::from(config)
@@ -348,8 +535,71 @@ async fn attempt(
     let peer = tls::peer_fingerprint(stream.get_ref().1.peer_certificates())
         .ok_or_else(|| invalid("no certificate"))?;
     write(&mut stream, message).await?;
-    let answer = read(&mut stream).await?;
-    Ok((peer, answer))
+    let (answer, attachment) = read_answer(&mut stream).await?;
+    Ok((peer, answer, attachment))
+}
+
+/// an answer with the bytes after it, put back in place for a thumbnail
+async fn read_answer<S: AsyncRead + Unpin>(stream: &mut S) -> io::Result<(Message, Vec<u8>)> {
+    let mut answer = read(stream).await?;
+    let size = match &answer {
+        Message::Peeked { attachment, .. } if *attachment > MAX_THUMBNAIL => {
+            return Err(invalid("thumbnail too large"));
+        }
+        Message::Peeked { attachment, .. } => *attachment as usize,
+        Message::Fetched { size, .. } if *size as usize > MAX_CONTENT_SIZE => {
+            return Err(invalid("clipboard content too large"));
+        }
+        Message::Fetched { size, .. } => *size as usize,
+        _ => 0,
+    };
+    let mut bytes = vec![0; size];
+    stream.read_exact(&mut bytes).await?;
+    if let Message::Peeked {
+        seen:
+            Some(ClipboardSeen::Holds {
+                peek: ClipboardPeek::Image { thumbnail, .. },
+                ..
+            }),
+        ..
+    } = &mut answer
+    {
+        *thumbnail = std::mem::take(&mut bytes);
+    }
+    Ok((answer, bytes))
+}
+
+/// [`Message::Peeked`], the thumbnail of an image after it
+async fn write_peeked<S: AsyncWrite + Unpin>(
+    stream: &mut S,
+    mut seen: Option<ClipboardSeen>,
+) -> io::Result<()> {
+    let mut thumbnail = match &mut seen {
+        Some(ClipboardSeen::Holds {
+            peek: ClipboardPeek::Image { thumbnail, .. },
+            ..
+        }) => std::mem::take(thumbnail),
+        _ => Vec::new(),
+    };
+    if thumbnail.len() > MAX_THUMBNAIL as usize {
+        thumbnail.clear();
+    }
+    let attachment = thumbnail.len() as u32;
+    write(stream, &Message::Peeked { seen, attachment }).await?;
+    stream.write_all(&thumbnail).await?;
+    stream.flush().await
+}
+
+/// [`Message::Fetched`], the content after it
+async fn write_fetched<S: AsyncWrite + Unpin>(stream: &mut S, content: Content) -> io::Result<()> {
+    let message = Message::Fetched {
+        kind: content.kind.into(),
+        hash: content.hash,
+        size: content.data.len() as u32,
+    };
+    write(stream, &message).await?;
+    stream.write_all(&content.data).await?;
+    stream.flush().await
 }
 
 fn invalid(message: &str) -> io::Error {
@@ -480,6 +730,212 @@ mod tests {
             rx.recv().await.unwrap(),
             ArrangementEvent::Identify { .. }
         ));
+    }
+
+    /// one question over an in-memory stream, the answer with what follows
+    /// it, the service answering with `service`
+    async fn ask_service(
+        arrangement: &Arrangement,
+        rx: &mut local_channel::mpsc::Receiver<ArrangementEvent>,
+        message: Message,
+        authorized: bool,
+        service: impl FnOnce(ArrangementEvent),
+    ) -> (Message, Vec<u8>) {
+        let (mut ours, mut theirs) = tokio::io::duplex(64 * 1024);
+        let addr: SocketAddr = "192.168.1.51:4242".parse().unwrap();
+        let serving = arrangement.serve(&mut theirs, "peer", authorized, addr);
+        let asking = async {
+            write(&mut ours, &message).await.unwrap();
+            read_answer(&mut ours).await.unwrap()
+        };
+        let answering = async {
+            if authorized {
+                service(rx.recv().await.unwrap());
+            }
+        };
+        let (served, answer, ()) = tokio::join!(serving, asking, answering);
+        served.unwrap();
+        answer
+    }
+
+    #[tokio::test]
+    async fn tells_authorized_devices_what_the_clipboard_holds() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        // a stranger hears nothing, the service is not even asked
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Peek { known: None },
+            false,
+            |_| {},
+        )
+        .await;
+        assert!(matches!(answer, Message::Refused { .. }));
+        assert!(timeout(Duration::from_millis(50), rx.recv()).await.is_err());
+
+        // an image: its thumbnail comes after the message
+        let thumbnail: Vec<u8> = (0..=255).cycle().take(70_000).collect();
+        let image = ClipboardSeen::Holds {
+            hash: 42,
+            peek: ClipboardPeek::Image {
+                width: 1920,
+                height: 1080,
+                thumbnail: thumbnail.clone(),
+            },
+        };
+        let sent = image.clone();
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Peek { known: Some(7) },
+            true,
+            move |event| match event {
+                ArrangementEvent::Peek { known, done, .. } => {
+                    assert_eq!(known, Some(7));
+                    let _ = done.send(Some(sent));
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        match answer {
+            Message::Peeked { seen, attachment } => {
+                assert_eq!(attachment as usize, thumbnail.len());
+                assert_eq!(seen, Some(image));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+
+        // unchanged, and nobody to read it (no clipboard sharing here)
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Peek { known: Some(42) },
+            true,
+            |event| match event {
+                ArrangementEvent::Peek { done, .. } => {
+                    let _ = done.send(None);
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        assert!(matches!(answer, Message::Peeked { seen: None, .. }));
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Peek { known: None },
+            true,
+            drop,
+        )
+        .await;
+        assert!(matches!(
+            answer,
+            Message::Peeked {
+                seen: Some(ClipboardSeen::Hidden),
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn sends_the_clipboard_to_authorized_devices_that_ask() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Fetch { hash: 1 },
+            false,
+            |_| {},
+        )
+        .await;
+        assert!(matches!(answer, Message::Refused { .. }));
+
+        // a text comes after the answer, as it is
+        let text = "olá ".repeat(100_000).into_bytes();
+        let content = Content {
+            kind: ClipboardKind::Text,
+            data: text.clone(),
+            hash: 9,
+        };
+        let (answer, data) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Fetch { hash: 9 },
+            true,
+            move |event| match event {
+                ArrangementEvent::Fetch {
+                    hash, from, done, ..
+                } => {
+                    assert_eq!((hash, from.as_str()), (9, "peer"));
+                    let _ = done.send(Ok(Fetched::Data(content)));
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        match answer {
+            Message::Fetched { kind, hash, size } => {
+                assert_eq!(ClipboardKind::try_from(kind).unwrap(), ClipboardKind::Text);
+                assert_eq!((hash, size as usize), (9, text.len()));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(data, text);
+
+        // files go as a transfer; a changed clipboard is said so
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Fetch { hash: 5 },
+            true,
+            |event| match event {
+                ArrangementEvent::Fetch { done, .. } => {
+                    let _ = done.send(Ok(Fetched::Files(3)));
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        assert!(matches!(answer, Message::FilesSent { count: 3 }));
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Fetch { hash: 5 },
+            true,
+            |event| match event {
+                ArrangementEvent::Fetch { done, .. } => {
+                    let _ = done.send(Err("the clipboard changed meanwhile".into()));
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        match answer {
+            Message::Refused { reason } => assert_eq!(reason, "the clipboard changed meanwhile"),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn answers_that_announce_too_much_are_refused() {
+        for answer in [
+            Message::Peeked {
+                seen: None,
+                attachment: MAX_THUMBNAIL + 1,
+            },
+            Message::Fetched {
+                kind: 0,
+                hash: 0,
+                size: MAX_CONTENT_SIZE as u32 + 1,
+            },
+        ] {
+            let (mut ours, mut theirs) = tokio::io::duplex(1024);
+            write(&mut theirs, &answer).await.unwrap();
+            assert!(read_answer(&mut ours).await.is_err());
+        }
     }
 
     #[tokio::test]
