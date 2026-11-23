@@ -32,7 +32,8 @@
               <object class="GtkLabel" id="intro">
                 <property name="label" translatable="yes">A computer that is not authorized is trying to connect. Do you want to authorize it?</property>
                 <property name="width-request">100</property>
-                <property name="wrap">word-wrap</property>
+                <property name="max-width-chars">64</property>
+                <property name="wrap">True</property>
               </object>
             </child>
             <child>
@@ -68,7 +69,7 @@
                 <child>
                   <object class="GtkLabel">
                     <property name="label" translatable="yes">Or, on the computer that is trying to connect, open RustInput, click “Enter code…” next to this computer and enter:</property>
-                    <property name="wrap">word-wrap</property>
+                    <property name="wrap">True</property>
                     <property name="width-request">100</property>
                   </object>
                 </child>
@@ -83,7 +84,7 @@
                 <child>
                   <object class="GtkLabel">
                     <property name="label" translatable="yes">That authorizes both computers on each other.</property>
-                    <property name="wrap">word-wrap</property>
+                    <property name="wrap">True</property>
                     <style>
                       <class name="dim-label"/>
                     </style>
