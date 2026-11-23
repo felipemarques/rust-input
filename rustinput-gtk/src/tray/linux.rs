@@ -13,9 +13,10 @@ use crate::i18n::tr;
 
 struct RustInputTray {
     actions: Sender<TrayAction>,
-    icons: Vec<ksni::Icon>,
-    /// the same, grey with a pause sign, while paused
-    paused_icons: Vec<ksni::Icon>,
+    /// the icon in every size, in its four looks: `[paused][new version]`
+    /// (grey with a pause sign while paused, a green sign with an arrow up
+    /// when a new version is out)
+    icons: [[Vec<ksni::Icon>; 2]; 2],
     /// name and version, shown in the tooltip and at the top of the menu
     label: String,
     /// the file transfers
@@ -39,10 +40,9 @@ impl ksni::Tray for RustInputTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        match self.transfers.paused {
-            Some(true) => self.paused_icons.clone(),
-            _ => self.icons.clone(),
-        }
+        let paused = self.transfers.paused == Some(true);
+        let new = self.transfers.update.is_some();
+        self.icons[paused as usize][new as usize].clone()
     }
 
     fn tool_tip(&self) -> ToolTip {
@@ -53,6 +53,9 @@ impl ksni::Tray for RustInputTray {
             .unwrap_or_else(|| tr("Mouse and keyboard sharing").into());
         if self.transfers.paused == Some(true) {
             description = format!("{}\n{description}", paused_status());
+        }
+        if let Some(update) = &self.transfers.update_status {
+            description = format!("{description}\n{update}");
         }
         ToolTip {
             title: self.label.clone(),
@@ -200,12 +203,19 @@ impl Drop for Handle {
 /// shows the tray icon, `None` if the desktop has no system tray
 pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle> {
     let originals = icon::icons();
-    let paused_icons = originals.iter().map(icon::paused).map(argb).collect();
-    let icons = originals.into_iter().map(argb).collect();
+    let looks = |paused, new| {
+        originals
+            .iter()
+            .map(|original| argb(icon::look(original, paused, new)))
+            .collect()
+    };
+    let icons = [
+        [looks(false, false), looks(false, true)],
+        [looks(true, false), looks(true, true)],
+    ];
     let tray = RustInputTray {
         actions,
         icons,
-        paused_icons,
         label,
         transfers: Summary::default(),
     };

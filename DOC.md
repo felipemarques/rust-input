@@ -571,6 +571,47 @@ in a line under the header bar (until "Later", for that version) and in the tray
 (the installer puts it there), which asks for administrator rights and installs; elsewhere
 **Download** opens the page of the release.
 
+### The sign on the tray icon and the notification (0.32.0)
+
+The tray icon shows a new version too: `tray::icon::new_version` draws a green disc with a
+white arrow up at the top right of the logo, with a thin transparent gap around it so it
+stands out of the orange monitors (`icon::look` combines it with the pause sign, which is at
+the bottom right). The tooltip gets the line "RustInput 0.32.0 is out" and the menu the item
+that gets it. On Linux `ksni` gets the four looks of every size at once; on Windows the icon
+changes when the look does.
+
+A notification of the system tells it once per version: `notification::to_tell` tells a
+version newer than this one, looked for because the user wants it (`check_updates`), not
+being asked about right now, and not told about yet. The service keeps the version told about
+in `config.toml` (`update_notified`, through `FrontendRequest::UpdateNotified`, sent back in
+`UpdateState::notified`), so starting again does not tell it again, and a newer version is
+told about again. When the window is in front (visible and active) there is no notification,
+as the window says it already, but the version counts as told.
+
+- **Linux and macOS**: `gio::Notification` through the `GApplication`, so the notification
+  service of the desktop (`org.freedesktop.Notifications` on Cinnamon, KDE and the others, the
+  portal in a sandbox, `org.gtk.Notifications` on GNOME) or the notification center of macOS.
+  The icon is the themed `software-update-available` (the freedesktop backend of GLib sends it
+  as `image-path`) and the name "RustInput" (`glib::set_application_name`). Clicking it runs
+  `app.show-window`, its button (**Download**) `app.install-update`.
+- **Windows**: GLib has no notifications there, so it is a balloon of the tray icon
+  (`Shell_NotifyIconW` with `NIF_INFO`, `NIIF_RESPECT_QUIET_TIME`), which Windows 10 and 11
+  show as a notification of the app. tray-icon does not offer balloons: the icon is told
+  apart by its window (`TrayIcon::window_handle`) and a number tray-icon counts from 1, so the
+  first number for which Windows takes `NIM_MODIFY` is it. A subclass of that window sees
+  `NIN_BALLOONUSERCLICK` in the callback message of tray-icon (`WM_USER_TRAYICON`, 6002 in
+  tray-icon 0.26: check it when updating tray-icon) and shows the window. A test on the
+  Windows runners of CI shows a balloon when there is a taskbar.
+
+Opening the release page with the window never shown (RustInput started into the tray with
+`RUSTINPUT_HIDDEN=1`) crashed GTK on X11, which asked the window without a surface for its
+handle: `Window::open_uri` gives GTK a parent only while the window is on screen. The tray
+item of 0.27.0 had the same crash.
+
+Tested end to end by `update-notice.sh` (in the folder of the end-to-end tests), with a fake
+notification service that logs the notifications and clicks them, and a fake browser. Debug
+builds take the latest version from `RUSTINPUT_TEST_LATEST` instead of GitHub.
+
 ## Capture on Windows
 
 The Windows backend watches the input with low level hooks on a thread of

@@ -36,7 +36,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🔓 Type the password on the lock screen and the screen to log on, answer the prompts of User Account Control | ✅ ¹⁵ | — | — | — |
 | 🌗 Light or dark windows, or as the system (`theme`) | ✅ ⁸ | ✅ ⁸ | ✅ ² | ✅ ² |
 | 🌍 In English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文 and 日本語 | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
-| ⬆️ Tells of new versions, if you want it to; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
+| ⬆️ Tells of new versions, if you want it to: a sign on the tray icon and a notification; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
@@ -352,11 +352,20 @@ language has every text (see [DOC.md](DOC.md#languages)). A new language is one 
 
 The first time the window opens, it asks whether RustInput should look for new versions. If so, it asks GitHub for the
 number of the latest release when it starts and every 12 hours, and nothing else (see the
-[privacy policy](#privacy-policy)). When there is a newer one, a line under the header bar and an item of the tray menu
-say so. On Windows, **Update now** runs the updater the installer put next to RustInput (`update-rustinput.ps1`, the
+[privacy policy](#privacy-policy)). When there is a newer one:
+
+- the tray icon gets a green sign with an arrow up, its tooltip says "RustInput 0.32.0 is out" and its menu has
+  **Update to RustInput 0.32.0…**;
+- a notification of the system says so, once for each version, also after RustInput starts again. It does not show
+  when the window is in front, because the window says it already. Clicking it shows the window; on Linux and macOS
+  its button **Download** opens the release page. On Windows it is a notification of the tray icon;
+- a line under the header bar of the window says so, until **Later**.
+
+On Windows, **Update now** runs the updater the installer put next to RustInput (`update-rustinput.ps1`, the
 Start menu's "Update RustInput"), which asks for administrator rights once. Elsewhere, **Download** opens the release
 page. **Preferences > Updates** switches it on or off (`check_updates` in `config.toml`) and asks right away with
-**Check now**.
+**Check now**. Without `check_updates` there are no notifications, but **Check now** still shows a new version on the
+tray icon.
 
 ## Authorizing computers
 
@@ -781,6 +790,8 @@ Click the icon (or choose "Show RustInput" in its menu) to bring the window back
 icon menu or in the window menu to stop RustInput. Starting RustInput again while it runs in the tray also shows the window.
 The menu also lists the running and recent file transfers with their progress, can cancel them, turns
 "Send copied files automatically" on and off, and opens the transfers window ("File transfers…").
+The icon turns grey with an orange pause sign while RustInput is [paused](#pausing), and gets a green sign with an
+arrow up when a [new version](#updates) is out.
 On macOS the same is done by the menu bar item.
 
 Without a system tray, closing the window quits RustInput as before.
@@ -899,6 +910,9 @@ language = "pt-BR"
 # asks the first time when this is missing)
 check_updates = true
 
+# written by RustInput: the new version a notification told about, so it tells it once
+# update_notified = "0.32.0"
+
 # paused from the tray icon, the window or the radial menu: the mouse and keyboard
 # stay on this computer and no other one controls it (only written while paused)
 # paused = true
@@ -954,6 +968,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Bandwidth usage measurement and visualization
 - [x] Clipboard support (text and images)
 - [x] System tray icon, closing the window keeps RustInput running
+- [x] New versions: a sign on the tray icon and a notification of the system, once per version
 - [x] Pause from the tray icon, the window or the radial menu, seen by the other computers
 - [x] Lock the screen of another computer, or of all of them, from the radial menu
 - [x] Windows: the lock screen, the screen to log on and the prompts of User Account Control

@@ -257,6 +257,7 @@ impl Service {
         let updates = UpdateState {
             check: config.check_updates(),
             url: update::RELEASES_PAGE.to_owned(),
+            notified: config.update_notified(),
             ..Default::default()
         };
         let (update_results_tx, update_results) = channel();
@@ -466,12 +467,21 @@ impl Service {
                     self.updates = UpdateState {
                         check: Some(false),
                         url: update::RELEASES_PAGE.to_owned(),
+                        notified: self.updates.notified.take(),
                         ..Default::default()
                     };
                 }
                 self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
             }
             FrontendRequest::CheckUpdates => self.check_updates(),
+            FrontendRequest::UpdateNotified(version) => {
+                if self.updates.notified.as_ref() != Some(&version) {
+                    self.config.set_update_notified(version.clone());
+                    self.save_config();
+                    self.updates.notified = Some(version);
+                    self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+                }
+            }
             FrontendRequest::SetPaused(paused) => self.set_paused(paused),
             FrontendRequest::SendFiles(paths) => match &self.files {
                 Some(files) => files.send_now(paths),

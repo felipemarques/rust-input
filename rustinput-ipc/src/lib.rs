@@ -332,6 +332,11 @@ pub struct UpdateState {
     pub url: String,
     /// why the last question failed
     pub error: Option<String>,
+    /// the new version the user was told about with a notification of the
+    /// system, kept in the configuration: once per version
+    /// ([`FrontendRequest::UpdateNotified`])
+    #[serde(default)]
+    pub notified: Option<String>,
 }
 
 /// One second of the input channel with a device: what went over the
@@ -519,6 +524,10 @@ pub enum FrontendRequest {
     SetCheckUpdates(bool),
     /// ask GitHub for the latest version now
     CheckUpdates,
+    /// the user was told about the new version with a notification of the
+    /// system (or saw it in the window), so it is not told again; kept in
+    /// the configuration ([`UpdateState::notified`])
+    UpdateNotified(String),
     /// Pause RustInput on this computer, or let it go on: paused, the mouse
     /// and keyboard stay here and no other computer controls this one. Kept
     /// in the configuration ([`FrontendEvent::Paused`]).

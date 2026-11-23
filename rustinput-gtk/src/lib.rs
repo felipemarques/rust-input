@@ -11,6 +11,7 @@ mod link_stats;
 mod macos_privacy;
 #[cfg(target_os = "macos")]
 mod macos_status_item;
+mod notification;
 mod transfers;
 #[cfg(not(target_os = "macos"))]
 mod tray;
@@ -131,6 +132,8 @@ fn gtk_main() -> glib::ExitCode {
     // the windows in the language of the texts
     i18n::register_windows();
 
+    // the name notifications show
+    glib::set_application_name("RustInput");
     let app = Application::builder()
         .application_id("io.github.felipemarques.RustInput")
         .build();
@@ -382,6 +385,22 @@ fn build_ui(app: &Application) {
         });
     }
 
+    // what the notification about a new version does when clicked
+    let show_window = gio::SimpleAction::new(notification::SHOW_WINDOW, None);
+    show_window.connect_activate(clone!(
+        #[weak]
+        window,
+        move |_, _| window.present()
+    ));
+    app.add_action(&show_window);
+    let install_update = gio::SimpleAction::new(notification::INSTALL_UPDATE, None);
+    install_update.connect_activate(clone!(
+        #[weak]
+        window,
+        move |_, _| window.install_update()
+    ));
+    app.add_action(&install_update);
+
     window.setup_theme(THEME.get().copied().unwrap_or_default());
     let transfers = transfers::Transfers::new(&window);
     window.setup_file_settings(clone!(
@@ -406,6 +425,8 @@ fn build_ui(app: &Application) {
         async move {
             // received transfers already announced in the window
             let mut announced = std::collections::HashSet::new();
+            // the new version told about with a notification of the system
+            let mut told: Option<String> = None;
             // the arrangement, with the monitors of the other computers
             window.request(FrontendRequest::Arrangement);
             loop {
@@ -486,6 +507,24 @@ fn build_ui(app: &Application) {
                             tray.show_update(
                                 state.available.then(|| state.latest.clone()).flatten(),
                             );
+                        }
+                        if let Some(version) = notification::to_tell(&state, told.as_deref()) {
+                            // the window in front shows it already
+                            if !(window.is_visible() && window.is_active()) {
+                                #[cfg(windows)]
+                                if let Some(tray) = &tray {
+                                    tray.notify(
+                                        &notification::title(&version),
+                                        &notification::text(),
+                                    );
+                                }
+                                #[cfg(not(windows))]
+                                if let Some(app) = window.application() {
+                                    notification::send(&app, &version);
+                                }
+                            }
+                            window.request(FrontendRequest::UpdateNotified(version.clone()));
+                            told = Some(version);
                         }
                         window.set_updates(state);
                     }

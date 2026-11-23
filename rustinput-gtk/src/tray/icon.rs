@@ -1,8 +1,9 @@
 //! The tray icon, embedded as PNG in a few sizes.
 //!
 //! The files are rendered from the logo by `scripts/render-icons.py`, so
-//! no SVG renderer is needed at runtime. The icon of a paused RustInput is
-//! made from them ([`paused`]).
+//! no SVG renderer is needed at runtime. The icon of a paused RustInput
+//! ([`paused`]) and the one telling that a new version is out
+//! ([`new_version`]) are made from them.
 
 use std::io::Cursor;
 
@@ -16,6 +17,7 @@ const PNGS: [&[u8]; 6] = [
 ];
 
 /// an image as 8 bit RGBA, row by row
+#[derive(Clone)]
 pub(crate) struct Rgba {
     pub(crate) width: u32,
     pub(crate) height: u32,
@@ -47,50 +49,118 @@ pub(crate) fn icon(size: u32) -> Option<Rgba> {
 
 /// the orange of the RustInput logo
 const ACCENT: [f32; 3] = [232.0, 105.0, 46.0];
+/// the green of the sign of a new version
+const NEW_VERSION: [f32; 3] = [46.0, 160.0, 67.0];
+
+/// a corner of the icon, for a sign
+#[derive(Clone, Copy)]
+enum Corner {
+    TopRight,
+    BottomRight,
+}
 
 /// The icon of a paused RustInput: grey and fainter, with a pause sign (two
 /// white bars on an orange disc) at the bottom right.
 pub(crate) fn paused(icon: &Rgba) -> Rgba {
-    const SAMPLES: usize = 4;
-    let (w, h) = (icon.width as usize, icon.height as usize);
     let mut pixels = icon.pixels.clone();
     for p in pixels.as_chunks_mut::<4>().0 {
         let grey = (0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32) as u8;
         *p = [grey, grey, grey, (p[3] as f32 * 0.55) as u8];
     }
+    let grey = Rgba {
+        width: icon.width,
+        height: icon.height,
+        pixels,
+    };
+    sign(&grey, Corner::BottomRight, 0.27, ACCENT, 0.0, |x, y| {
+        y.abs() <= 0.5 && (0.17..=0.47).contains(&x.abs())
+    })
+}
+
+/// The icon when a new version of RustInput is out: a white arrow up on a
+/// green disc at the top right, with a thin gap around it so it stands out
+/// of the monitors of the logo.
+pub(crate) fn new_version(icon: &Rgba) -> Rgba {
+    sign(icon, Corner::TopRight, 0.24, NEW_VERSION, 0.06, |x, y| {
+        let head = (-0.64..=-0.02).contains(&y) && x.abs() <= 0.58 * (y + 0.64) / 0.62;
+        let stem = (-0.1..=0.62).contains(&y) && x.abs() <= 0.19;
+        head || stem
+    })
+}
+
+/// the icon in its four looks: paused or not, with a new version or not
+pub(crate) fn look(icon: &Rgba, paused: bool, new: bool) -> Rgba {
+    let icon = match paused {
+        true => self::paused(icon),
+        false => icon.clone(),
+    };
+    match new {
+        true => new_version(&icon),
+        false => icon,
+    }
+}
+
+/// `icon` with a disc of `color` in `corner`, `radius` times the size of
+/// the icon, white where `white` says (given the point in radii from the
+/// centre of the disc, y down), and a transparent gap of `gap` times the
+/// size of the icon around the disc
+fn sign(
+    icon: &Rgba,
+    corner: Corner,
+    radius: f32,
+    color: [f32; 3],
+    gap: f32,
+    white: impl Fn(f32, f32) -> bool,
+) -> Rgba {
+    const SAMPLES: usize = 4;
+    let (w, h) = (icon.width as usize, icon.height as usize);
+    let mut pixels = icon.pixels.clone();
     let size = w.min(h) as f32;
-    let r = size * 0.27;
-    let (cx, cy) = (w as f32 - r - size * 0.01, h as f32 - r - size * 0.01);
-    let (bar, half, gap) = (r * 0.3, r * 0.5, r * 0.17);
+    let r = size * radius;
+    let cut = r + size * gap;
+    let cx = w as f32 - r - size * 0.01;
+    let cy = match corner {
+        Corner::TopRight => r + size * 0.01,
+        Corner::BottomRight => h as f32 - r - size * 0.01,
+    };
     for y in 0..h {
         for x in 0..w {
-            // how much of the pixel the disc and the bars cover
-            let (mut disc, mut bars) = (0.0f32, 0.0f32);
+            // how much of the pixel the disc, its white sign and the gap
+            // around it cover
+            let (mut disc, mut marked, mut gone) = (0.0f32, 0.0f32, 0.0f32);
             for sy in 0..SAMPLES {
                 for sx in 0..SAMPLES {
                     let dx = x as f32 + (sx as f32 + 0.5) / SAMPLES as f32 - cx;
                     let dy = y as f32 + (sy as f32 + 0.5) / SAMPLES as f32 - cy;
-                    if dx * dx + dy * dy > r * r {
+                    let distance = dx * dx + dy * dy;
+                    if distance <= cut * cut {
+                        gone += 1.0;
+                    }
+                    if distance > r * r {
                         continue;
                     }
                     disc += 1.0;
-                    let across = dx.abs();
-                    if dy.abs() <= half && across >= gap && across <= gap + bar {
-                        bars += 1.0;
+                    if white(dx / r, dy / r) {
+                        marked += 1.0;
                     }
                 }
             }
-            if disc == 0.0 {
+            if gone == 0.0 {
                 continue;
             }
-            let white = bars / disc;
-            let coverage = disc / (SAMPLES * SAMPLES) as f32;
+            let all = (SAMPLES * SAMPLES) as f32;
             let at = (y * w + x) * 4;
             let p = &mut pixels[at..at + 4];
-            let below = p[3] as f32 / 255.0;
+            let below = p[3] as f32 / 255.0 * (1.0 - (gone - disc) / all);
+            if disc == 0.0 {
+                p[3] = (below * 255.0).round() as u8;
+                continue;
+            }
+            let white = marked / disc;
+            let coverage = disc / all;
             let alpha = coverage + below * (1.0 - coverage);
-            for (k, accent) in ACCENT.iter().enumerate() {
-                let color = accent + (255.0 - accent) * white;
+            for (k, base) in color.iter().enumerate() {
+                let color = base + (255.0 - base) * white;
                 let mixed = color * coverage + p[k] as f32 * below * (1.0 - coverage);
                 p[k] = (mixed / alpha.max(f32::EPSILON)).round().clamp(0.0, 255.0) as u8;
             }
@@ -161,6 +231,43 @@ mod tests {
             for p in paused.pixels.as_chunks::<4>().0.iter().take(w * h / 3) {
                 assert_eq!((p[0], p[1]), (p[1], p[2]));
             }
+        }
+    }
+
+    #[test]
+    fn a_new_version_shows_as_a_green_sign_with_a_white_arrow() {
+        for icon in icons() {
+            let new = new_version(&icon);
+            let (w, h) = (icon.width as usize, icon.height as usize);
+            let pixel = |x: usize, y: usize| {
+                let at = (y * w + x) * 4;
+                &new.pixels[at..at + 4]
+            };
+            let size = w as f32;
+            let r = size * 0.24;
+            let (cx, cy) = (size - r - size * 0.01, r + size * 0.01);
+            // green and opaque at the edge of the disc, white in the stem
+            let edge = pixel((cx + r * 0.8) as usize, cy as usize);
+            assert!(
+                edge[1] > edge[0] + 60 && edge[1] > edge[2] + 60 && edge[3] > 200,
+                "{edge:?}"
+            );
+            let stem = pixel(cx as usize, (cy + r * 0.35) as usize);
+            assert!(stem.iter().all(|&c| c > 200), "{stem:?}");
+            // the left of the logo stays as it was
+            for y in 0..h {
+                let (row, left) = (y * w * 4, w / 3 * 4);
+                assert_eq!(new.pixels[row..row + left], icon.pixels[row..row + left]);
+            }
+        }
+    }
+
+    #[test]
+    fn paused_with_a_new_version_shows_both_signs() {
+        for icon in icons() {
+            let both = look(&icon, true, true);
+            assert_eq!(both.pixels, new_version(&paused(&icon)).pixels);
+            assert_eq!(look(&icon, false, false).pixels, icon.pixels);
         }
     }
 
