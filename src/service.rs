@@ -1070,6 +1070,7 @@ impl Service {
         if files {
             add(self.texts.transfers(), Action::ShowTransfers);
         }
+        add(self.texts.clipboards(), Action::ShowClipboards);
         add(self.texts.window(), Action::ShowWindow);
         self.radial.set_items(items);
     }
@@ -1100,6 +1101,7 @@ impl Service {
                 self.lock_screens(clients, true);
             }
             Action::ShowTransfers => self.notify_frontend(FrontendEvent::ShowTransfers),
+            Action::ShowClipboards => self.notify_frontend(FrontendEvent::ShowClipboardsTab),
             Action::ShowWindow => self.notify_frontend(FrontendEvent::ShowWindow),
         }
     }

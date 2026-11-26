@@ -560,6 +560,7 @@ fn build_ui(app: &Application) {
                         window.set_keep_clipboard_history(keep)
                     }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
+                    FrontendEvent::ShowClipboardsTab => window.show_clipboards(),
                     FrontendEvent::FileOptions(options) => {
                         window.set_file_options(options);
                         transfers_window.set_options(options);

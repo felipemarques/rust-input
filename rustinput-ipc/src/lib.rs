@@ -499,6 +499,9 @@ pub enum FrontendEvent {
     ShowWindow,
     /// show the window of the file transfers (picked in the radial menu)
     ShowTransfers,
+    /// show the main window on its Clipboards tab (picked in the radial menu;
+    /// [`FrontendEvent::ShowClipboard`] is whether the others see this one)
+    ShowClipboardsTab,
     /// The computer `name` (the client `handle`) answered with a certificate
     /// that is not authorized here: no input goes to it until `fingerprint`
     /// is authorized (or the two are paired with a code).

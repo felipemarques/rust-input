@@ -47,6 +47,8 @@ pub(crate) enum Action {
     /// lock the screens of this device and of the clients
     LockAllScreens,
     ShowTransfers,
+    /// the main window on its Clipboards tab
+    ShowClipboards,
     ShowWindow,
 }
 
@@ -133,6 +135,10 @@ impl Texts {
 
     pub(crate) fn transfers(&self) -> String {
         tr("File transfers").to_owned()
+    }
+
+    pub(crate) fn clipboards(&self) -> String {
+        tr("Clipboards").to_owned()
     }
 
     pub(crate) fn window(&self) -> String {
@@ -292,5 +298,6 @@ mod tests {
         assert_eq!(texts.go_to("xeon"), "Go to xeon");
         assert_eq!(texts.lock(true), "Free the pointer");
         assert_eq!(texts.lock_screen("laptop"), "Lock laptop");
+        assert_eq!(texts.clipboards(), "Clipboards");
     }
 }
