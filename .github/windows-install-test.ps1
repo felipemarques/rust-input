@@ -206,7 +206,10 @@ function Wait-DaemonOwner([string]$Label, [string]$User, [int]$Seconds = 30) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
         Start-Sleep -Milliseconds 500
-        $owners = @(Get-Daemon | ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User })
+        # a daemon that ends meanwhile (the service restarting it) is no owner
+        $owners = @(Get-Daemon | ForEach-Object {
+            try { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner -ErrorAction Stop).User } catch { }
+        })
     } while (($owners.Count -ne 1 -or $owners[0] -ne $User) -and (Get-Date) -lt $deadline)
     if ($owners.Count -ne 1 -or $owners[0] -ne $User) {
         Fail "${Label}: the daemon runs as '$($owners -join ', ')', not $User"
