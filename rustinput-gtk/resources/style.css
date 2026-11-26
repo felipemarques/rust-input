@@ -64,6 +64,16 @@ picture.clipboard-image {
     border-radius: 8px;
 }
 
+/* the thumbnail of an image in the history */
+picture.clipboard-history-image {
+    border-radius: 4px;
+}
+
+/* "History · 4 copies before" over the list */
+label.clipboard-history-title {
+    font-size: 0.9em;
+}
+
 /* RustInput paused on this computer */
 .pause-banner {
     padding: 8px 16px;

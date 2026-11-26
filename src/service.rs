@@ -22,9 +22,9 @@ use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, ClipboardSeen, DEFAULT_PORT, EdgeLink, FileOptions,
-    FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError, LinkStats, Position, Span,
-    Status, Theme, TransferInfo, UpdateState,
+    AsyncFrontendListener, ClientHandle, ClipboardHistory, ClipboardSeen, DEFAULT_PORT, EdgeLink,
+    FileOptions, FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError, LinkStats,
+    Position, Span, Status, Theme, TransferInfo, UpdateState,
     layout::{ArrangementView, Layout, Machine, Monitor, Peer as ArrangedPeer},
 };
 use std::{
@@ -147,6 +147,11 @@ pub struct Service {
     clipboard_seen: HashMap<Option<ClientHandle>, (String, ClipboardSeen)>,
     /// the clipboards being asked about
     clipboard_peeking: HashSet<Option<ClientHandle>>,
+    /// the histories of the clipboards with their versions, as the window
+    /// knows them
+    clipboard_histories: HashMap<Option<ClientHandle>, (u64, ClipboardHistory)>,
+    /// this computer keeps a history of its clipboard
+    keep_clipboard_history: bool,
     /// the certificates the clients answered with about their clipboard
     clipboard_fingerprints: HashMap<ClientHandle, String>,
     clipboard_results: Receiver<ClipboardResult>,
@@ -253,7 +258,14 @@ impl Service {
         let files = clipboard.files_enabled().then(|| file_channel.clone());
         let (pair_results_tx, pair_results) = channel();
         let (notices_tx, notices) = channel();
-        clipboard::spawn(&clipboard, clipboard_rx, links, files.clone(), notices_tx);
+        clipboard::spawn(
+            &clipboard,
+            clipboard_rx,
+            links,
+            files.clone(),
+            notices_tx,
+            config.clipboard_history(),
+        );
         let radial = Menu::default();
         let (radial_tx, radial_actions) = tokio::sync::mpsc::unbounded_channel();
         if config.radial_menu() {
@@ -284,6 +296,7 @@ impl Service {
         let (update_results_tx, update_results) = channel();
         let (clipboard_results_tx, clipboard_results) = channel();
         let show_clipboard = config.show_clipboard();
+        let keep_clipboard_history = config.clipboard_history() > 0;
         let service = Self {
             config,
             capture,
@@ -335,6 +348,8 @@ impl Service {
             show_clipboard,
             clipboard_seen: HashMap::new(),
             clipboard_peeking: HashSet::new(),
+            clipboard_histories: HashMap::new(),
+            keep_clipboard_history,
             clipboard_fingerprints: HashMap::new(),
             clipboard_results,
             clipboard_results_tx,
@@ -528,6 +543,8 @@ impl Service {
             FrontendRequest::PeekClipboards { all } => self.peek_clipboards(all),
             FrontendRequest::BringClipboard { handle, hash } => self.bring_clipboard(handle, hash),
             FrontendRequest::SetShowClipboard(show) => self.set_show_clipboard(show),
+            FrontendRequest::SetClipboardHistory(keep) => self.set_clipboard_history(keep),
+            FrontendRequest::ClearClipboardHistory => self.clear_clipboard_history(),
             FrontendRequest::RemoveReceivedFiles => {
                 if let Some(files) = &self.files {
                     files.remove_received();
@@ -618,6 +635,9 @@ impl Service {
             self.notify_frontend(FrontendEvent::Theme(theme));
         }
         self.show_clipboard = self.config.show_clipboard();
+        let history = self.config.clipboard_history();
+        self.keep_clipboard_history = history > 0;
+        self.clipboard.notify(ClipboardMsg::HistorySize(history));
         self.sync_frontend();
     }
 
@@ -820,6 +840,9 @@ impl Service {
         self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
         self.notify_frontend(FrontendEvent::Paused(self.paused));
         self.notify_frontend(FrontendEvent::ShowClipboard(self.show_clipboard));
+        self.notify_frontend(FrontendEvent::KeepClipboardHistory(
+            self.keep_clipboard_history,
+        ));
     }
 
     /// Pauses RustInput on this computer, or lets it go on: paused, the

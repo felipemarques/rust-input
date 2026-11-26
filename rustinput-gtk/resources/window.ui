@@ -590,6 +590,19 @@
                                 </child>
                               </object>
                             </child>
+                            <child>
+                              <object class="AdwActionRow">
+                                <property name="title" translatable="yes">Keep a history of the copies</property>
+                                <property name="subtitle" translatable="yes">The last copies of this computer, in memory only: they are gone when RustInput closes. Passwords marked by a password manager are not kept.</property>
+                                <property name="activatable-widget">keep_history_switch</property>
+                                <child>
+                                  <object class="GtkSwitch" id="keep_history_switch">
+                                    <property name="valign">center</property>
+                                    <property name="active">true</property>
+                                  </object>
+                                </child>
+                              </object>
+                            </child>
                           </object>
                         </child>
                         <child>

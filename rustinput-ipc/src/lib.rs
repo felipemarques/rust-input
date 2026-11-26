@@ -322,6 +322,41 @@ pub enum ClipboardPeek {
 
 /// longest start of a text shown of a clipboard, in bytes
 pub const CLIPBOARD_PEEK_TEXT: usize = 4096;
+/// longest start of a text in the history of a clipboard, in bytes
+pub const CLIPBOARD_HISTORY_TEXT: usize = 1024;
+/// largest thumbnail of an image in the history of a clipboard, in pixels
+/// each way
+pub const CLIPBOARD_HISTORY_THUMBNAIL: u32 = 128;
+/// copies kept in the history of a clipboard when the configuration does not
+/// say (`clipboard_history`)
+pub const CLIPBOARD_HISTORY_DEFAULT: usize = 30;
+
+/// Something the clipboard of a computer held, in its history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClipboardHistoryItem {
+    /// [`FrontendRequest::BringClipboard`] with it brings it here
+    pub hash: u64,
+    /// when it was copied, in seconds since 1970 (on the clock of that
+    /// computer)
+    pub when: u64,
+    /// shortened: [`CLIPBOARD_HISTORY_TEXT`], [`CLIPBOARD_HISTORY_THUMBNAIL`]
+    pub peek: ClipboardPeek,
+}
+
+/// The history of the clipboard of a computer
+/// ([`FrontendEvent::ClipboardHistory`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClipboardHistory {
+    /// what it copied while RustInput ran, the latest first, without what it
+    /// holds now
+    Items(Vec<ClipboardHistoryItem>),
+    /// it keeps none (`clipboard_history = 0`)
+    Off,
+    /// it can not tell when something is copied on its system (Wayland)
+    Unsupported,
+    /// it runs a RustInput without history (before 0.35.0)
+    Older,
+}
 /// largest thumbnail of an image on a clipboard, in pixels each way
 pub const CLIPBOARD_THUMBNAIL: u32 = 320;
 /// most names of copied files shown of a clipboard
@@ -527,6 +562,9 @@ pub enum FrontendEvent {
     /// ([`FrontendRequest::BringClipboard`]), or not (`error`); `files`
     /// when it held files, which come as a file transfer
     ClipboardBrought {
+        /// `None`: a copy of the history of this computer is back on its
+        /// clipboard
+        handle: Option<ClientHandle>,
         name: String,
         files: bool,
         error: Option<String>,
@@ -534,6 +572,15 @@ pub enum FrontendEvent {
     /// whether the other computers see the clipboard of this one
     /// (`show_clipboard` in the configuration)
     ShowClipboard(bool),
+    /// the history of the clipboard of the client (of this computer:
+    /// `None`), answering [`FrontendRequest::PeekClipboards`] when it changed
+    ClipboardHistory {
+        handle: Option<ClientHandle>,
+        history: ClipboardHistory,
+    },
+    /// whether this computer keeps a history of its clipboard
+    /// (`clipboard_history` in the configuration is not 0)
+    KeepClipboardHistory(bool),
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
@@ -622,9 +669,19 @@ pub enum FrontendRequest {
     /// time, or everything (`all`). The Clipboard tab asks every few seconds
     /// while it is shown.
     PeekClipboards { all: bool },
-    /// bring what the clipboard of the client holds here, if it still holds
-    /// `hash` ([`FrontendEvent::ClipboardBrought`])
-    BringClipboard { handle: ClientHandle, hash: u64 },
+    /// Bring what the clipboard of the client holds, or held (its
+    /// history), here, if it still has `hash`
+    /// ([`FrontendEvent::ClipboardBrought`]); `None`: something of the
+    /// history of this computer back on its clipboard.
+    BringClipboard {
+        handle: Option<ClientHandle>,
+        hash: u64,
+    },
+    /// whether this computer keeps a history of its clipboard, kept in the
+    /// configuration ([`FrontendEvent::KeepClipboardHistory`])
+    SetClipboardHistory(bool),
+    /// forget the history of the clipboard of this computer
+    ClearClipboardHistory,
     /// whether the other computers see the clipboard of this one, kept in
     /// the configuration ([`FrontendEvent::ShowClipboard`])
     SetShowClipboard(bool),

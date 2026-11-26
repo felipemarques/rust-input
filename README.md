@@ -29,6 +29,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
+| 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
@@ -68,6 +69,8 @@ tested in automated runs on a Windows of GitHub (the daemon runs as SYSTEM and f
 hand.
 ¹⁶ New in 0.34.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Passwords marked by a
 password manager are recognized on Windows and X11, not yet on Wayland and macOS (see [The Clipboards tab](#the-clipboards-tab)).
+¹⁷ New in 0.35.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Not on Wayland yet: RustInput
+can not tell there when something is copied.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -128,9 +131,9 @@ To turn the clipboard synchronization off, set `clipboard = false` in the [confi
 ### The Clipboards tab
 
 <p align="center">
-  <img src="screenshots/clipboards.png" width="820" alt="The Clipboards tab: the text this computer copied, and the screenshot the laptop copied with Copy here">
+  <img src="screenshots/clipboards.png" width="820" alt="The Clipboards tab: what this computer and the laptop copied, each with the copies before, a screenshot among them, and Copy here on every one">
   <br>
-  <em>What this computer and the laptop copied. “Copy here” puts the laptop’s screenshot on the clipboard of this one.</em>
+  <em>What this computer and the laptop copied, with what they copied before. “Copy here” puts any of them on the clipboard of this computer.</em>
 </p>
 
 The **Clipboards** tab of the window (also **Clipboards…** in the menu of the tray icon) shows what each computer has
@@ -150,6 +153,17 @@ one, without moving the mouse there: text, formatted text and images right away,
   Preferences (`show_clipboard = false`): the others then see “Does not show its clipboard” and cannot copy from it.
   The clipboard still follows the pointer as before.
 - Both computers need RustInput 0.34.0 or newer; an older one is shown as such.
+
+**History** (0.35.0): under what each computer holds now come the copies it made before, the latest first (5 of them
+until **Show all**), with the time and a thumbnail for images. **Copy here** brings any of them to this computer; on this
+computer **Copy** puts an earlier copy back on its clipboard, and **Clear** forgets its history.
+
+- Each computer keeps its own last 30 copies (`clipboard_history`), **in memory only**: nothing is written to disk, and
+  the history is gone when RustInput closes. The same thing copied again moves to the top instead of being there twice.
+- What a password manager marks as secret is **not kept** at all.
+- Copies are noticed on Windows, X11 and macOS; not yet on Wayland.
+- Switch it off in Preferences (**Keep a history of the copies**, `clipboard_history = 0`). A computer that does not
+  show its clipboard to the others does not show its history either.
 
 ## Copy and paste files
 
@@ -686,8 +700,9 @@ This program will not transfer any information to other networked systems unless
 or the person installing or operating it.
 
 RustInput sends keyboard, mouse, clipboard and file data only to the computers its user adds and authorizes, over
-encrypted connections on the local network. Those computers can also see what its clipboard holds, in their Clipboards
-tab, unless its user switches that off in Preferences. The installer and `update-rustinput.ps1` connect only to GitHub, to find
+encrypted connections on the local network. Those computers can also see what its clipboard holds, and its history,
+in their Clipboards tab, unless its user switches that off in Preferences. The history of the clipboard is kept in
+memory only, never written to disk. The installer and `update-rustinput.ps1` connect only to GitHub, to find
 and download releases of RustInput. If its user says yes when the window first asks (or switches it on in
 Preferences), RustInput asks GitHub for the number of its latest release when it starts and every 12 hours: one request
 for `github.com/felipemarques/rust-input/releases/latest`, which carries nothing about the user or the computers. It can
@@ -948,6 +963,10 @@ radial_menu = true
 # tab, and can copy it from there (on by default); also in Preferences
 show_clipboard = true
 
+# how many copies the history of the clipboard keeps, in memory only (30 by default, at most
+# 200); 0 keeps none. Also "Keep a history of the copies" in Preferences
+clipboard_history = 30
+
 # light or dark windows: "system" (as the system, the default), "light" or "dark";
 # also chosen in the window, under "appearance"
 theme = "system"
@@ -1027,6 +1046,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] See what every computer copied, in one tab, and bring it here with one click
+- [x] History of the clipboard of every computer, in memory only
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 

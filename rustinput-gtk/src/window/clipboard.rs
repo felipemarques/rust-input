@@ -4,9 +4,15 @@
 //! While the tab is shown, the service is asked every [`PERIOD`] what
 //! changed ([`FrontendRequest::PeekClipboards`]); its answers come as
 //! [`Window::clipboard_seen`].
+//!
+//! Under what a computer holds now comes its history (0.35.0): what it copied
+//! before, the latest first, [`FIRST_ITEMS`] of them until "Show all", each
+//! with a button that brings it here (on this computer: back on the
+//! clipboard).
 
 use std::{
     cell::{Cell, RefCell},
+    rc::Rc,
     time::Duration,
 };
 
@@ -15,7 +21,10 @@ use adw::subclass::prelude::*;
 use glib::clone;
 use gtk::{gdk, glib};
 use rustinput_i18n::{tr, trf, trn};
-use rustinput_ipc::{ClientHandle, ClipboardPeek, ClipboardSeen, FrontendRequest};
+use rustinput_ipc::{
+    ClientHandle, ClipboardHistory, ClipboardHistoryItem, ClipboardPeek, ClipboardSeen,
+    FrontendRequest,
+};
 
 use super::Window;
 
@@ -25,6 +34,13 @@ const PERIOD: Duration = Duration::from_secs(2);
 const THUMBNAIL_HEIGHT: i32 = 180;
 /// lines of a text shown before it is cut
 const TEXT_LINES: i32 = 8;
+/// copies of the history shown until "Show all"
+const FIRST_ITEMS: usize = 5;
+/// height of the thumbnail of an image in the history
+const HISTORY_THUMBNAIL_HEIGHT: i32 = 40;
+
+/// what a button of the history does: bring the copy with this hash
+type Bring = Rc<dyn Fn(u64, &gtk::Button)>;
 
 /// the card of one computer
 pub struct Card {
@@ -37,6 +53,18 @@ pub struct Card {
     /// what it holds, to bring it here
     hash: Cell<Option<u64>>,
     seen: RefCell<Option<ClipboardSeen>>,
+    /// the history: its title, a line when there is none, the copies
+    history_box: gtk::Box,
+    history_title: gtk::Label,
+    history_note: gtk::Label,
+    history_list: gtk::ListBox,
+    /// "Show all" and back
+    more: gtk::Button,
+    /// forgets the history, on this computer
+    clear: gtk::Button,
+    history: RefCell<Option<ClipboardHistory>>,
+    show_all: Cell<bool>,
+    bring: RefCell<Option<Bring>>,
 }
 
 impl Window {
@@ -55,6 +83,15 @@ impl Window {
             move |switch| {
                 if !window.imp().updating_show_clipboard.get() {
                     window.request(FrontendRequest::SetShowClipboard(switch.is_active()));
+                }
+            }
+        ));
+        imp.keep_history_switch.connect_active_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |switch| {
+                if !window.imp().updating_show_clipboard.get() {
+                    window.request(FrontendRequest::SetClipboardHistory(switch.is_active()));
                 }
             }
         ));
@@ -107,6 +144,29 @@ impl Window {
         imp.updating_show_clipboard.set(false);
     }
 
+    /// whether this computer keeps a history of its clipboard, as the
+    /// service has it
+    pub(crate) fn set_keep_clipboard_history(&self, keep: bool) {
+        let imp = self.imp();
+        imp.updating_show_clipboard.set(true);
+        imp.keep_history_switch.set_active(keep);
+        imp.updating_show_clipboard.set(false);
+    }
+
+    /// the history of the clipboard of a computer, as the service says
+    pub(crate) fn clipboard_history(
+        &self,
+        handle: Option<ClientHandle>,
+        history: ClipboardHistory,
+    ) {
+        let cards = self.imp().clipboard_cards.borrow();
+        let Some(card) = cards.iter().find(|c| c.handle == handle) else {
+            return;
+        };
+        card.history.replace(Some(history));
+        card.show_history();
+    }
+
     /// what the clipboard of a computer holds, as the service says
     pub(crate) fn clipboard_seen(
         &self,
@@ -123,8 +183,8 @@ impl Window {
         if card.seen.borrow().as_ref() == Some(&seen) {
             return;
         }
+        card.seen.replace(Some(seen.clone()));
         card.show(&seen);
-        card.seen.replace(Some(seen));
     }
 
     /// makes the card of the computer, when missing
@@ -142,7 +202,34 @@ impl Window {
         card.button.connect_clicked(clone!(
             #[weak(rename_to = window)]
             self,
-            move |button| window.bring_clipboard(handle, button)
+            move |button| {
+                if let (Some(_), Some(hash)) = (handle, window.card_hash(handle)) {
+                    window.bring_clipboard(handle, hash, button);
+                }
+            }
+        ));
+        let window = self.downgrade();
+        card.bring
+            .replace(Some(Rc::new(move |hash, button: &gtk::Button| {
+                if let Some(window) = window.upgrade() {
+                    window.bring_clipboard(handle, hash, button);
+                }
+            })));
+        card.clear.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.request(FrontendRequest::ClearClipboardHistory)
+        ));
+        card.more.connect_clicked(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| {
+                let cards = window.imp().clipboard_cards.borrow();
+                if let Some(card) = cards.iter().find(|c| c.handle == handle) {
+                    card.show_all.set(!card.show_all.get());
+                    card.show_history();
+                }
+            }
         ));
         // this computer first, the clients in the order they were made
         let mut cards = imp.clipboard_cards.borrow_mut();
@@ -169,10 +256,9 @@ impl Window {
         }
     }
 
-    fn bring_clipboard(&self, handle: Option<ClientHandle>, button: &gtk::Button) {
-        let (Some(handle), Some(hash)) = (handle, self.card_hash(handle)) else {
-            return;
-        };
+    /// brings the copy with `hash` of the computer here (of this computer:
+    /// back on its clipboard)
+    fn bring_clipboard(&self, handle: Option<ClientHandle>, hash: u64, button: &gtk::Button) {
         button.set_sensitive(false);
         button.set_label(tr("Copying…"));
         self.request(FrontendRequest::BringClipboard { handle, hash });
@@ -183,13 +269,26 @@ impl Window {
         cards.iter().find(|c| c.handle == handle)?.hash.get()
     }
 
-    /// what the clipboard of `name` held came here, or not
-    pub(crate) fn clipboard_brought(&self, name: &str, files: bool, error: Option<&str>) {
+    /// what the clipboard of `name` held came here, or not (of this
+    /// computer, `handle` `None`: back on its clipboard)
+    pub(crate) fn clipboard_brought(
+        &self,
+        handle: Option<ClientHandle>,
+        name: &str,
+        files: bool,
+        error: Option<&str>,
+    ) {
         for card in self.imp().clipboard_cards.borrow().iter() {
             card.button.set_sensitive(true);
             card.button.set_label(tr("Copy here"));
+            card.show_history();
         }
         match error {
+            None if handle.is_none() => self.show_toast(tr("Back on the clipboard")),
+            Some(error) if handle.is_none() => self.show_toast(&trf(
+                "Could not put it back on the clipboard: {error}",
+                &[("error", &error)],
+            )),
             None if files => self.show_toast(&trf(
                 "The files of {name} are on their way here",
                 &[("name", &name)],
@@ -273,6 +372,50 @@ impl Card {
             .build();
         root.append(&header);
         root.append(&body);
+        let history_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(6)
+            .margin_top(4)
+            .visible(false)
+            .build();
+        let history_header = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(8)
+            .build();
+        let history_title = gtk::Label::builder()
+            .xalign(0.0)
+            .hexpand(true)
+            .css_classes(["heading", "clipboard-history-title"])
+            .build();
+        let clear = gtk::Button::builder()
+            .label(tr("Clear"))
+            .tooltip_text(tr("Forget the history of this computer"))
+            .valign(gtk::Align::Center)
+            .visible(handle.is_none())
+            .css_classes(["flat", "caption"])
+            .build();
+        history_header.append(&history_title);
+        history_header.append(&clear);
+        let history_note = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .visible(false)
+            .css_classes(["dim-label", "caption"])
+            .build();
+        let history_list = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .css_classes(["boxed-list"])
+            .build();
+        let more = gtk::Button::builder()
+            .halign(gtk::Align::Start)
+            .visible(false)
+            .css_classes(["flat"])
+            .build();
+        history_box.append(&history_header);
+        history_box.append(&history_note);
+        history_box.append(&history_list);
+        history_box.append(&more);
+        root.append(&history_box);
         Self {
             handle,
             root,
@@ -282,6 +425,15 @@ impl Card {
             button,
             hash: Cell::new(None),
             seen: RefCell::new(None),
+            history_box,
+            history_title,
+            history_note,
+            history_list,
+            more,
+            clear,
+            history: RefCell::new(None),
+            show_all: Cell::new(false),
+            bring: RefCell::new(None),
         }
     }
 
@@ -309,6 +461,209 @@ impl Card {
         self.summary.set_label(&summary);
         self.body.set_visible(self.body.first_child().is_some());
         self.button.set_visible(holds && self.handle.is_some());
+        // what it holds now is not in its history list
+        self.show_history();
+    }
+
+    /// The history under what it holds now; none while it can not be asked
+    /// or does not show its clipboard.
+    fn show_history(&self) {
+        while let Some(row) = self.history_list.first_child() {
+            self.history_list.remove(&row);
+        }
+        let reachable = matches!(*self.seen.borrow(), Some(ClipboardSeen::Holds { .. }));
+        let history = self.history.borrow();
+        let (Some(history), true) = (history.as_ref(), reachable) else {
+            self.history_box.set_visible(false);
+            return;
+        };
+        let here = self.handle.is_none();
+        let note = match history {
+            ClipboardHistory::Items(_) => None,
+            ClipboardHistory::Off if here => Some(tr(
+                "No history is kept on this computer: switch it on in Preferences.",
+            )),
+            ClipboardHistory::Off => Some(tr("It keeps no history of its clipboard.")),
+            ClipboardHistory::Unsupported => Some(tr(
+                "New copies can not be noticed on its system yet (Wayland): no history.",
+            )),
+            ClipboardHistory::Older => Some(tr("Its RustInput is older, without a history.")),
+        };
+        let current = self.hash.get();
+        let items: Vec<&ClipboardHistoryItem> = match history {
+            ClipboardHistory::Items(items) => {
+                items.iter().filter(|i| Some(i.hash) != current).collect()
+            }
+            _ => Vec::new(),
+        };
+        if note.is_none() && items.is_empty() {
+            // nothing copied before what it holds now
+            self.history_box.set_visible(false);
+            return;
+        }
+        self.history_box.set_visible(true);
+        self.history_note.set_visible(note.is_some());
+        self.history_note.set_label(note.unwrap_or_default());
+        self.history_list.set_visible(!items.is_empty());
+        self.clear.set_visible(here && !items.is_empty());
+        self.history_title.set_label(&if items.is_empty() {
+            tr("History").to_owned()
+        } else {
+            trn(
+                "History · {count} copy before",
+                "History · {count} copies before",
+                items.len() as u64,
+                &[],
+            )
+        });
+        let shown = if self.show_all.get() {
+            items.len()
+        } else {
+            items.len().min(FIRST_ITEMS)
+        };
+        for item in &items[..shown] {
+            self.history_list.append(&self.history_row(item));
+        }
+        self.more.set_visible(items.len() > FIRST_ITEMS);
+        self.more.set_label(&if self.show_all.get() {
+            tr("Show fewer").to_owned()
+        } else {
+            trf("Show all {count}", &[("count", &items.len())])
+        });
+    }
+
+    /// a copy of the history: what it was, when, and a button that brings it
+    fn history_row(&self, item: &ClipboardHistoryItem) -> gtk::ListBoxRow {
+        let line = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(10)
+            .margin_top(6)
+            .margin_bottom(6)
+            .margin_start(10)
+            .margin_end(8)
+            .build();
+        let (title, detail, icon) = match &item.peek {
+            ClipboardPeek::Text {
+                start,
+                chars,
+                formatted,
+                ..
+            } => {
+                let first = start.lines().map(str::trim).find(|l| !l.is_empty());
+                let kind = if *formatted {
+                    tr("Formatted text")
+                } else {
+                    tr("Text")
+                };
+                (
+                    first.unwrap_or_default().to_owned(),
+                    format!(
+                        "{kind} · {}",
+                        trn("{count} character", "{count} characters", *chars, &[])
+                    ),
+                    Some("text-x-generic-symbolic"),
+                )
+            }
+            ClipboardPeek::Image {
+                width,
+                height,
+                thumbnail,
+            } => {
+                let title = trf(
+                    "Image, {width} × {height}",
+                    &[("width", width), ("height", height)],
+                );
+                match texture(thumbnail) {
+                    Some(texture) => {
+                        let (w, h) = (texture.width().max(1), texture.height().max(1));
+                        let height = h.min(HISTORY_THUMBNAIL_HEIGHT);
+                        let picture = gtk::Picture::builder()
+                            .paintable(&texture)
+                            .keep_aspect_ratio(true)
+                            .can_shrink(true)
+                            .width_request((w * height / h).max(1))
+                            .height_request(height)
+                            .valign(gtk::Align::Center)
+                            .css_classes(["clipboard-history-image"])
+                            .build();
+                        line.append(&picture);
+                        (title, tr("Image").to_owned(), None)
+                    }
+                    None => (
+                        title,
+                        tr("Image").to_owned(),
+                        Some("image-x-generic-symbolic"),
+                    ),
+                }
+            }
+            ClipboardPeek::Files { names, count } => (
+                names.join(", "),
+                trn(
+                    "{count} file or folder",
+                    "{count} files and folders",
+                    *count,
+                    &[],
+                ),
+                Some("folder-symbolic"),
+            ),
+            ClipboardPeek::Empty | ClipboardPeek::Secret => {
+                (String::new(), String::new(), Some("edit-paste-symbolic"))
+            }
+        };
+        if let Some(icon) = icon {
+            let image = gtk::Image::from_icon_name(icon);
+            image.set_valign(gtk::Align::Center);
+            image.add_css_class("dim-label");
+            line.append(&image);
+        }
+        let titles = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(2)
+            .hexpand(true)
+            .valign(gtk::Align::Center)
+            .build();
+        titles.append(
+            &gtk::Label::builder()
+                .label(&title)
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .single_line_mode(true)
+                .build(),
+        );
+        titles.append(
+            &gtk::Label::builder()
+                .label(format!("{} · {detail}", when_label(item.when)))
+                .xalign(0.0)
+                .ellipsize(gtk::pango::EllipsizeMode::End)
+                .css_classes(["dim-label", "caption"])
+                .build(),
+        );
+        line.append(&titles);
+        // copied files of this computer are copied again in the file manager
+        let files_here = self.handle.is_none() && matches!(item.peek, ClipboardPeek::Files { .. });
+        if !files_here {
+            let label = if self.handle.is_none() {
+                tr("Copy")
+            } else {
+                tr("Copy here")
+            };
+            let button = gtk::Button::builder()
+                .label(label)
+                .valign(gtk::Align::Center)
+                .tooltip_text(tr("Put it on the clipboard of this computer"))
+                .build();
+            let (bring, hash) = (self.bring.borrow().clone(), item.hash);
+            button.connect_clicked(move |button| {
+                if let Some(bring) = &bring {
+                    bring(hash, button);
+                }
+            });
+            line.append(&button);
+        }
+        gtk::ListBoxRow::builder()
+            .child(&line)
+            .activatable(false)
+            .build()
     }
 
     /// fills the body, returns the line under the name
@@ -419,6 +774,24 @@ impl Card {
             }
         }
     }
+}
+
+/// the time of a copy: the hour today, with the day otherwise
+fn when_label(when: u64) -> String {
+    let (Ok(then), Ok(now)) = (
+        glib::DateTime::from_unix_local(when as i64),
+        glib::DateTime::now_local(),
+    ) else {
+        return String::new();
+    };
+    let format = if then.ymd() == now.ymd() {
+        "%H:%M"
+    } else {
+        "%e %b, %H:%M"
+    };
+    then.format(format)
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default()
 }
 
 /// the thumbnail (a PNG) as something to show; GTK 4.2 can not read it

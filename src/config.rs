@@ -107,6 +107,9 @@ struct ConfigToml {
     /// whether the authorized computers see what the clipboard of this one
     /// holds, in their Clipboard tab (on when not set)
     show_clipboard: Option<bool>,
+    /// how many copies the history of the clipboard keeps, in memory only
+    /// (30 when not set, 0: none)
+    clipboard_history: Option<usize>,
     /// RustInput is paused on this computer: the mouse and keyboard stay
     /// here and no other computer controls it (from the tray icon, the
     /// window or the radial menu)
@@ -704,6 +707,27 @@ impl Config {
     pub fn set_show_clipboard(&mut self, show: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.show_clipboard = Some(show);
+    }
+
+    /// how many copies the history of the clipboard keeps
+    /// (`clipboard_history`, 0: none), at most 200
+    pub fn clipboard_history(&self) -> usize {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.clipboard_history)
+            .unwrap_or(rustinput_ipc::CLIPBOARD_HISTORY_DEFAULT)
+            .min(200)
+    }
+
+    /// keeps a history (of the size already set, or the default) or none
+    pub fn set_clipboard_history(&mut self, keep: bool) {
+        let size = self.clipboard_history();
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.clipboard_history = Some(match (keep, size) {
+            (false, _) => 0,
+            (true, 0) => rustinput_ipc::CLIPBOARD_HISTORY_DEFAULT,
+            (true, size) => size,
+        });
     }
 
     /// the new version the user was told about (`update_notified`)
