@@ -284,6 +284,38 @@ clipboard, `ExcludeClipboardContentFromMonitorProcessing`, `Clipboard Viewer Ign
 Windows). Such a text is shown as `Secret`: the hash travels, the text does not, and "Copy here"
 still brings it, as the pointer would. Not recognized on Wayland and macOS yet.
 
+### The history (0.35.0)
+
+Every computer keeps what was copied on it while RustInput ran (`clipboard/history.rs`), the
+latest first, in memory only: at most `clipboard_history` copies (30, at most 200, 0 for none)
+and 64 MiB, the oldest going first; a copy over 32 MiB is not kept. The same content copied again
+(same hash) moves to the top. It needs to know when something is copied (`clipboard/watch.rs`):
+XFixes on X11 (`SetSelectionOwner` on CLIPBOARD, which every copy sets, also by the same
+application), the sequence number of the clipboard on Windows and the change count of the
+general pasteboard on macOS, looked at every 400 ms, through `clipboard-win` and the Objective-C
+runtime. Not on Wayland yet (`HistoryAnswer::Unsupported`). 300 ms after a copy the clipboard
+task reads it once (`LocalClipboard::record`): the content as the synchronization would send it,
+and a shortened view (the start of a text up to 1 KiB, a thumbnail of 128 pixels, the names of
+files). A secret of a password manager is not read at all. A copy made while reading is read
+again afterwards.
+
+It travels with the questions of the tab: `Peek` carries `history`, the version the asker knows
+(0 for none), and `Peeked` the history unless it is still that version
+(`HistoryAnswer::Unchanged`), its thumbnails after the one of the current content, their sizes in
+`attachments` (at most 8 MiB together). Both fields are `#[serde(default)]`: 0.34.0 asks without
+them and ignores them in the answer, and an answer without `history` tells the asker that the
+other computer is older (`ClipboardHistory::Older`). `Fetch` takes a hash of the history as well
+as the current one, so "Copy here" on an older copy works without anything new on the wire. On
+this computer `BringClipboard { handle: None }` puts a copy of its history back on its
+clipboard (`ClipboardMsg::Restore`); copied files are not put back, as that would offer them to
+be moved (they are copied again in the file manager). `ClearClipboardHistory` forgets it, and
+`SetClipboardHistory` switches it on or off (Preferences, "Keep a history of the copies").
+
+The window shows the history of each card under what it holds now, without that one, 5 copies
+until "Show all"; `clipboard-history.sh` (end to end) checks the order, bringing an old copy,
+putting one back here, a copy again moving up, a password not kept, the thumbnail of an image,
+clearing and switching off.
+
 The window grew to 1200 pixels wide by default, so the five tabs fit with their names in every
 language. `clipboard-view.sh` (end to end) checks text, image, a password (with `clip_owner.py`
 as the password manager), files and switching it off; `clipboard-shot.sh` takes pictures of it.

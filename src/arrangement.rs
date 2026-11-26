@@ -46,13 +46,14 @@ use tokio_rustls::TlsConnector;
 use webrtc_dtls::crypto::Certificate;
 
 use crate::{
-    clipboard::{Content, Fetched, MAX_CONTENT_SIZE},
+    clipboard::{Content, Fetched, HistoryAnswer, MAX_CONTENT_SIZE},
     files::tls,
 };
 
 /// first bytes of a connection about the arrangement, both ways
 pub(crate) const MAGIC: [u8; 4] = *b"RIA1";
-const MAX_MESSAGE: u32 = 256 * 1024;
+/// a history of 200 copies with the start of their texts fits
+const MAX_MESSAGE: u32 = 1024 * 1024;
 /// connecting and one question and answer
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// longest name accepted from the other device
@@ -74,6 +75,8 @@ const QUESTION_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const SERVE_TIMEOUT: Duration = Duration::from_secs(130);
 /// largest thumbnail of an image after [`Message::Peeked`]
 const MAX_THUMBNAIL: u32 = 4 * 1024 * 1024;
+/// most bytes of the thumbnails of the history after [`Message::Peeked`]
+const MAX_HISTORY_THUMBNAILS: usize = 8 * 1024 * 1024;
 
 #[derive(Debug, Serialize, Deserialize)]
 enum Message {
@@ -95,15 +98,24 @@ enum Message {
         reason: String,
     },
     /// what the clipboard holds, unless it still holds what `known` (a
-    /// hash) stands for
+    /// hash) stands for; with its history when `history` is there (the
+    /// version the asker knows, 0 for none; 0.35.0)
     Peek {
         known: Option<u64>,
+        #[serde(default)]
+        history: Option<u64>,
     },
     /// `None`: it still holds what `known` stands for; the thumbnail of an
-    /// image follows the message (`attachment` bytes)
+    /// image follows the message (`attachment` bytes), then those of the
+    /// images of the history, in their order (`attachments`). Without
+    /// `history` from a RustInput before 0.35.0.
     Peeked {
         seen: Option<ClipboardSeen>,
         attachment: u32,
+        #[serde(default)]
+        history: Option<HistoryAnswer>,
+        #[serde(default)]
+        attachments: Vec<u32>,
     },
     /// what the clipboard holds, if it still holds `hash`
     Fetch {
@@ -159,7 +171,9 @@ pub(crate) enum ArrangementEvent {
     Peek {
         addr: SocketAddr,
         known: Option<u64>,
-        done: oneshot::Sender<Option<ClipboardSeen>>,
+        /// the history too, unless the asker knows this version of it
+        history: Option<u64>,
+        done: oneshot::Sender<(Option<ClipboardSeen>, Option<HistoryAnswer>)>,
     },
     /// the authorized device with the certificate `from` asks for what the
     /// clipboard holds, if it still holds `hash`
@@ -271,20 +285,26 @@ impl Arrangement {
                 };
                 Message::Locked { error }
             }
-            Message::Peek { known } => {
+            Message::Peek { known, history } => {
                 let (done, result) = oneshot::channel();
-                let _ = self
-                    .events
-                    .send(ArrangementEvent::Peek { addr, known, done });
-                let seen = match timeout(PEEK_TIMEOUT, result).await {
-                    Ok(Ok(seen)) => seen,
+                let _ = self.events.send(ArrangementEvent::Peek {
+                    addr,
+                    known,
+                    history,
+                    done,
+                });
+                let (seen, history) = match timeout(PEEK_TIMEOUT, result).await {
+                    Ok(Ok(answer)) => answer,
                     // nobody to read it: the clipboard is not shared here
-                    Ok(Err(_)) => Some(ClipboardSeen::Hidden),
-                    Err(_) => Some(ClipboardSeen::Unavailable(
-                        "its clipboard did not answer in time".into(),
-                    )),
+                    Ok(Err(_)) => (Some(ClipboardSeen::Hidden), None),
+                    Err(_) => (
+                        Some(ClipboardSeen::Unavailable(
+                            "its clipboard did not answer in time".into(),
+                        )),
+                        None,
+                    ),
                 };
-                return write_peeked(stream, seen).await;
+                return write_peeked(stream, seen, history).await;
             }
             Message::Fetch { hash } => {
                 let (done, result) = oneshot::channel();
@@ -413,17 +433,26 @@ pub(crate) async fn lock(
     }
 }
 
-/// What the clipboard of the device at one of `addrs` holds, with the
-/// fingerprint of the device that answered; `None` when it still holds what
-/// `known` stands for.
+/// what [`peek`] found: the fingerprint of the device that answered, what
+/// its clipboard holds (`None`: still what `known` stands for) and its
+/// history (`None`: a RustInput before 0.35.0)
+pub(crate) type PeekedHere = (String, Option<ClipboardSeen>, Option<HistoryAnswer>);
+
+/// What the clipboard of the device at one of `addrs` holds, and its history
+/// unless the version `history` is still the one it has.
 pub(crate) async fn peek(
     cert: Certificate,
     addrs: Vec<SocketAddr>,
     expected: Option<String>,
     known: Option<u64>,
-) -> Result<(String, Option<ClipboardSeen>), ArrangeError> {
-    match ask_within(cert, addrs, expected, Message::Peek { known }, TIMEOUT).await {
-        Ok((peer, Message::Peeked { seen, .. }, _)) => Ok((peer, seen)),
+    history: u64,
+) -> Result<PeekedHere, ArrangeError> {
+    let question = Message::Peek {
+        known,
+        history: Some(history),
+    };
+    match ask_within(cert, addrs, expected, question, TIMEOUT).await {
+        Ok((peer, Message::Peeked { seen, history, .. }, _)) => Ok((peer, seen, history)),
         Ok((_, Message::Refused { reason }, _)) => Err(ArrangeError::Refused(reason)),
         Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
         Err(e) => Err(older(e)),
@@ -539,9 +568,16 @@ async fn attempt(
     Ok((peer, answer, attachment))
 }
 
-/// an answer with the bytes after it, put back in place for a thumbnail
+/// an answer with the bytes after it, put back in place for thumbnails
 async fn read_answer<S: AsyncRead + Unpin>(stream: &mut S) -> io::Result<(Message, Vec<u8>)> {
     let mut answer = read(stream).await?;
+    if let Message::Peeked { attachments, .. } = &answer {
+        if attachments.iter().any(|&a| a > MAX_THUMBNAIL)
+            || attachments.iter().map(|&a| a as usize).sum::<usize>() > MAX_HISTORY_THUMBNAILS
+        {
+            return Err(invalid("thumbnails too large"));
+        }
+    }
     let size = match &answer {
         Message::Peeked { attachment, .. } if *attachment > MAX_THUMBNAIL => {
             return Err(invalid("thumbnail too large"));
@@ -566,13 +602,33 @@ async fn read_answer<S: AsyncRead + Unpin>(stream: &mut S) -> io::Result<(Messag
     {
         *thumbnail = std::mem::take(&mut bytes);
     }
+    if let Message::Peeked {
+        history: Some(HistoryAnswer::Items { items, .. }),
+        attachments,
+        ..
+    } = &mut answer
+    {
+        let mut images = items.iter_mut().filter_map(|item| match &mut item.peek {
+            ClipboardPeek::Image { thumbnail, .. } => Some(thumbnail),
+            _ => None,
+        });
+        for &size in attachments.iter() {
+            let mut thumbnail = vec![0; size as usize];
+            stream.read_exact(&mut thumbnail).await?;
+            if let Some(image) = images.next() {
+                *image = thumbnail;
+            }
+        }
+    }
     Ok((answer, bytes))
 }
 
-/// [`Message::Peeked`], the thumbnail of an image after it
+/// [`Message::Peeked`], the thumbnail of an image after it, then those of the
+/// history
 async fn write_peeked<S: AsyncWrite + Unpin>(
     stream: &mut S,
     mut seen: Option<ClipboardSeen>,
+    mut history: Option<HistoryAnswer>,
 ) -> io::Result<()> {
     let mut thumbnail = match &mut seen {
         Some(ClipboardSeen::Holds {
@@ -585,8 +641,32 @@ async fn write_peeked<S: AsyncWrite + Unpin>(
         thumbnail.clear();
     }
     let attachment = thumbnail.len() as u32;
-    write(stream, &Message::Peeked { seen, attachment }).await?;
+    // the thumbnails of the history in their order, as long as they fit
+    let mut thumbnails = Vec::new();
+    if let Some(HistoryAnswer::Items { items, .. }) = &mut history {
+        let mut total = 0;
+        for item in items.iter_mut() {
+            if let ClipboardPeek::Image { thumbnail, .. } = &mut item.peek {
+                let small = std::mem::take(thumbnail);
+                let fits = small.len() <= MAX_THUMBNAIL as usize
+                    && total + small.len() <= MAX_HISTORY_THUMBNAILS;
+                total += if fits { small.len() } else { 0 };
+                thumbnails.push(if fits { small } else { Vec::new() });
+            }
+        }
+    }
+    let attachments = thumbnails.iter().map(|t| t.len() as u32).collect();
+    let message = Message::Peeked {
+        seen,
+        attachment,
+        history,
+        attachments,
+    };
+    write(stream, &message).await?;
     stream.write_all(&thumbnail).await?;
+    for small in thumbnails {
+        stream.write_all(&small).await?;
+    }
     stream.flush().await
 }
 
@@ -766,7 +846,10 @@ mod tests {
         let (answer, _) = ask_service(
             &arrangement,
             &mut rx,
-            Message::Peek { known: None },
+            Message::Peek {
+                known: None,
+                history: None,
+            },
             false,
             |_| {},
         )
@@ -788,19 +871,24 @@ mod tests {
         let (answer, _) = ask_service(
             &arrangement,
             &mut rx,
-            Message::Peek { known: Some(7) },
+            Message::Peek {
+                known: Some(7),
+                history: None,
+            },
             true,
             move |event| match event {
                 ArrangementEvent::Peek { known, done, .. } => {
                     assert_eq!(known, Some(7));
-                    let _ = done.send(Some(sent));
+                    let _ = done.send((Some(sent), None));
                 }
                 other => panic!("unexpected {other:?}"),
             },
         )
         .await;
         match answer {
-            Message::Peeked { seen, attachment } => {
+            Message::Peeked {
+                seen, attachment, ..
+            } => {
                 assert_eq!(attachment as usize, thumbnail.len());
                 assert_eq!(seen, Some(image));
             }
@@ -811,11 +899,14 @@ mod tests {
         let (answer, _) = ask_service(
             &arrangement,
             &mut rx,
-            Message::Peek { known: Some(42) },
+            Message::Peek {
+                known: Some(42),
+                history: None,
+            },
             true,
             |event| match event {
                 ArrangementEvent::Peek { done, .. } => {
-                    let _ = done.send(None);
+                    let _ = done.send((None, None));
                 }
                 other => panic!("unexpected {other:?}"),
             },
@@ -825,7 +916,10 @@ mod tests {
         let (answer, _) = ask_service(
             &arrangement,
             &mut rx,
-            Message::Peek { known: None },
+            Message::Peek {
+                known: None,
+                history: None,
+            },
             true,
             drop,
         )
@@ -920,11 +1014,103 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn the_history_comes_with_its_thumbnails() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        let item = |hash: u64, peek: ClipboardPeek| rustinput_ipc::ClipboardHistoryItem {
+            hash,
+            when: 1_700_000_000 + hash,
+            peek,
+        };
+        let image = |n: u8| ClipboardPeek::Image {
+            width: 640,
+            height: 480,
+            thumbnail: vec![n; 1000 + n as usize],
+        };
+        let text = ClipboardPeek::Text {
+            start: "olá".into(),
+            chars: 3,
+            lines: 1,
+            formatted: false,
+        };
+        let history = HistoryAnswer::Items {
+            version: 4,
+            items: vec![item(1, image(1)), item(2, text), item(3, image(3))],
+        };
+        let current = ClipboardSeen::Holds {
+            hash: 1,
+            peek: image(9),
+        };
+        let sent = (Some(current.clone()), Some(history.clone()));
+        let (answer, _) = ask_service(
+            &arrangement,
+            &mut rx,
+            Message::Peek {
+                known: None,
+                history: Some(2),
+            },
+            true,
+            move |event| match event {
+                ArrangementEvent::Peek { history, done, .. } => {
+                    assert_eq!(history, Some(2));
+                    let _ = done.send(sent);
+                }
+                other => panic!("unexpected {other:?}"),
+            },
+        )
+        .await;
+        match answer {
+            Message::Peeked {
+                seen,
+                history: received,
+                attachments,
+                ..
+            } => {
+                assert_eq!(seen, Some(current));
+                assert_eq!(attachments, vec![1001, 1003]);
+                assert_eq!(received, Some(history), "every thumbnail back in place");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_peek_without_history_is_what_0_34_sends_and_reads() {
+        // 0.34.0 asks without `history` and answers without it
+        let asked: Message = serde_json::from_str(r#"{"Peek":{"known":7}}"#).unwrap();
+        assert!(matches!(
+            asked,
+            Message::Peek {
+                known: Some(7),
+                history: None
+            }
+        ));
+        let answered: Message =
+            serde_json::from_str(r#"{"Peeked":{"seen":null,"attachment":0}}"#).unwrap();
+        assert!(matches!(
+            answered,
+            Message::Peeked {
+                history: None,
+                ref attachments,
+                ..
+            } if attachments.is_empty()
+        ));
+    }
+
+    #[tokio::test]
     async fn answers_that_announce_too_much_are_refused() {
         for answer in [
             Message::Peeked {
                 seen: None,
                 attachment: MAX_THUMBNAIL + 1,
+                history: None,
+                attachments: Vec::new(),
+            },
+            Message::Peeked {
+                seen: None,
+                attachment: 0,
+                history: None,
+                attachments: vec![MAX_THUMBNAIL; 3],
             },
             Message::Fetched {
                 kind: 0,

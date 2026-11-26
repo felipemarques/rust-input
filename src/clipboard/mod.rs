@@ -11,9 +11,11 @@
 //! Copied files go to peers that announced [`CAP_FILES`] as well, over the
 //! file channel (see [`crate::files`]).
 
+mod history;
 mod local;
 mod secret;
 mod transfer;
+mod watch;
 #[cfg(windows)]
 mod windows_files;
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -41,6 +43,8 @@ use crate::{
     files::{FilesHandle, PeerInfo},
     listen::IncomingLinks,
 };
+pub(crate) use history::HistoryAnswer;
+use history::{History, Kept};
 pub(crate) use local::Peeked;
 use local::{LocalClipboard, LocalContent};
 pub(crate) use transfer::MAX_CONTENT_SIZE;
@@ -146,6 +150,24 @@ pub(crate) enum ClipboardMsg {
         content: Content,
         fingerprint: String,
     },
+    /// the history of the clipboard, unless the asker still knows its
+    /// version
+    History {
+        known: Option<u64>,
+        reply: oneshot::Sender<HistoryAnswer>,
+    },
+    /// something of the history back on the clipboard
+    Restore {
+        hash: u64,
+        reply: oneshot::Sender<Result<(), String>>,
+    },
+    /// forget the history
+    ClearHistory,
+    /// keep at most so many copies in the history (0: none)
+    HistorySize(usize),
+    /// the clipboard was read after something was copied, `None` for nothing
+    /// to keep
+    Recorded(Option<local::Recorded>),
 }
 
 /// what the clipboard gave for [`ClipboardMsg::Fetch`]
@@ -237,19 +259,23 @@ impl PeerLinks {
     }
 }
 
-/// starts the clipboard task, which runs until the service ends
+/// Starts the clipboard task, which runs until the service ends; with a
+/// history of `history` copies.
 pub(crate) fn spawn(
     handle: &ClipboardHandle,
     rx: Receiver<ClipboardMsg>,
     links: PeerLinks,
     files: Option<FilesHandle>,
     notices: Sender<String>,
+    history: usize,
 ) {
     if !handle.enabled {
         log::info!("clipboard synchronization is disabled");
         return;
     }
-    let manager = Manager {
+    let (changed, changes) = tokio::sync::mpsc::unbounded_channel();
+    let watched = watch::spawn(changed);
+    let mut manager = Manager {
         rx,
         tx: handle.tx.clone(),
         send_copied: handle.send_copied.clone(),
@@ -262,7 +288,14 @@ pub(crate) fn spawn(
         next_transfer: 0,
         peek_waiting: Vec::new(),
         peek_running: None,
+        history: History::new(history),
+        watched,
+        changes,
+        recording: false,
+        record_again: false,
     };
+    // what the clipboard holds already is the first of the history
+    manager.start_record();
     spawn_local(manager.run());
 }
 
@@ -301,7 +334,21 @@ struct Manager {
     peek_waiting: Vec<PeekQuestion>,
     /// the questions the running read is for, if one runs
     peek_running: Option<Vec<PeekQuestion>>,
+    /// what was copied here
+    history: History,
+    /// copies are told here ([`watch`])
+    watched: bool,
+    /// something was copied
+    changes: tokio::sync::mpsc::UnboundedReceiver<()>,
+    /// the clipboard is being read for the history
+    recording: bool,
+    /// something else was copied while it was being read
+    record_again: bool,
 }
+
+/// how long after a copy the clipboard is read for the history: the
+/// application may still be putting its formats there
+const RECORD_DELAY: std::time::Duration = std::time::Duration::from_millis(300);
 
 /// a question of [`ClipboardMsg::Peek`]: the hash the asker knows, where the
 /// answer goes
@@ -318,6 +365,7 @@ impl Manager {
                     Some(msg) => self.handle(msg).await,
                     None => break,
                 },
+                Some(()) = self.changes.recv() => self.start_record(),
                 _ = tick.tick(), if busy => self.on_tick().await,
             }
         }
@@ -466,7 +514,71 @@ impl Manager {
                 );
                 self.local.write(content);
             }
+            ClipboardMsg::History { known, reply } => {
+                let answer = if self.watched {
+                    self.history.answer(known)
+                } else {
+                    HistoryAnswer::Unsupported
+                };
+                let _ = reply.send(answer);
+            }
+            ClipboardMsg::Restore { hash, reply } => {
+                let result = match self.history.find(hash) {
+                    Some(Kept::Data(content)) => {
+                        log::info!("a copy of the history back on the clipboard");
+                        self.local.write(content.clone());
+                        Ok(())
+                    }
+                    Some(Kept::Files(_)) => {
+                        Err("copied files are copied again in the file manager".into())
+                    }
+                    None => Err("it is no longer in the history".into()),
+                };
+                let _ = reply.send(result);
+            }
+            ClipboardMsg::ClearHistory => {
+                log::info!("the history of the clipboard is forgotten");
+                self.history.clear();
+            }
+            ClipboardMsg::HistorySize(size) => {
+                let was = self.history.size();
+                self.history.set_size(size);
+                if was == 0 && size > 0 {
+                    self.start_record();
+                }
+            }
+            ClipboardMsg::Recorded(recorded) => {
+                self.recording = false;
+                if let Some(recorded) = recorded {
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_secs());
+                    self.history.add(recorded, now);
+                }
+                if std::mem::take(&mut self.record_again) {
+                    self.start_record();
+                }
+            }
         }
+    }
+
+    /// Reads the clipboard for the history, a moment after something was
+    /// copied; once at a time.
+    fn start_record(&mut self) {
+        if !self.watched || self.history.size() == 0 {
+            return;
+        }
+        if self.recording {
+            self.record_again = true;
+            return;
+        }
+        self.recording = true;
+        let (local, tx) = (self.local.clone(), self.tx.clone());
+        spawn_local(async move {
+            tokio::time::sleep(RECORD_DELAY).await;
+            let recorded = local.record().await;
+            let _ = tx.send(ClipboardMsg::Recorded(recorded));
+        });
     }
 
     /// One read of the clipboard at a time answers every question that came
@@ -536,8 +648,17 @@ impl Manager {
                     _ => Err("files go only to a computer connected with file transfers on".into()),
                 }
             }
-            Some(_) => Err("the clipboard changed meanwhile".into()),
-            None => Err("the clipboard is empty".into()),
+            // not on the clipboard any more: maybe in the history
+            _ => match self.history.find(hash).cloned() {
+                Some(Kept::Data(content)) => {
+                    self.fetched(hash, fingerprint, Some(LocalContent::Data(content)))
+                }
+                Some(Kept::Files(paths)) => {
+                    let content = LocalContent::Files { paths, key: hash };
+                    self.fetched(hash, fingerprint, Some(content))
+                }
+                None => Err("the clipboard changed meanwhile".into()),
+            },
         }
     }
 

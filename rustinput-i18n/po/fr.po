@@ -299,59 +299,67 @@ msgstr "Montrer ce presse-papiers aux autres ordinateurs"
 msgid "In their Clipboards tab, to the computers authorized here, which can also copy it from there. Passwords marked by a password manager are never shown."
 msgstr "Dans leur onglet Presse-papiers, aux ordinateurs autorisés ici, qui peuvent aussi le copier de là. Les mots de passe marqués par un gestionnaire de mots de passe ne sont jamais montrés."
 
-#: rustinput-gtk/resources/window.ui:597
+#: rustinput-gtk/resources/window.ui:595
+msgid "Keep a history of the copies"
+msgstr "Garder un historique des copies"
+
+#: rustinput-gtk/resources/window.ui:596
+msgid "The last copies of this computer, in memory only: they are gone when RustInput closes. Passwords marked by a password manager are not kept."
+msgstr "Les dernières copies de cet ordinateur, en mémoire seulement : elles disparaissent quand RustInput se ferme. Les mots de passe marqués par un gestionnaire de mots de passe ne sont pas gardés."
+
+#: rustinput-gtk/resources/window.ui:610
 msgid "File transfers"
 msgstr "Transferts de fichiers"
 
-#: rustinput-gtk/resources/window.ui:598
+#: rustinput-gtk/resources/window.ui:611
 msgid "Copy files on one computer and paste them on another"
 msgstr "Copiez des fichiers sur un ordinateur et collez-les sur un autre"
 
-#: rustinput-gtk/resources/window.ui:604
+#: rustinput-gtk/resources/window.ui:617
 msgid "Allowed to connect"
 msgstr "Autorisés à se connecter"
 
-#: rustinput-gtk/resources/window.ui:605
+#: rustinput-gtk/resources/window.ui:618
 msgid "The computers whose certificate this one accepts. A computer that is not here asks first, with a code."
 msgstr "Les ordinateurs dont celui-ci accepte le certificat. Un ordinateur absent de cette liste doit d’abord demander, avec un code."
 
-#: rustinput-gtk/resources/window.ui:624
+#: rustinput-gtk/resources/window.ui:637
 msgid "No computers allowed yet"
 msgstr "Aucun ordinateur autorisé pour l’instant"
 
-#: rustinput-gtk/resources/window.ui:625
+#: rustinput-gtk/resources/window.ui:638
 msgid "Authorize one with “Authorize”, or accept its request"
 msgstr "Autorisez-en un avec « Autoriser », ou acceptez sa demande"
 
-#: rustinput-gtk/resources/window.ui:642
+#: rustinput-gtk/resources/window.ui:655
 msgid "About"
 msgstr "À propos"
 
-#: rustinput-gtk/resources/window.ui:647
+#: rustinput-gtk/resources/window.ui:660
 msgid "Easily use your mouse and keyboard on multiple computers"
 msgstr "Utilisez facilement votre souris et votre clavier sur plusieurs ordinateurs"
 
-#: rustinput-gtk/resources/window.ui:656
+#: rustinput-gtk/resources/window.ui:669
 msgid "Version"
 msgstr "Version"
 
-#: rustinput-gtk/resources/window.ui:661
+#: rustinput-gtk/resources/window.ui:674
 msgid "Source code"
 msgstr "Code source"
 
-#: rustinput-gtk/resources/window.ui:674
+#: rustinput-gtk/resources/window.ui:687
 msgid "Based on Lan Mouse"
 msgstr "Basé sur Lan Mouse"
 
-#: rustinput-gtk/resources/window.ui:675
+#: rustinput-gtk/resources/window.ui:688
 msgid "by Ferdinand Schober and contributors"
 msgstr "par Ferdinand Schober et ses contributeurs"
 
-#: rustinput-gtk/resources/window.ui:687
+#: rustinput-gtk/resources/window.ui:700
 msgid "License"
 msgstr "Licence"
 
-#: rustinput-gtk/resources/window.ui:700
+#: rustinput-gtk/resources/window.ui:713
 msgid "Logs"
 msgstr "Journaux"
 
@@ -467,7 +475,7 @@ msgstr "La souris est arrivée de {address}"
 msgid "{address} disconnected"
 msgstr "{address} déconnecté"
 
-#: rustinput-gtk/src/lib.rs:573
+#: rustinput-gtk/src/lib.rs:582
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Fichiers reçus de {name} : {count}, prêts à être collés"
 
@@ -689,95 +697,153 @@ msgstr "{files} de {name}, collage effectué"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} de {name}, collage non effectué"
 
-#: rustinput-gtk/src/window/clipboard.rs:177
+#: rustinput-gtk/src/window/clipboard.rs:263
 msgid "Copying…"
 msgstr "Copie…"
 
-#: rustinput-gtk/src/window/clipboard.rs:190
+#: rustinput-gtk/src/window/clipboard.rs:283
 msgid "Copy here"
 msgstr "Copier ici"
 
-#: rustinput-gtk/src/window/clipboard.rs:193
+#: rustinput-gtk/src/window/clipboard.rs:287
+msgid "Back on the clipboard"
+msgstr "De nouveau dans le presse-papiers"
+
+#: rustinput-gtk/src/window/clipboard.rs:288
+msgid "Could not put it back on the clipboard: {error}"
+msgstr "Impossible de le remettre dans le presse-papiers : {error}"
+
+#: rustinput-gtk/src/window/clipboard.rs:292
 msgid "The files of {name} are on their way here"
 msgstr "Les fichiers de {name} arrivent"
 
-#: rustinput-gtk/src/window/clipboard.rs:197
+#: rustinput-gtk/src/window/clipboard.rs:296
 msgid "Copied here from {name}"
 msgstr "Copié ici depuis {name}"
 
-#: rustinput-gtk/src/window/clipboard.rs:198
+#: rustinput-gtk/src/window/clipboard.rs:297
 msgid "Could not copy from {name}: {error}"
 msgstr "Impossible de copier depuis {name} : {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:239
+#: rustinput-gtk/src/window/clipboard.rs:338
 msgid "Asking…"
 msgstr "Demande en cours…"
 
-#: rustinput-gtk/src/window/clipboard.rs:262
+#: rustinput-gtk/src/window/clipboard.rs:361
 msgid "Put it on the clipboard of this computer"
 msgstr "Le mettre dans le presse-papiers de cet ordinateur"
 
-#: rustinput-gtk/src/window/clipboard.rs:297
+#: rustinput-gtk/src/window/clipboard.rs:391
+msgid "Clear"
+msgstr "Effacer"
+
+#: rustinput-gtk/src/window/clipboard.rs:392
+msgid "Forget the history of this computer"
+msgstr "Oublier l’historique de cet ordinateur"
+
+#: rustinput-gtk/src/window/clipboard.rs:447
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "Le presse-papiers n’est pas partagé sur cet ordinateur (clipboard = false)"
 
-#: rustinput-gtk/src/window/clipboard.rs:300
+#: rustinput-gtk/src/window/clipboard.rs:450
 msgid "Does not show its clipboard"
 msgstr "Ne montre pas son presse-papiers"
 
-#: rustinput-gtk/src/window/clipboard.rs:302
+#: rustinput-gtk/src/window/clipboard.rs:452
 msgid "Could not be asked: {error}"
 msgstr "Impossible de demander : {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:319
-msgid "Empty"
-msgstr "Vide"
+#: rustinput-gtk/src/window/clipboard.rs:483
+msgid "No history is kept on this computer: switch it on in Preferences."
+msgstr "Aucun historique n’est gardé sur cet ordinateur : activez-le dans Préférences."
 
-#: rustinput-gtk/src/window/clipboard.rs:338
+#: rustinput-gtk/src/window/clipboard.rs:486
+msgid "It keeps no history of its clipboard."
+msgstr "Il ne garde pas d’historique de son presse-papiers."
+
+#: rustinput-gtk/src/window/clipboard.rs:487
+msgid "New copies can not be noticed on its system yet (Wayland): no history."
+msgstr "Les nouvelles copies ne peuvent pas encore être remarquées sur son système (Wayland) : pas d’historique."
+
+#: rustinput-gtk/src/window/clipboard.rs:490
+msgid "Its RustInput is older, without a history."
+msgstr "Son RustInput est plus ancien, sans historique."
+
+#: rustinput-gtk/src/window/clipboard.rs:510
+msgid "History"
+msgstr "Historique"
+
+#: rustinput-gtk/src/window/clipboard.rs:512
+msgid "History · {count} copy before"
+msgid_plural "History · {count} copies before"
+msgstr[0] "Historique · {count} copie avant"
+msgstr[1] "Historique · {count} copies avant"
+
+#: rustinput-gtk/src/window/clipboard.rs:529
+msgid "Show fewer"
+msgstr "Afficher moins"
+
+#: rustinput-gtk/src/window/clipboard.rs:531
+msgid "Show all {count}"
+msgstr "Afficher les {count}"
+
+#: rustinput-gtk/src/window/clipboard.rs:554
 msgid "Formatted text"
 msgstr "Texte mis en forme"
 
-#: rustinput-gtk/src/window/clipboard.rs:340
+#: rustinput-gtk/src/window/clipboard.rs:556
 msgid "Text"
 msgstr "Texte"
 
-#: rustinput-gtk/src/window/clipboard.rs:344
+#: rustinput-gtk/src/window/clipboard.rs:562
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} caractère"
 msgstr[1] "{count} caractères"
 
-#: rustinput-gtk/src/window/clipboard.rs:345
-msgid "{count} line"
-msgid_plural "{count} lines"
-msgstr[0] "{count} ligne"
-msgstr[1] "{count} lignes"
-
-#: rustinput-gtk/src/window/clipboard.rs:364
+#: rustinput-gtk/src/window/clipboard.rs:572
 msgid "Image, {width} × {height}"
 msgstr "Image, {width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:374
-msgid "and {count} more"
-msgid_plural "and {count} more"
-msgstr[0] "et {count} autre"
-msgstr[1] "et {count} autres"
+#: rustinput-gtk/src/window/clipboard.rs:590
+msgid "Image"
+msgstr "Image"
 
-#: rustinput-gtk/src/window/clipboard.rs:385
+#: rustinput-gtk/src/window/clipboard.rs:601
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} fichier ou dossier"
 msgstr[1] "{count} fichiers et dossiers"
 
-#: rustinput-gtk/src/window/clipboard.rs:401
+#: rustinput-gtk/src/window/clipboard.rs:646
+msgid "Copy"
+msgstr "Copier"
+
+#: rustinput-gtk/src/window/clipboard.rs:672
+msgid "Empty"
+msgstr "Vide"
+
+#: rustinput-gtk/src/window/clipboard.rs:698
+msgid "{count} line"
+msgid_plural "{count} lines"
+msgstr[0] "{count} ligne"
+msgstr[1] "{count} lignes"
+
+#: rustinput-gtk/src/window/clipboard.rs:738
+msgid "and {count} more"
+msgid_plural "and {count} more"
+msgstr[0] "et {count} autre"
+msgstr[1] "et {count} autres"
+
+#: rustinput-gtk/src/window/clipboard.rs:765
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "Un gestionnaire de mots de passe l’a marqué comme secret : il n’est pas montré, mais peut être copié."
 
-#: rustinput-gtk/src/window/clipboard.rs:409
+#: rustinput-gtk/src/window/clipboard.rs:773
 msgid "Password, hidden"
 msgstr "Mot de passe, masqué"
 
-#: rustinput-gtk/src/window/imp.rs:249
+#: rustinput-gtk/src/window/imp.rs:251
 msgid "Failed to relaunch RustInput"
 msgstr "Impossible de relancer RustInput"
 

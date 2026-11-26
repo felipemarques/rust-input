@@ -8,16 +8,21 @@
 //! short answer; the window hears only what changed. A client is believed
 //! only with a certificate authorized here, the one it described itself with
 //! or the first one it answered with.
+//!
+//! The history of each clipboard (0.35.0, [`crate::clipboard`]) comes with
+//! the same questions, unless the version the window has is still the one
+//! there; "Copy here" on it brings an older copy, from this computer back to
+//! its clipboard too.
 
 use std::time::Duration;
 
-use rustinput_ipc::{ClientHandle, ClipboardSeen, FrontendEvent};
+use rustinput_ipc::{ClientHandle, ClipboardHistory, ClipboardSeen, FrontendEvent};
 use tokio::{sync::oneshot, time::timeout};
 
 use super::Service;
 use crate::{
     arrangement::{self, ArrangeError, ArrangementEvent, FetchedHere},
-    clipboard::{ClipboardMsg, Peeked},
+    clipboard::{ClipboardMsg, HistoryAnswer, Peeked},
 };
 
 /// longest the clipboard of this computer may take to be read
@@ -25,19 +30,29 @@ const PEEK_HERE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// how asking about a clipboard went
 pub(super) enum ClipboardResult {
-    /// what the clipboard of the client (of this computer: `None`) holds;
-    /// `None` when it did not change, with the fingerprint that answered
+    /// what the clipboard of the client (of this computer: `None`) holds,
+    /// `None` when it did not change, and its history, `None` from a
+    /// RustInput without it; with the fingerprint that answered
     Peeked {
         handle: Option<ClientHandle>,
         name: String,
-        result: Result<(Option<String>, Option<ClipboardSeen>), ArrangeError>,
+        result: Result<Peeked3, ArrangeError>,
     },
     /// what the clipboard of the client held came
     Brought {
+        handle: ClientHandle,
         name: String,
         result: Result<(String, FetchedHere), ArrangeError>,
     },
+    /// a copy of the history of this computer is back on its clipboard
+    Restored {
+        name: String,
+        result: Result<(), String>,
+    },
 }
+
+/// the fingerprint that answered, what the clipboard holds and its history
+type Peeked3 = (Option<String>, Option<ClipboardSeen>, Option<HistoryAnswer>);
 
 impl Service {
     /// Asks what the clipboards hold: the window hears what changed, or
@@ -51,6 +66,14 @@ impl Service {
                 .collect();
             for (handle, name, seen) in known {
                 self.notify_frontend(FrontendEvent::Clipboard { handle, name, seen });
+            }
+            let histories: Vec<_> = self
+                .clipboard_histories
+                .iter()
+                .map(|(handle, (_, history))| (*handle, history.clone()))
+                .collect();
+            for (handle, history) in histories {
+                self.notify_frontend(FrontendEvent::ClipboardHistory { handle, history });
             }
         }
         self.peek_here();
@@ -67,6 +90,13 @@ impl Service {
         }
     }
 
+    /// the version of the history of the clipboard the window has, 0 for none
+    fn known_history(&self, handle: Option<ClientHandle>) -> u64 {
+        self.clipboard_histories
+            .get(&handle)
+            .map_or(0, |(version, _)| *version)
+    }
+
     fn peek_here(&mut self) {
         if !self.clipboard_peeking.insert(None) {
             return;
@@ -74,15 +104,22 @@ impl Service {
         let known = self.known_hash(None);
         let (reply, peeked) = oneshot::channel();
         self.clipboard.notify(ClipboardMsg::Peek { known, reply });
+        let version = self.known_history(None);
+        let (reply, history) = oneshot::channel();
+        self.clipboard.notify(ClipboardMsg::History {
+            known: (version > 0).then_some(version),
+            reply,
+        });
         let (results, name) = (self.clipboard_results_tx.clone(), self.name.clone());
         tokio::task::spawn_local(async move {
             let result = match timeout(PEEK_HERE_TIMEOUT, peeked).await {
-                Ok(Ok(Peeked::Unchanged)) => Ok((None, None)),
+                Ok(Ok(Peeked::Unchanged)) => Ok((None, None, history.await.ok())),
                 Ok(Ok(Peeked::Holds { hash, peek })) => {
-                    Ok((None, Some(ClipboardSeen::Holds { hash, peek })))
+                    let seen = Some(ClipboardSeen::Holds { hash, peek });
+                    Ok((None, seen, history.await.ok()))
                 }
                 // nobody reads it: the clipboard is not shared here
-                Ok(Err(_)) => Ok((None, Some(ClipboardSeen::Hidden))),
+                Ok(Err(_)) => Ok((None, Some(ClipboardSeen::Hidden), None)),
                 Err(_) => Err(ArrangeError::Failed(
                     "the clipboard did not answer in time".into(),
                 )),
@@ -108,11 +145,12 @@ impl Service {
         }
         self.clipboard_peeking.insert(Some(handle));
         let known = self.known_hash(Some(handle));
+        let version = self.known_history(Some(handle));
         let (cert, results) = (self.cert.clone(), self.clipboard_results_tx.clone());
         tokio::task::spawn_local(async move {
-            let result = arrangement::peek(cert, addrs, expected, known)
+            let result = arrangement::peek(cert, addrs, expected, known, version)
                 .await
-                .map(|(peer, seen)| (Some(peer), seen));
+                .map(|(peer, seen, history)| (Some(peer), seen, history));
             let _ = results.send(ClipboardResult::Peeked {
                 handle: Some(handle),
                 name,
@@ -135,12 +173,26 @@ impl Service {
             .contains_key(fingerprint)
     }
 
-    /// Brings what the clipboard of the client holds here, if it still
-    /// holds `hash`.
-    pub(super) fn bring_clipboard(&mut self, handle: ClientHandle, hash: u64) {
+    /// Brings what the clipboard of the client holds, or held, here, if it
+    /// still has `hash`; of this computer (`None`): from its history back
+    /// on its clipboard.
+    pub(super) fn bring_clipboard(&mut self, handle: Option<ClientHandle>, hash: u64) {
+        let Some(handle) = handle else {
+            let (reply, restored) = oneshot::channel();
+            self.clipboard.notify(ClipboardMsg::Restore { hash, reply });
+            let (results, name) = (self.clipboard_results_tx.clone(), self.name.clone());
+            tokio::task::spawn_local(async move {
+                let result = restored
+                    .await
+                    .unwrap_or_else(|_| Err("the clipboard is not shared here".into()));
+                let _ = results.send(ClipboardResult::Restored { name, result });
+            });
+            return;
+        };
         let (expected, name) = self.clipboard_peer(handle);
         if !self.clipboard.enabled() {
             self.notify_frontend(FrontendEvent::ClipboardBrought {
+                handle: Some(handle),
                 name,
                 files: false,
                 error: Some(
@@ -154,7 +206,11 @@ impl Service {
         let (cert, results) = (self.cert.clone(), self.clipboard_results_tx.clone());
         tokio::task::spawn_local(async move {
             let result = arrangement::fetch(cert, addrs, expected, hash).await;
-            let _ = results.send(ClipboardResult::Brought { name, result });
+            let _ = results.send(ClipboardResult::Brought {
+                handle,
+                name,
+                result,
+            });
         });
     }
 
@@ -172,23 +228,47 @@ impl Service {
                         return;
                     }
                 }
-                let seen = match result {
-                    Ok((Some(peer), _)) if !self.is_authorized(&peer) => Some(
-                        ClipboardSeen::Unavailable("its certificate is not authorized here".into()),
+                let (seen, history) = match result {
+                    Ok((Some(peer), ..)) if !self.is_authorized(&peer) => (
+                        Some(ClipboardSeen::Unavailable(
+                            "its certificate is not authorized here".into(),
+                        )),
+                        None,
                     ),
-                    Ok((peer, seen)) => {
+                    Ok((peer, seen, history)) => {
                         if let (Some(handle), Some(peer)) = (handle, peer) {
                             self.clipboard_fingerprints.insert(handle, peer);
                         }
-                        seen
+                        // a client that answered without it is older
+                        let older = handle.is_some() && seen != Some(ClipboardSeen::Hidden);
+                        let history = match history {
+                            None if older => Some(HistoryAnswer::Older),
+                            history => history,
+                        };
+                        (seen, history)
                     }
-                    Err(e) => Some(ClipboardSeen::Unavailable(e.to_string())),
+                    Err(e) => (Some(ClipboardSeen::Unavailable(e.to_string())), None),
                 };
                 if let Some(seen) = seen {
                     self.clipboard_seen_now(handle, name, seen);
                 }
+                if let Some(history) = history {
+                    self.clipboard_history_now(handle, history);
+                }
             }
-            ClipboardResult::Brought { name, result } => {
+            ClipboardResult::Restored { name, result } => {
+                self.notify_frontend(FrontendEvent::ClipboardBrought {
+                    handle: None,
+                    name,
+                    files: false,
+                    error: result.err(),
+                });
+            }
+            ClipboardResult::Brought {
+                handle,
+                name,
+                result,
+            } => {
                 let (files, error) = match result {
                     Ok((peer, _)) if !self.is_authorized(&peer) => (
                         false,
@@ -210,7 +290,12 @@ impl Service {
                         (false, Some(e.to_string()))
                     }
                 };
-                self.notify_frontend(FrontendEvent::ClipboardBrought { name, files, error });
+                self.notify_frontend(FrontendEvent::ClipboardBrought {
+                    handle: Some(handle),
+                    name,
+                    files,
+                    error,
+                });
             }
         }
     }
@@ -233,10 +318,48 @@ impl Service {
         }
     }
 
+    /// keeps the history of a clipboard and tells the window if it changed
+    fn clipboard_history_now(&mut self, handle: Option<ClientHandle>, answer: HistoryAnswer) {
+        let (version, history) = match answer {
+            HistoryAnswer::Unchanged => return,
+            HistoryAnswer::Items { version, items } => (version, ClipboardHistory::Items(items)),
+            HistoryAnswer::Off => (0, ClipboardHistory::Off),
+            HistoryAnswer::Unsupported => (0, ClipboardHistory::Unsupported),
+            HistoryAnswer::Older => (0, ClipboardHistory::Older),
+        };
+        let changed = self
+            .clipboard_histories
+            .get(&handle)
+            .is_none_or(|(_, known)| *known != history);
+        self.clipboard_histories
+            .insert(handle, (version, history.clone()));
+        if changed {
+            self.notify_frontend(FrontendEvent::ClipboardHistory { handle, history });
+        }
+    }
+
     /// forgets what the clipboard of a deleted client held
     pub(super) fn forget_clipboard(&mut self, handle: ClientHandle) {
         self.clipboard_seen.remove(&Some(handle));
+        self.clipboard_histories.remove(&Some(handle));
         self.clipboard_fingerprints.remove(&handle);
+    }
+
+    /// whether this computer keeps a history of its clipboard, kept in the
+    /// configuration
+    pub(super) fn set_clipboard_history(&mut self, keep: bool) {
+        self.config.set_clipboard_history(keep);
+        self.save_config();
+        let size = self.config.clipboard_history();
+        log::info!("the history of the clipboard keeps {size} copies");
+        self.clipboard.notify(ClipboardMsg::HistorySize(size));
+        self.keep_clipboard_history = size > 0;
+        self.notify_frontend(FrontendEvent::KeepClipboardHistory(size > 0));
+    }
+
+    /// forgets the history of the clipboard of this computer
+    pub(super) fn clear_clipboard_history(&mut self) {
+        self.clipboard.notify(ClipboardMsg::ClearHistory);
     }
 
     /// whether the other computers see the clipboard of this one, kept in
@@ -258,15 +381,24 @@ impl Service {
             ArrangementEvent::Peek {
                 addr,
                 known,
+                history,
                 mut done,
             } => {
                 log::debug!("{addr} looks at the clipboard");
                 if !self.show_clipboard {
-                    let _ = done.send(Some(ClipboardSeen::Hidden));
+                    let _ = done.send((Some(ClipboardSeen::Hidden), None));
                     return;
                 }
                 let (reply, peeked) = oneshot::channel();
                 self.clipboard.notify(ClipboardMsg::Peek { known, reply });
+                let history = history.map(|version| {
+                    let (reply, history) = oneshot::channel();
+                    self.clipboard.notify(ClipboardMsg::History {
+                        known: (version > 0).then_some(version),
+                        reply,
+                    });
+                    history
+                });
                 tokio::task::spawn_local(async move {
                     // the asker gave up: the clipboard is not read for it
                     let peeked = tokio::select! {
@@ -281,7 +413,11 @@ impl Service {
                         // nobody reads it: the clipboard is not shared here
                         Err(_) => Some(ClipboardSeen::Hidden),
                     };
-                    let _ = done.send(seen);
+                    let history = match history {
+                        Some(history) => history.await.ok(),
+                        None => None,
+                    };
+                    let _ = done.send((seen, history));
                 });
             }
             ArrangementEvent::Fetch {

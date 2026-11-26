@@ -546,10 +546,19 @@ fn build_ui(app: &Application) {
                     FrontendEvent::Clipboard { handle, name, seen } => {
                         window.clipboard_seen(handle, &name, seen)
                     }
-                    FrontendEvent::ClipboardBrought { name, files, error } => {
-                        window.clipboard_brought(&name, files, error.as_deref())
-                    }
+                    FrontendEvent::ClipboardBrought {
+                        handle,
+                        name,
+                        files,
+                        error,
+                    } => window.clipboard_brought(handle, &name, files, error.as_deref()),
                     FrontendEvent::ShowClipboard(show) => window.set_show_clipboard(show),
+                    FrontendEvent::ClipboardHistory { handle, history } => {
+                        window.clipboard_history(handle, history)
+                    }
+                    FrontendEvent::KeepClipboardHistory(keep) => {
+                        window.set_keep_clipboard_history(keep)
+                    }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::FileOptions(options) => {
                         window.set_file_options(options);

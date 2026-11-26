@@ -299,59 +299,67 @@ msgstr "このクリップボードをほかのコンピューターに見せる
 msgid "In their Clipboards tab, to the computers authorized here, which can also copy it from there. Passwords marked by a password manager are never shown."
 msgstr "ここで許可されたコンピューターの「クリップボード」タブに表示され、そこからコピーすることもできます。パスワードマネージャーが印を付けたパスワードは表示されません。"
 
-#: rustinput-gtk/resources/window.ui:597
+#: rustinput-gtk/resources/window.ui:595
+msgid "Keep a history of the copies"
+msgstr "コピーの履歴を残す"
+
+#: rustinput-gtk/resources/window.ui:596
+msgid "The last copies of this computer, in memory only: they are gone when RustInput closes. Passwords marked by a password manager are not kept."
+msgstr "このコンピューターの最近のコピーをメモリーにだけ保存します。RustInput を閉じると消えます。パスワードマネージャーが印を付けたパスワードは保存しません。"
+
+#: rustinput-gtk/resources/window.ui:610
 msgid "File transfers"
 msgstr "ファイル転送"
 
-#: rustinput-gtk/resources/window.ui:598
+#: rustinput-gtk/resources/window.ui:611
 msgid "Copy files on one computer and paste them on another"
 msgstr "あるコンピューターでファイルをコピーし、別のコンピューターに貼り付けます"
 
-#: rustinput-gtk/resources/window.ui:604
+#: rustinput-gtk/resources/window.ui:617
 msgid "Allowed to connect"
 msgstr "接続を許可済み"
 
-#: rustinput-gtk/resources/window.ui:605
+#: rustinput-gtk/resources/window.ui:618
 msgid "The computers whose certificate this one accepts. A computer that is not here asks first, with a code."
 msgstr "このコンピューターが証明書を受け入れるコンピューターです。ここにないコンピューターは、まずコードを使って確認を求めます。"
 
-#: rustinput-gtk/resources/window.ui:624
+#: rustinput-gtk/resources/window.ui:637
 msgid "No computers allowed yet"
 msgstr "許可されたコンピューターはまだありません"
 
-#: rustinput-gtk/resources/window.ui:625
+#: rustinput-gtk/resources/window.ui:638
 msgid "Authorize one with “Authorize”, or accept its request"
 msgstr "「承認」で承認するか、相手からの要求を受け入れてください"
 
-#: rustinput-gtk/resources/window.ui:642
+#: rustinput-gtk/resources/window.ui:655
 msgid "About"
 msgstr "このアプリについて"
 
-#: rustinput-gtk/resources/window.ui:647
+#: rustinput-gtk/resources/window.ui:660
 msgid "Easily use your mouse and keyboard on multiple computers"
 msgstr "マウスとキーボードを複数のコンピューターで簡単に使えます"
 
-#: rustinput-gtk/resources/window.ui:656
+#: rustinput-gtk/resources/window.ui:669
 msgid "Version"
 msgstr "バージョン"
 
-#: rustinput-gtk/resources/window.ui:661
+#: rustinput-gtk/resources/window.ui:674
 msgid "Source code"
 msgstr "ソースコード"
 
-#: rustinput-gtk/resources/window.ui:674
+#: rustinput-gtk/resources/window.ui:687
 msgid "Based on Lan Mouse"
 msgstr "Lan Mouse をベースにしています"
 
-#: rustinput-gtk/resources/window.ui:675
+#: rustinput-gtk/resources/window.ui:688
 msgid "by Ferdinand Schober and contributors"
 msgstr "Ferdinand Schober と貢献者による"
 
-#: rustinput-gtk/resources/window.ui:687
+#: rustinput-gtk/resources/window.ui:700
 msgid "License"
 msgstr "ライセンス"
 
-#: rustinput-gtk/resources/window.ui:700
+#: rustinput-gtk/resources/window.ui:713
 msgid "Logs"
 msgstr "ログ"
 
@@ -467,7 +475,7 @@ msgstr "マウスが {address} から移ってきました"
 msgid "{address} disconnected"
 msgstr "{address} との接続が切れました"
 
-#: rustinput-gtk/src/lib.rs:573
+#: rustinput-gtk/src/lib.rs:582
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "{name} からファイルを {count} 個受信しました。貼り付けできます"
 
@@ -686,91 +694,148 @@ msgstr "{name} からの {files}、貼り付け済み"
 msgid "{files} from {name}, not pasted"
 msgstr "{name} からの {files}、貼り付けられていません"
 
-#: rustinput-gtk/src/window/clipboard.rs:177
+#: rustinput-gtk/src/window/clipboard.rs:263
 msgid "Copying…"
 msgstr "コピー中…"
 
-#: rustinput-gtk/src/window/clipboard.rs:190
+#: rustinput-gtk/src/window/clipboard.rs:283
 msgid "Copy here"
 msgstr "ここにコピー"
 
-#: rustinput-gtk/src/window/clipboard.rs:193
+#: rustinput-gtk/src/window/clipboard.rs:287
+msgid "Back on the clipboard"
+msgstr "クリップボードに戻しました"
+
+#: rustinput-gtk/src/window/clipboard.rs:288
+msgid "Could not put it back on the clipboard: {error}"
+msgstr "クリップボードに戻せませんでした: {error}"
+
+#: rustinput-gtk/src/window/clipboard.rs:292
 msgid "The files of {name} are on their way here"
 msgstr "{name} のファイルを転送しています"
 
-#: rustinput-gtk/src/window/clipboard.rs:197
+#: rustinput-gtk/src/window/clipboard.rs:296
 msgid "Copied here from {name}"
 msgstr "{name} からここにコピーしました"
 
-#: rustinput-gtk/src/window/clipboard.rs:198
+#: rustinput-gtk/src/window/clipboard.rs:297
 msgid "Could not copy from {name}: {error}"
 msgstr "{name} からコピーできませんでした: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:239
+#: rustinput-gtk/src/window/clipboard.rs:338
 msgid "Asking…"
 msgstr "問い合わせ中…"
 
-#: rustinput-gtk/src/window/clipboard.rs:262
+#: rustinput-gtk/src/window/clipboard.rs:361
 msgid "Put it on the clipboard of this computer"
 msgstr "このコンピューターのクリップボードに入れる"
 
-#: rustinput-gtk/src/window/clipboard.rs:297
+#: rustinput-gtk/src/window/clipboard.rs:391
+msgid "Clear"
+msgstr "消去"
+
+#: rustinput-gtk/src/window/clipboard.rs:392
+msgid "Forget the history of this computer"
+msgstr "このコンピューターの履歴を消す"
+
+#: rustinput-gtk/src/window/clipboard.rs:447
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "このコンピューターではクリップボードを共有していません (clipboard = false)"
 
-#: rustinput-gtk/src/window/clipboard.rs:300
+#: rustinput-gtk/src/window/clipboard.rs:450
 msgid "Does not show its clipboard"
 msgstr "クリップボードを見せていません"
 
-#: rustinput-gtk/src/window/clipboard.rs:302
+#: rustinput-gtk/src/window/clipboard.rs:452
 msgid "Could not be asked: {error}"
 msgstr "問い合わせできませんでした: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:319
-msgid "Empty"
-msgstr "空"
+#: rustinput-gtk/src/window/clipboard.rs:483
+msgid "No history is kept on this computer: switch it on in Preferences."
+msgstr "このコンピューターでは履歴を残していません。「設定」でオンにできます。"
 
-#: rustinput-gtk/src/window/clipboard.rs:338
+#: rustinput-gtk/src/window/clipboard.rs:486
+msgid "It keeps no history of its clipboard."
+msgstr "クリップボードの履歴を残していません。"
+
+#: rustinput-gtk/src/window/clipboard.rs:487
+msgid "New copies can not be noticed on its system yet (Wayland): no history."
+msgstr "そのシステムではまだ新しいコピーを検知できません (Wayland)。履歴はありません。"
+
+#: rustinput-gtk/src/window/clipboard.rs:490
+msgid "Its RustInput is older, without a history."
+msgstr "その RustInput は古く、履歴がありません。"
+
+#: rustinput-gtk/src/window/clipboard.rs:510
+msgid "History"
+msgstr "履歴"
+
+#: rustinput-gtk/src/window/clipboard.rs:512
+msgid "History · {count} copy before"
+msgid_plural "History · {count} copies before"
+msgstr[0] "履歴 · 前の {count} 件"
+
+#: rustinput-gtk/src/window/clipboard.rs:529
+msgid "Show fewer"
+msgstr "少なく表示"
+
+#: rustinput-gtk/src/window/clipboard.rs:531
+msgid "Show all {count}"
+msgstr "すべて表示 ({count})"
+
+#: rustinput-gtk/src/window/clipboard.rs:554
 msgid "Formatted text"
 msgstr "書式付きテキスト"
 
-#: rustinput-gtk/src/window/clipboard.rs:340
+#: rustinput-gtk/src/window/clipboard.rs:556
 msgid "Text"
 msgstr "テキスト"
 
-#: rustinput-gtk/src/window/clipboard.rs:344
+#: rustinput-gtk/src/window/clipboard.rs:562
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} 文字"
 
-#: rustinput-gtk/src/window/clipboard.rs:345
-msgid "{count} line"
-msgid_plural "{count} lines"
-msgstr[0] "{count} 行"
-
-#: rustinput-gtk/src/window/clipboard.rs:364
+#: rustinput-gtk/src/window/clipboard.rs:572
 msgid "Image, {width} × {height}"
 msgstr "画像、{width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:374
-msgid "and {count} more"
-msgid_plural "and {count} more"
-msgstr[0] "ほか {count} 件"
+#: rustinput-gtk/src/window/clipboard.rs:590
+msgid "Image"
+msgstr "画像"
 
-#: rustinput-gtk/src/window/clipboard.rs:385
+#: rustinput-gtk/src/window/clipboard.rs:601
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} 個のファイルとフォルダー"
 
-#: rustinput-gtk/src/window/clipboard.rs:401
+#: rustinput-gtk/src/window/clipboard.rs:646
+msgid "Copy"
+msgstr "コピー"
+
+#: rustinput-gtk/src/window/clipboard.rs:672
+msgid "Empty"
+msgstr "空"
+
+#: rustinput-gtk/src/window/clipboard.rs:698
+msgid "{count} line"
+msgid_plural "{count} lines"
+msgstr[0] "{count} 行"
+
+#: rustinput-gtk/src/window/clipboard.rs:738
+msgid "and {count} more"
+msgid_plural "and {count} more"
+msgstr[0] "ほか {count} 件"
+
+#: rustinput-gtk/src/window/clipboard.rs:765
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "パスワードマネージャーが秘密として印を付けました。表示されませんが、コピーはできます。"
 
-#: rustinput-gtk/src/window/clipboard.rs:409
+#: rustinput-gtk/src/window/clipboard.rs:773
 msgid "Password, hidden"
 msgstr "パスワード (非表示)"
 
-#: rustinput-gtk/src/window/imp.rs:249
+#: rustinput-gtk/src/window/imp.rs:251
 msgid "Failed to relaunch RustInput"
 msgstr "RustInput を再起動できませんでした"
 

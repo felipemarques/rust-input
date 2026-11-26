@@ -7,7 +7,8 @@
 use std::{borrow::Cow, io::Cursor, path::PathBuf, sync::mpsc};
 
 use rustinput_ipc::{
-    CLIPBOARD_PEEK_FILES, CLIPBOARD_PEEK_TEXT, CLIPBOARD_THUMBNAIL, ClipboardPeek,
+    CLIPBOARD_HISTORY_TEXT, CLIPBOARD_HISTORY_THUMBNAIL, CLIPBOARD_PEEK_FILES, CLIPBOARD_PEEK_TEXT,
+    CLIPBOARD_THUMBNAIL, ClipboardPeek,
 };
 use rustinput_proto::{
     ClipboardKind,
@@ -62,9 +63,19 @@ pub(crate) enum Peeked {
     Holds { hash: u64, peek: ClipboardPeek },
 }
 
+/// what was copied, for the history of the clipboard
+#[derive(Debug)]
+pub(crate) struct Recorded {
+    pub(crate) content: LocalContent,
+    /// shortened for the history: [`CLIPBOARD_HISTORY_TEXT`],
+    /// [`CLIPBOARD_HISTORY_THUMBNAIL`]
+    pub(crate) peek: ClipboardPeek,
+}
+
 enum Request {
     Read(oneshot::Sender<Option<LocalContent>>),
     Peek(Option<u64>, oneshot::Sender<Peeked>),
+    Record(oneshot::Sender<Option<Recorded>>),
     Write(Content),
     WriteFiles(Vec<PathBuf>),
 }
@@ -103,6 +114,14 @@ impl LocalClipboard {
         peeked.await.ok()
     }
 
+    /// What was just copied, for the history; `None` for nothing, and for a
+    /// secret (see [`Marks`]), which is not kept.
+    pub(crate) async fn record(&self) -> Option<Recorded> {
+        let (reply, recorded) = oneshot::channel();
+        self.requests.send(Request::Record(reply)).ok()?;
+        recorded.await.ok().flatten()
+    }
+
     /// replaces the content of the clipboard
     pub(crate) fn write(&self, content: Content) {
         let _ = self.requests.send(Request::Write(content));
@@ -137,6 +156,10 @@ fn worker(requests: mpsc::Receiver<Request>) {
                 if let Some(clipboard) = clipboard.as_mut() {
                     let _ = reply.send(peek(clipboard, &mut marks, known));
                 }
+            }
+            Request::Record(reply) => {
+                let recorded = clipboard.as_mut().and_then(|c| record(c, &mut marks));
+                let _ = reply.send(recorded);
             }
             Request::WriteFiles(paths) => write_files(clipboard.as_mut(), paths),
             Request::Write(content) => {
@@ -242,18 +265,7 @@ fn peek(clipboard: &mut arboard::Clipboard, marks: &mut Marks, known: Option<u64
     };
     if let Ok(paths) = clipboard.get().file_list() {
         if !paths.is_empty() {
-            let names = paths
-                .iter()
-                .take(CLIPBOARD_PEEK_FILES)
-                .map(|p| {
-                    p.file_name()
-                        .unwrap_or(p.as_os_str())
-                        .to_string_lossy()
-                        .into_owned()
-                })
-                .collect();
-            let count = paths.len() as u64;
-            return holds(files_key(&paths), ClipboardPeek::Files { names, count });
+            return holds(files_key(&paths), files_peek(&paths));
         }
     }
     let secret = marks.secret();
@@ -262,11 +274,12 @@ fn peek(clipboard: &mut arboard::Clipboard, marks: &mut Marks, known: Option<u64
         if !html_to_text(&html).trim().is_empty() {
             let text = text.unwrap_or_else(|| html_to_text(&html));
             let hash = html_hash(&html, &text);
-            return holds(hash, text_peek(&text, true, secret));
+            return holds(hash, text_peek(&text, true, secret, CLIPBOARD_PEEK_TEXT));
         }
     }
     if let Some(text) = text {
-        return holds(text_hash(text.as_bytes()), text_peek(&text, false, secret));
+        let peek = text_peek(&text, false, secret, CLIPBOARD_PEEK_TEXT);
+        return holds(text_hash(text.as_bytes()), peek);
     }
     match clipboard.get_image() {
         Ok(image) if image.bytes.len() == image.width * image.height * 4 => {
@@ -288,12 +301,77 @@ fn peek(clipboard: &mut arboard::Clipboard, marks: &mut Marks, known: Option<u64
     }
 }
 
-fn text_peek(text: &str, formatted: bool, secret: bool) -> ClipboardPeek {
+/// What [`read`] would take, and the same shortened for the history, in one
+/// reading. A secret is not even read.
+fn record(clipboard: &mut arboard::Clipboard, marks: &mut Marks) -> Option<Recorded> {
+    if let Ok(paths) = clipboard.get().file_list() {
+        if !paths.is_empty() {
+            let peek = files_peek(&paths);
+            let key = files_key(&paths);
+            return Some(Recorded {
+                content: LocalContent::Files { paths, key },
+                peek,
+            });
+        }
+    }
+    if marks.secret() {
+        return None;
+    }
+    let text = clipboard.get_text().ok().filter(|t| !t.is_empty());
+    if let Ok(html) = clipboard.get().html() {
+        if !html_to_text(&html).trim().is_empty() {
+            let text = text.unwrap_or_else(|| html_to_text(&html));
+            return Some(Recorded {
+                peek: text_peek(&text, true, false, CLIPBOARD_HISTORY_TEXT),
+                content: LocalContent::Data(Content::html(&html, &text)),
+            });
+        }
+    }
+    if let Some(text) = text {
+        return Some(Recorded {
+            peek: text_peek(&text, false, false, CLIPBOARD_HISTORY_TEXT),
+            content: LocalContent::Data(Content::text(text)),
+        });
+    }
+    let image = clipboard.get_image().ok()?;
+    let content = Content::image(image.width, image.height, &image.bytes).ok()?;
+    let max = CLIPBOARD_HISTORY_THUMBNAIL as usize;
+    let (w, h, small) = thumbnail(image.width, image.height, &image.bytes, max);
+    Some(Recorded {
+        content: LocalContent::Data(content),
+        peek: ClipboardPeek::Image {
+            width: image.width as u32,
+            height: image.height as u32,
+            thumbnail: encode_png(w, h, &small).unwrap_or_default(),
+        },
+    })
+}
+
+/// the first names of copied files and folders, and how many there are
+fn files_peek(paths: &[PathBuf]) -> ClipboardPeek {
+    let names = paths
+        .iter()
+        .take(CLIPBOARD_PEEK_FILES)
+        .map(|p| {
+            p.file_name()
+                .unwrap_or(p.as_os_str())
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    ClipboardPeek::Files {
+        names,
+        count: paths.len() as u64,
+    }
+}
+
+/// a text shortened to its start of at most `max` bytes
+fn text_peek(text: &str, formatted: bool, secret: bool, max: usize) -> ClipboardPeek {
     if secret {
         return ClipboardPeek::Secret;
     }
     ClipboardPeek::Text {
-        start: text_start(text, CLIPBOARD_PEEK_TEXT).to_owned(),
+        start: text_start(text, max).to_owned(),
         chars: text.chars().count() as u64,
         lines: text.lines().count().max(1) as u64,
         formatted,
@@ -614,7 +692,7 @@ mod tests {
         // "é" takes two bytes: not cut in half
         assert_eq!(text_start("aé", 2), "a");
         assert_eq!(text_start("aé", 3), "aé");
-        match text_peek("um\ndois\ntrês", false, false) {
+        match text_peek("um\ndois\ntrês", false, false, 100) {
             ClipboardPeek::Text {
                 start,
                 chars,
@@ -626,7 +704,7 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
-        assert_eq!(text_peek("senha", false, true), ClipboardPeek::Secret);
+        assert_eq!(text_peek("senha", false, true, 100), ClipboardPeek::Secret);
     }
 
     #[test]

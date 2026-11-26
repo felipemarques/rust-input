@@ -134,6 +134,8 @@ pub struct Window {
     pub clipboard_timer: RefCell<Option<glib::SourceId>>,
     #[template_child]
     pub show_clipboard_switch: TemplateChild<gtk::Switch>,
+    #[template_child]
+    pub keep_history_switch: TemplateChild<gtk::Switch>,
     /// the switch is being set to what the service has
     pub updating_show_clipboard: Cell<bool>,
 }
