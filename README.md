@@ -136,12 +136,13 @@ To turn the clipboard synchronization off, set `clipboard = false` in the [confi
   <em>What this computer and the laptop copied, with what they copied before. “Copy here” puts any of them on the clipboard of this computer.</em>
 </p>
 
-The **Clipboards** tab of the window (also **Clipboards…** in the menu of the tray icon) shows what each computer has
-copied, one card each, this one first: the start of a text with how many characters and lines it has, a thumbnail of
-an image with its size, the names of copied files and folders. It is kept up to date every 2 seconds while the tab is
-open, and nothing is asked while it is not. **Copy here** puts what another computer copied on the clipboard of this
-one, without moving the mouse there: text, formatted text and images right away, files and folders as a file transfer
-(the two computers need to be connected for that, as for any file transfer).
+The **Clipboards** tab of the window (also **Clipboards…** in the menu of the tray icon and **Clipboards** in the
+[radial menu](#radial-menu)) shows what each computer has copied, one card each, this one first: the start of a text
+with how many characters and lines it has, a thumbnail of an image with its size, the names of copied files and
+folders. It is kept up to date every 2 seconds while the tab is open, and nothing is asked while it is not. **Copy
+here** puts what another computer copied on the clipboard of this one, without moving the mouse there: text, formatted
+text and images right away, files and folders as a file transfer (the two computers need to be connected for that, as
+for any file transfer).
 
 - Only computers authorized on each other see each other's clipboard, the same as for the rest of the clipboard. The
   clipboard of a computer is only read while another one shows the tab, and only what is shown travels: the start of
@@ -226,6 +227,7 @@ picks nothing.
   **Open RustInput**.
 - **Lock** another computer: its screen locks, as Win+L does there. One for each computer, like **Go to**.
 - **Lock all computers**: this one and the others at once, when you leave the desk.
+- **Clipboards** opens the window on [the Clipboards tab](#the-clipboards-tab), to see what every computer copied.
 - **File transfers** and **Open RustInput** open those windows.
 
 "Send copied files automatically" is in the menu of the tray icon and in Preferences. With more than eight actions

@@ -475,7 +475,7 @@ msgstr "El ratón llegó desde {address}"
 msgid "{address} disconnected"
 msgstr "{address}: desconectado"
 
-#: rustinput-gtk/src/lib.rs:582
+#: rustinput-gtk/src/lib.rs:583
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Archivos recibidos de {name}: {count}, listos para pegar"
 
@@ -697,149 +697,149 @@ msgstr "{files} de {name}, todo pegado"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} de {name}, sin pegar"
 
-#: rustinput-gtk/src/window/clipboard.rs:263
+#: rustinput-gtk/src/window/clipboard.rs:261
 msgid "Copying…"
 msgstr "Copiando…"
 
-#: rustinput-gtk/src/window/clipboard.rs:283
+#: rustinput-gtk/src/window/clipboard.rs:281
 msgid "Copy here"
 msgstr "Copiar aquí"
 
-#: rustinput-gtk/src/window/clipboard.rs:287
+#: rustinput-gtk/src/window/clipboard.rs:285
 msgid "Back on the clipboard"
 msgstr "De vuelta en el portapapeles"
 
-#: rustinput-gtk/src/window/clipboard.rs:288
+#: rustinput-gtk/src/window/clipboard.rs:286
 msgid "Could not put it back on the clipboard: {error}"
 msgstr "No se pudo volver a poner en el portapapeles: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:292
+#: rustinput-gtk/src/window/clipboard.rs:290
 msgid "The files of {name} are on their way here"
 msgstr "Los archivos de {name} están en camino"
 
-#: rustinput-gtk/src/window/clipboard.rs:296
+#: rustinput-gtk/src/window/clipboard.rs:294
 msgid "Copied here from {name}"
 msgstr "Copiado aquí desde {name}"
 
-#: rustinput-gtk/src/window/clipboard.rs:297
+#: rustinput-gtk/src/window/clipboard.rs:295
 msgid "Could not copy from {name}: {error}"
 msgstr "No se pudo copiar desde {name}: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:338
+#: rustinput-gtk/src/window/clipboard.rs:336
 msgid "Asking…"
 msgstr "Preguntando…"
 
-#: rustinput-gtk/src/window/clipboard.rs:361
+#: rustinput-gtk/src/window/clipboard.rs:359
 msgid "Put it on the clipboard of this computer"
 msgstr "Ponerlo en el portapapeles de este equipo"
 
-#: rustinput-gtk/src/window/clipboard.rs:391
+#: rustinput-gtk/src/window/clipboard.rs:389
 msgid "Clear"
 msgstr "Borrar"
 
-#: rustinput-gtk/src/window/clipboard.rs:392
+#: rustinput-gtk/src/window/clipboard.rs:390
 msgid "Forget the history of this computer"
 msgstr "Olvidar el historial de este equipo"
 
-#: rustinput-gtk/src/window/clipboard.rs:447
+#: rustinput-gtk/src/window/clipboard.rs:445
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "El portapapeles no se comparte en este equipo (clipboard = false)"
 
-#: rustinput-gtk/src/window/clipboard.rs:450
+#: rustinput-gtk/src/window/clipboard.rs:448
 msgid "Does not show its clipboard"
 msgstr "No muestra su portapapeles"
 
-#: rustinput-gtk/src/window/clipboard.rs:452
+#: rustinput-gtk/src/window/clipboard.rs:450
 msgid "Could not be asked: {error}"
 msgstr "No se pudo preguntar: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:483
+#: rustinput-gtk/src/window/clipboard.rs:481
 msgid "No history is kept on this computer: switch it on in Preferences."
 msgstr "No se guarda historial en este equipo: actívalo en Preferencias."
 
-#: rustinput-gtk/src/window/clipboard.rs:486
+#: rustinput-gtk/src/window/clipboard.rs:484
 msgid "It keeps no history of its clipboard."
 msgstr "No guarda historial de su portapapeles."
 
-#: rustinput-gtk/src/window/clipboard.rs:487
+#: rustinput-gtk/src/window/clipboard.rs:485
 msgid "New copies can not be noticed on its system yet (Wayland): no history."
 msgstr "Todavía no se pueden notar copias nuevas en su sistema (Wayland): sin historial."
 
-#: rustinput-gtk/src/window/clipboard.rs:490
+#: rustinput-gtk/src/window/clipboard.rs:488
 msgid "Its RustInput is older, without a history."
 msgstr "Su RustInput es más antiguo, sin historial."
 
-#: rustinput-gtk/src/window/clipboard.rs:510
+#: rustinput-gtk/src/window/clipboard.rs:508
 msgid "History"
 msgstr "Historial"
 
-#: rustinput-gtk/src/window/clipboard.rs:512
+#: rustinput-gtk/src/window/clipboard.rs:510
 msgid "History · {count} copy before"
 msgid_plural "History · {count} copies before"
 msgstr[0] "Historial · {count} copia anterior"
 msgstr[1] "Historial · {count} copias anteriores"
 
-#: rustinput-gtk/src/window/clipboard.rs:529
+#: rustinput-gtk/src/window/clipboard.rs:527
 msgid "Show fewer"
 msgstr "Mostrar menos"
 
-#: rustinput-gtk/src/window/clipboard.rs:531
+#: rustinput-gtk/src/window/clipboard.rs:529
 msgid "Show all {count}"
 msgstr "Mostrar las {count}"
 
-#: rustinput-gtk/src/window/clipboard.rs:554
+#: rustinput-gtk/src/window/clipboard.rs:552
 msgid "Formatted text"
 msgstr "Texto con formato"
 
-#: rustinput-gtk/src/window/clipboard.rs:556
+#: rustinput-gtk/src/window/clipboard.rs:554
 msgid "Text"
 msgstr "Texto"
 
-#: rustinput-gtk/src/window/clipboard.rs:562
+#: rustinput-gtk/src/window/clipboard.rs:560
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} carácter"
 msgstr[1] "{count} caracteres"
 
-#: rustinput-gtk/src/window/clipboard.rs:572
+#: rustinput-gtk/src/window/clipboard.rs:570
 msgid "Image, {width} × {height}"
 msgstr "Imagen, {width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:590
+#: rustinput-gtk/src/window/clipboard.rs:588
 msgid "Image"
 msgstr "Imagen"
 
-#: rustinput-gtk/src/window/clipboard.rs:601
+#: rustinput-gtk/src/window/clipboard.rs:599
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} archivo o carpeta"
 msgstr[1] "{count} archivos y carpetas"
 
-#: rustinput-gtk/src/window/clipboard.rs:646
+#: rustinput-gtk/src/window/clipboard.rs:644
 msgid "Copy"
 msgstr "Copiar"
 
-#: rustinput-gtk/src/window/clipboard.rs:672
+#: rustinput-gtk/src/window/clipboard.rs:670
 msgid "Empty"
 msgstr "Vacío"
 
-#: rustinput-gtk/src/window/clipboard.rs:698
+#: rustinput-gtk/src/window/clipboard.rs:696
 msgid "{count} line"
 msgid_plural "{count} lines"
 msgstr[0] "{count} línea"
 msgstr[1] "{count} líneas"
 
-#: rustinput-gtk/src/window/clipboard.rs:738
+#: rustinput-gtk/src/window/clipboard.rs:736
 msgid "and {count} more"
 msgid_plural "and {count} more"
 msgstr[0] "y {count} más"
 msgstr[1] "y {count} más"
 
-#: rustinput-gtk/src/window/clipboard.rs:765
+#: rustinput-gtk/src/window/clipboard.rs:763
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "Un gestor de contraseñas lo marcó como secreto: no se muestra, pero se puede copiar."
 
-#: rustinput-gtk/src/window/clipboard.rs:773
+#: rustinput-gtk/src/window/clipboard.rs:771
 msgid "Password, hidden"
 msgstr "Contraseña, oculta"
 
@@ -1139,38 +1139,38 @@ msgstr "Copiar a RustInput"
 msgid "Send to the other computer, ready to be pasted there"
 msgstr "Enviar al otro equipo, listo para pegar allí"
 
-#: src/radial/mod.rs:98
+#: src/radial/mod.rs:100
 msgid "Go to {name}"
 msgstr "Ir a {name}"
 
-#: src/radial/mod.rs:102
+#: src/radial/mod.rs:104
 msgid "Send the clipboard"
 msgstr "Enviar el portapapeles"
 
-#: src/radial/mod.rs:106
+#: src/radial/mod.rs:108
 msgid "Send copied files"
 msgstr "Enviar archivos copiados"
 
-#: src/radial/mod.rs:111
+#: src/radial/mod.rs:113
 msgid "Free the pointer"
 msgstr "Liberar el puntero"
 
-#: src/radial/mod.rs:112
+#: src/radial/mod.rs:114
 msgid "Keep the pointer here"
 msgstr "Mantener el puntero aquí"
 
-#: src/radial/mod.rs:127
+#: src/radial/mod.rs:129
 msgid "Lock {name}"
 msgstr "Bloquear {name}"
 
-#: src/radial/mod.rs:131
+#: src/radial/mod.rs:133
 msgid "Lock all computers"
 msgstr "Bloquear todos los equipos"
 
-#: src/radial/mod.rs:143
+#: src/radial/mod.rs:149
 msgid "No files copied: copy files in the file manager first"
 msgstr "No hay archivos copiados: primero hay que copiar archivos en el gestor de archivos"
 
-#: src/radial/mod.rs:147
+#: src/radial/mod.rs:153
 msgid "Point at an action and let go"
 msgstr "Apuntar a una acción y soltar"

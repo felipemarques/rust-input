@@ -99,9 +99,7 @@ impl Window {
         self.card(None, "");
     }
 
-    /// shows the Clipboards tab, from the tray (macOS has its own menu bar
-    /// item, without it)
-    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    /// shows the Clipboards tab, from the tray or the radial menu
     pub(crate) fn show_clipboards(&self) {
         self.imp().stack.set_visible_child_name("clipboards");
         self.present();

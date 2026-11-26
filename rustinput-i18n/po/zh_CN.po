@@ -475,7 +475,7 @@ msgstr "鼠标来自 {address}"
 msgid "{address} disconnected"
 msgstr "{address} 已断开连接"
 
-#: rustinput-gtk/src/lib.rs:582
+#: rustinput-gtk/src/lib.rs:583
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "已收到来自 {name} 的 {count} 个文件，可以粘贴"
 
@@ -694,144 +694,144 @@ msgstr "来自 {name} 的 {files}，已粘贴"
 msgid "{files} from {name}, not pasted"
 msgstr "来自 {name} 的 {files}，未粘贴"
 
-#: rustinput-gtk/src/window/clipboard.rs:263
+#: rustinput-gtk/src/window/clipboard.rs:261
 msgid "Copying…"
 msgstr "正在复制…"
 
-#: rustinput-gtk/src/window/clipboard.rs:283
+#: rustinput-gtk/src/window/clipboard.rs:281
 msgid "Copy here"
 msgstr "复制到这里"
 
-#: rustinput-gtk/src/window/clipboard.rs:287
+#: rustinput-gtk/src/window/clipboard.rs:285
 msgid "Back on the clipboard"
 msgstr "已放回剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:288
+#: rustinput-gtk/src/window/clipboard.rs:286
 msgid "Could not put it back on the clipboard: {error}"
 msgstr "无法放回剪贴板：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:292
+#: rustinput-gtk/src/window/clipboard.rs:290
 msgid "The files of {name} are on their way here"
 msgstr "{name} 的文件正在传来"
 
-#: rustinput-gtk/src/window/clipboard.rs:296
+#: rustinput-gtk/src/window/clipboard.rs:294
 msgid "Copied here from {name}"
 msgstr "已从 {name} 复制到这里"
 
-#: rustinput-gtk/src/window/clipboard.rs:297
+#: rustinput-gtk/src/window/clipboard.rs:295
 msgid "Could not copy from {name}: {error}"
 msgstr "无法从 {name} 复制：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:338
+#: rustinput-gtk/src/window/clipboard.rs:336
 msgid "Asking…"
 msgstr "正在询问…"
 
-#: rustinput-gtk/src/window/clipboard.rs:361
+#: rustinput-gtk/src/window/clipboard.rs:359
 msgid "Put it on the clipboard of this computer"
 msgstr "放入本机的剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:391
+#: rustinput-gtk/src/window/clipboard.rs:389
 msgid "Clear"
 msgstr "清除"
 
-#: rustinput-gtk/src/window/clipboard.rs:392
+#: rustinput-gtk/src/window/clipboard.rs:390
 msgid "Forget the history of this computer"
 msgstr "清除本机的历史"
 
-#: rustinput-gtk/src/window/clipboard.rs:447
+#: rustinput-gtk/src/window/clipboard.rs:445
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "本机未共享剪贴板（clipboard = false）"
 
-#: rustinput-gtk/src/window/clipboard.rs:450
+#: rustinput-gtk/src/window/clipboard.rs:448
 msgid "Does not show its clipboard"
 msgstr "未显示其剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:452
+#: rustinput-gtk/src/window/clipboard.rs:450
 msgid "Could not be asked: {error}"
 msgstr "无法询问：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:483
+#: rustinput-gtk/src/window/clipboard.rs:481
 msgid "No history is kept on this computer: switch it on in Preferences."
 msgstr "本机不保留历史：可在“首选项”中开启。"
 
-#: rustinput-gtk/src/window/clipboard.rs:486
+#: rustinput-gtk/src/window/clipboard.rs:484
 msgid "It keeps no history of its clipboard."
 msgstr "它不保留剪贴板历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:487
+#: rustinput-gtk/src/window/clipboard.rs:485
 msgid "New copies can not be noticed on its system yet (Wayland): no history."
 msgstr "其系统上暂时无法察觉新的复制（Wayland）：没有历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:490
+#: rustinput-gtk/src/window/clipboard.rs:488
 msgid "Its RustInput is older, without a history."
 msgstr "它的 RustInput 版本较旧，没有历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:510
+#: rustinput-gtk/src/window/clipboard.rs:508
 msgid "History"
 msgstr "历史"
 
-#: rustinput-gtk/src/window/clipboard.rs:512
+#: rustinput-gtk/src/window/clipboard.rs:510
 msgid "History · {count} copy before"
 msgid_plural "History · {count} copies before"
 msgstr[0] "历史 · 之前 {count} 条"
 
-#: rustinput-gtk/src/window/clipboard.rs:529
+#: rustinput-gtk/src/window/clipboard.rs:527
 msgid "Show fewer"
 msgstr "显示更少"
 
-#: rustinput-gtk/src/window/clipboard.rs:531
+#: rustinput-gtk/src/window/clipboard.rs:529
 msgid "Show all {count}"
 msgstr "显示全部 {count} 条"
 
-#: rustinput-gtk/src/window/clipboard.rs:554
+#: rustinput-gtk/src/window/clipboard.rs:552
 msgid "Formatted text"
 msgstr "带格式的文本"
 
-#: rustinput-gtk/src/window/clipboard.rs:556
+#: rustinput-gtk/src/window/clipboard.rs:554
 msgid "Text"
 msgstr "文本"
 
-#: rustinput-gtk/src/window/clipboard.rs:562
+#: rustinput-gtk/src/window/clipboard.rs:560
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} 个字符"
 
-#: rustinput-gtk/src/window/clipboard.rs:572
+#: rustinput-gtk/src/window/clipboard.rs:570
 msgid "Image, {width} × {height}"
 msgstr "图像，{width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:590
+#: rustinput-gtk/src/window/clipboard.rs:588
 msgid "Image"
 msgstr "图像"
 
-#: rustinput-gtk/src/window/clipboard.rs:601
+#: rustinput-gtk/src/window/clipboard.rs:599
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} 个文件或文件夹"
 
-#: rustinput-gtk/src/window/clipboard.rs:646
+#: rustinput-gtk/src/window/clipboard.rs:644
 msgid "Copy"
 msgstr "复制"
 
-#: rustinput-gtk/src/window/clipboard.rs:672
+#: rustinput-gtk/src/window/clipboard.rs:670
 msgid "Empty"
 msgstr "空"
 
-#: rustinput-gtk/src/window/clipboard.rs:698
+#: rustinput-gtk/src/window/clipboard.rs:696
 msgid "{count} line"
 msgid_plural "{count} lines"
 msgstr[0] "{count} 行"
 
-#: rustinput-gtk/src/window/clipboard.rs:738
+#: rustinput-gtk/src/window/clipboard.rs:736
 msgid "and {count} more"
 msgid_plural "and {count} more"
 msgstr[0] "还有 {count} 个"
 
-#: rustinput-gtk/src/window/clipboard.rs:765
+#: rustinput-gtk/src/window/clipboard.rs:763
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "密码管理器已将其标记为机密：不会显示，但可以复制。"
 
-#: rustinput-gtk/src/window/clipboard.rs:773
+#: rustinput-gtk/src/window/clipboard.rs:771
 msgid "Password, hidden"
 msgstr "密码，已隐藏"
 
@@ -1131,38 +1131,38 @@ msgstr "复制到 RustInput"
 msgid "Send to the other computer, ready to be pasted there"
 msgstr "发送到另一台计算机，可在那里粘贴"
 
-#: src/radial/mod.rs:98
+#: src/radial/mod.rs:100
 msgid "Go to {name}"
 msgstr "转到 {name}"
 
-#: src/radial/mod.rs:102
+#: src/radial/mod.rs:104
 msgid "Send the clipboard"
 msgstr "发送剪贴板"
 
-#: src/radial/mod.rs:106
+#: src/radial/mod.rs:108
 msgid "Send copied files"
 msgstr "发送复制的文件"
 
-#: src/radial/mod.rs:111
+#: src/radial/mod.rs:113
 msgid "Free the pointer"
 msgstr "释放指针"
 
-#: src/radial/mod.rs:112
+#: src/radial/mod.rs:114
 msgid "Keep the pointer here"
 msgstr "将指针保留在此"
 
-#: src/radial/mod.rs:127
+#: src/radial/mod.rs:129
 msgid "Lock {name}"
 msgstr "锁定 {name}"
 
-#: src/radial/mod.rs:131
+#: src/radial/mod.rs:133
 msgid "Lock all computers"
 msgstr "锁定所有计算机"
 
-#: src/radial/mod.rs:143
+#: src/radial/mod.rs:149
 msgid "No files copied: copy files in the file manager first"
 msgstr "没有已复制的文件：请先在文件管理器中复制文件"
 
-#: src/radial/mod.rs:147
+#: src/radial/mod.rs:153
 msgid "Point at an action and let go"
 msgstr "指向一个操作并松开"

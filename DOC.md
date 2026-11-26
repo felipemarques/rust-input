@@ -382,7 +382,9 @@ network: the device the pointer is on shows it, because the keys go there.
   left the wheel in 0.30.0: it is in the tray menu and in Preferences.
 - The slices keep their order, so that pointing becomes a habit: the
   clients to go to, the clipboard, the files, keeping the pointer, pausing,
-  the clients to lock, locking all, the transfers, the window. Beyond eight
+  the clients to lock, locking all, the transfers, the clipboards (0.36.0:
+  the window on its Clipboards tab, `FrontendEvent::ShowClipboardsTab`), the
+  window. Beyond eight
   slices the wheel grows (up to half as large again, `draw::size`), so each
   label keeps its room.
 
