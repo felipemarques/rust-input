@@ -48,6 +48,8 @@ const MAX_REDIRECTS: usize = 5;
 
 /// how this RustInput was installed, which decides what replaces it
 #[derive(Clone, Debug, PartialEq, Eq)]
+// elsewhere than on Unix it never installs itself
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) enum Kind {
     /// an executable the user can replace (`~/.local/bin/rustinput`)
     Binary(PathBuf),
