@@ -633,6 +633,10 @@ pub enum FrontendEvent {
     },
     /// the computers running RustInput found on the network (0.40.0)
     Discovered(Vec<Discovered>),
+    /// The version whose news the window showed last (0.48.0): it shows
+    /// those of the versions after it once, then answers with
+    /// [`FrontendRequest::WhatsNewSeen`].
+    WhatsNewSeen(Option<String>),
     /// whether the keyboard shortcuts to move between the computers are on
     /// (`hotkeys`, 0.42.0)
     Hotkeys(bool),
@@ -806,6 +810,8 @@ pub enum FrontendRequest {
     /// moves the mouse and keyboard to this computer (`None`) or to a client
     /// without crossing an edge (from the tray icon, 0.43.0)
     GoTo(Option<ClientHandle>),
+    /// the window showed the news up to this version
+    WhatsNewSeen(String),
     /// the answer to [`FrontendEvent::Introduction`] of `fingerprint`
     AnswerIntroduction {
         fingerprint: String,

@@ -259,6 +259,14 @@ impl Window {
         for idx in 0..self.clients().n_items() {
             if let Some(row) = self.row_by_idx(idx as i32) {
                 row.set_arranged(arranged);
+                // the version it runs, once it described itself
+                let handle = self.client_by_idx(idx).map(|c| c.get_data().handle);
+                let version = view
+                    .peers
+                    .iter()
+                    .find(|p| Some(p.handle) == handle && !p.version.is_empty())
+                    .map(|p| p.version.clone());
+                row.set_version(version);
             }
         }
     }

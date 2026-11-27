@@ -1,6 +1,7 @@
 //! Finding the texts to translate: the calls of [`crate::tr`],
 //! [`crate::trc`] and [`crate::trf`] with a string literal in the Rust code,
-//! and the `translatable="yes"` elements of the GTK `.ui` files. Also puts
+//! the `translatable="yes"` elements of the GTK `.ui` files, and each change
+//! of `CHANGELOG.md` (context [`CHANGELOG_CONTEXT`]). Also puts
 //! translations into a `.ui` file, for the build of the GTK frontend.
 
 use std::path::{Path, PathBuf};
@@ -15,6 +16,33 @@ pub struct Message {
     pub plural: Option<String>,
     /// `file:line`, relative to the workspace
     pub location: String,
+}
+
+/// what is new in each version, in the workspace: its lines are translated
+/// too, for the window that shows them after an update
+pub const CHANGELOG: &str = "CHANGELOG.md";
+/// the context of the lines of [`CHANGELOG`]
+pub const CHANGELOG_CONTEXT: &str = "changelog";
+
+/// The changes of a changelog: each `- ` line with the lines indented under
+/// it, joined by a space, with its line. The text of the version headings
+/// (`## 0.48.0`) and of the rest is not translated.
+pub fn from_changelog(source: &str) -> Vec<(usize, String)> {
+    let mut found: Vec<(usize, String)> = Vec::new();
+    let mut open = false;
+    for (n, line) in source.lines().enumerate() {
+        if let Some(change) = line.strip_prefix("- ") {
+            found.push((n + 1, change.trim().to_owned()));
+            open = true;
+        } else if open && line.starts_with("  ") && !line.trim().is_empty() {
+            let last = found.last_mut().expect("a change");
+            last.1.push(' ');
+            last.1.push_str(line.trim());
+        } else {
+            open = false;
+        }
+    }
+    found
 }
 
 /// The folders, relative to the workspace, whose files have texts to
@@ -72,6 +100,19 @@ pub fn messages(workspace: &Path) -> Vec<Message> {
                     id,
                     plural,
                     location: format!("{relative}:{line}"),
+                });
+            }
+        }
+    }
+    if let Ok(source) = std::fs::read_to_string(workspace.join(CHANGELOG)) {
+        for (line, id) in from_changelog(&source) {
+            let context = Some(CHANGELOG_CONTEXT.to_owned());
+            if !all.iter().any(|m| m.context == context && m.id == id) {
+                all.push(Message {
+                    context,
+                    id,
+                    plural: None,
+                    location: format!("{CHANGELOG}:{line}"),
                 });
             }
         }
@@ -324,6 +365,20 @@ fn escape(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn the_changes_of_a_changelog() {
+        let log = "# News\n\nintro, not a change\n\n## 0.2.0\n\n- One thing.\n- Another one,\n  on two lines.\n\n## 0.1.0\n\n- The first.\n";
+        assert_eq!(
+            from_changelog(log),
+            [
+                (7, "One thing.".to_owned()),
+                (8, "Another one, on two lines.".to_owned()),
+                (13, "The first.".to_owned())
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

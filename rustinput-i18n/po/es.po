@@ -453,19 +453,31 @@ msgstr "La define la disposición"
 msgid "Round trip time of the pings to this computer"
 msgstr "Tiempo de ida y vuelta de los pings a este equipo"
 
-#: rustinput-gtk/src/client_row.rs:239
+#: rustinput-gtk/src/client_row.rs:247
 msgid "Paused on that computer: it neither controls nor is controlled"
 msgstr "En pausa en ese equipo: ni controla ni es controlado"
 
-#: rustinput-gtk/src/client_row.rs:245
+#: rustinput-gtk/src/client_row.rs:260
+msgid "RustInput {version}, the same as this one"
+msgstr "RustInput {version}, la misma que este"
+
+#: rustinput-gtk/src/client_row.rs:264
+msgid "RustInput {version}: older than this one ({local}), update it"
+msgstr "RustInput {version}: más antiguo que este ({local}), actualízalo"
+
+#: rustinput-gtk/src/client_row.rs:271
+msgid "RustInput {version}: newer than this one ({local})"
+msgstr "RustInput {version}: más reciente que este ({local})"
+
+#: rustinput-gtk/src/client_row.rs:286
 msgid "Its version: unknown · this one: {local}"
 msgstr "Su versión: desconocida · la de este: {local}"
 
-#: rustinput-gtk/src/client_row.rs:250
+#: rustinput-gtk/src/client_row.rs:291
 msgid "Its version: {peer} · the same"
 msgstr "Su versión: {peer} · la misma"
 
-#: rustinput-gtk/src/client_row.rs:252
+#: rustinput-gtk/src/client_row.rs:293
 msgid "Its version: {peer} · this one: {local}"
 msgstr "Su versión: {peer} · la de este: {local}"
 
@@ -485,35 +497,35 @@ msgstr "Ahora no"
 msgid "Authorize a computer?"
 msgstr "¿Autorizar un equipo?"
 
-#: rustinput-gtk/src/lib.rs:268
+#: rustinput-gtk/src/lib.rs:269
 msgid "Quit"
 msgstr "Salir"
 
-#: rustinput-gtk/src/lib.rs:269
+#: rustinput-gtk/src/lib.rs:270
 msgid "_File"
 msgstr "_Archivo"
 
-#: rustinput-gtk/src/lib.rs:497
+#: rustinput-gtk/src/lib.rs:498
 msgid "{name} and this computer authorized each other"
 msgstr "{name} y este equipo se autorizaron mutuamente"
 
-#: rustinput-gtk/src/lib.rs:502
+#: rustinput-gtk/src/lib.rs:503
 msgid "Not authorized: {error}"
 msgstr "No autorizado: {error}"
 
-#: rustinput-gtk/src/lib.rs:509
+#: rustinput-gtk/src/lib.rs:510
 msgid "{address} connected"
 msgstr "{address}: conectado"
 
-#: rustinput-gtk/src/lib.rs:516
+#: rustinput-gtk/src/lib.rs:517
 msgid "The mouse came from {address}"
 msgstr "El ratón llegó desde {address}"
 
-#: rustinput-gtk/src/lib.rs:522
+#: rustinput-gtk/src/lib.rs:523
 msgid "{address} disconnected"
 msgstr "{address}: desconectado"
 
-#: rustinput-gtk/src/lib.rs:616
+#: rustinput-gtk/src/lib.rs:618
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Archivos recibidos de {name}: {count}, listos para pegar"
 
@@ -803,6 +815,14 @@ msgstr "{files} de {name}, todo pegado"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} de {name}, sin pegar"
 
+#: rustinput-gtk/src/whats_new.rs:120
+msgid "OK"
+msgstr "Aceptar"
+
+#: rustinput-gtk/src/whats_new.rs:129
+msgid "What is new in RustInput {version}"
+msgstr "Novedades de RustInput {version}"
+
 #: rustinput-gtk/src/window/clipboard.rs:118
 msgid "Bring the clipboard along with the pointer"
 msgstr "Llevar el portapapeles junto con el puntero"
@@ -1091,271 +1111,271 @@ msgstr "Hacer clic en un equipo para ver por dónde sale el ratón y para elegir
 msgid "Connection settings"
 msgstr "Configuración de la conexión"
 
-#: rustinput-gtk/src/window.rs:308
+#: rustinput-gtk/src/window.rs:316
 msgid "Arrangement applied"
 msgstr "Disposición aplicada"
 
-#: rustinput-gtk/src/window.rs:313
+#: rustinput-gtk/src/window.rs:321
 msgid "{name} did not show the numbers of its monitors: {error}"
 msgstr "No se mostraron los números de los monitores en {name}: {error}"
 
-#: rustinput-gtk/src/window.rs:321
+#: rustinput-gtk/src/window.rs:329
 msgid "The screen of {name} did not lock: {error}"
 msgstr "La pantalla de {name} no se bloqueó: {error}"
 
-#: rustinput-gtk/src/window.rs:330
+#: rustinput-gtk/src/window.rs:338
 msgid "Arrangement sent to {name}"
 msgstr "Disposición enviada a {name}"
 
-#: rustinput-gtk/src/window.rs:331
+#: rustinput-gtk/src/window.rs:339
 msgid "Arrangement not sent to {name}: {error}"
 msgstr "Disposición no enviada a {name}: {error}"
 
-#: rustinput-gtk/src/window.rs:340
+#: rustinput-gtk/src/window.rs:348
 msgid "{name} changed the arrangement"
 msgstr "{name} cambió la disposición"
 
-#: rustinput-gtk/src/window.rs:354
+#: rustinput-gtk/src/window.rs:362
 msgid "{names} does not touch a computer this one reaches: move it next to one"
 msgstr "{names} no toca ningún equipo al que llegue este: hay que moverlo junto a uno"
 
-#: rustinput-gtk/src/window.rs:359
+#: rustinput-gtk/src/window.rs:367
 msgid "Made from the connections as they are now: arrange and apply"
 msgstr "Creada a partir de las conexiones actuales: ordenar y aplicar"
 
-#: rustinput-gtk/src/window.rs:361
+#: rustinput-gtk/src/window.rs:369
 msgid "Changes not applied yet"
 msgstr "Cambios aún sin aplicar"
 
-#: rustinput-gtk/src/window.rs:363
+#: rustinput-gtk/src/window.rs:371
 msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
 msgstr "{names} no indicó su tamaño: hay que actualizar RustInput allí a la 0.26.0 o posterior"
 
-#: rustinput-gtk/src/window.rs:368
+#: rustinput-gtk/src/window.rs:376
 msgid "Applied on the computers of the arrangement"
 msgstr "Aplicada en los equipos de la disposición"
 
-#: rustinput-gtk/src/window.rs:388
+#: rustinput-gtk/src/window.rs:396
 msgid "Where the mouse leaves {name}"
 msgstr "Por dónde sale el ratón de {name}"
 
-#: rustinput-gtk/src/window.rs:394
+#: rustinput-gtk/src/window.rs:402
 msgid "Nowhere"
 msgstr "Por ninguna parte"
 
-#: rustinput-gtk/src/window.rs:395
+#: rustinput-gtk/src/window.rs:403
 msgid "It touches no other computer"
 msgstr "No toca ningún otro equipo"
 
-#: rustinput-gtk/src/window.rs:402
+#: rustinput-gtk/src/window.rs:410
 msgid "Left edge: {name}"
 msgstr "Borde izquierdo: {name}"
 
-#: rustinput-gtk/src/window.rs:403
+#: rustinput-gtk/src/window.rs:411
 msgid "Right edge: {name}"
 msgstr "Borde derecho: {name}"
 
-#: rustinput-gtk/src/window.rs:404
+#: rustinput-gtk/src/window.rs:412
 msgid "Top edge: {name}"
 msgstr "Borde superior: {name}"
 
-#: rustinput-gtk/src/window.rs:405
+#: rustinput-gtk/src/window.rs:413
 msgid "Bottom edge: {name}"
 msgstr "Borde inferior: {name}"
 
-#: rustinput-gtk/src/window.rs:408
+#: rustinput-gtk/src/window.rs:416
 msgid "The whole edge of both, the place along it in proportion"
 msgstr "Todo el borde de ambos, con la posición a lo largo de él en proporción"
 
-#: rustinput-gtk/src/window.rs:410
+#: rustinput-gtk/src/window.rs:418
 msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
 msgstr "{part}, donde se tocan; activar para usar todo el borde de ambos, en proporción"
 
-#: rustinput-gtk/src/window.rs:415
+#: rustinput-gtk/src/window.rs:423
 msgid "{part}, where they touch: the edge is shared"
 msgstr "{part}, donde se tocan: el borde es compartido"
 
-#: rustinput-gtk/src/window.rs:428
+#: rustinput-gtk/src/window.rs:436
 msgid "Whole edge, in proportion"
 msgstr "Todo el borde, en proporción"
 
-#: rustinput-gtk/src/window.rs:943
+#: rustinput-gtk/src/window.rs:951
 msgid "As the system ({language})"
 msgstr "Como el sistema ({language})"
 
-#: rustinput-gtk/src/window.rs:966
+#: rustinput-gtk/src/window.rs:974
 msgid "The windows change language when RustInput starts again"
 msgstr "Las ventanas cambian de idioma al volver a iniciar RustInput"
 
-#: rustinput-gtk/src/window.rs:969
+#: rustinput-gtk/src/window.rs:977
 msgid "Restart now"
 msgstr "Reiniciar ahora"
 
-#: rustinput-gtk/src/window.rs:1041
+#: rustinput-gtk/src/window.rs:1049
 msgid "Asking GitHub…"
 msgstr "Consultando a GitHub…"
 
-#: rustinput-gtk/src/window.rs:1043
+#: rustinput-gtk/src/window.rs:1051
 msgid "Could not ask GitHub: {error}"
 msgstr "No se pudo consultar a GitHub: {error}"
 
-#: rustinput-gtk/src/window.rs:1045
+#: rustinput-gtk/src/window.rs:1053
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr "Ya está disponible RustInput {version}; este equipo tiene la {current}"
 
-#: rustinput-gtk/src/window.rs:1050
+#: rustinput-gtk/src/window.rs:1058
 msgid "{version} is the latest version"
 msgstr "{version} es la última versión"
 
-#: rustinput-gtk/src/window.rs:1061
+#: rustinput-gtk/src/window.rs:1069
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr "¿Debe RustInput buscar versiones nuevas? Pide a GitHub el número de la última versión al iniciarse y cada 12 horas; no se envía ningún dato personal ni de los equipos."
 
-#: rustinput-gtk/src/window.rs:1067
+#: rustinput-gtk/src/window.rs:1075
 msgid "No"
 msgstr "No"
 
-#: rustinput-gtk/src/window.rs:1068
+#: rustinput-gtk/src/window.rs:1076
 msgid "Yes, look for them"
 msgstr "Sí, buscarlas"
 
-#: rustinput-gtk/src/window.rs:1072
+#: rustinput-gtk/src/window.rs:1080
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr "Ya está disponible RustInput {version}; este equipo tiene la {current}."
 
-#: rustinput-gtk/src/window.rs:1076
+#: rustinput-gtk/src/window.rs:1084
 msgid "Later"
 msgstr "Más tarde"
 
-#: rustinput-gtk/src/window.rs:1125
+#: rustinput-gtk/src/window.rs:1133
 msgid "The update starts: Windows asks for administrator rights"
 msgstr "Se inicia la actualización: Windows pide permisos de administrador"
 
-#: rustinput-gtk/src/window.rs:1150
+#: rustinput-gtk/src/window.rs:1158
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr "Los archivos copiados en el gestor de archivos acompañan al puntero. Si está desactivado, solo se envían los archivos elegidos con «Copiar a RustInput»"
 
-#: rustinput-gtk/src/window.rs:1156
+#: rustinput-gtk/src/window.rs:1164
 msgid "“Copy to RustInput” in the file manager"
 msgstr "«Copiar a RustInput» en el gestor de archivos"
 
-#: rustinput-gtk/src/window.rs:1157
+#: rustinput-gtk/src/window.rs:1165
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr "En el menú de archivos y carpetas: Explorer, Nemo y Nautilus"
 
-#: rustinput-gtk/src/window.rs:1160
+#: rustinput-gtk/src/window.rs:1168
 msgid "Show the transfers window"
 msgstr "Mostrar la ventana de transferencias"
 
-#: rustinput-gtk/src/window.rs:1161
+#: rustinput-gtk/src/window.rs:1169
 msgid "With the progress, when files are sent or received"
 msgstr "Con el progreso, al enviar o recibir archivos"
 
-#: rustinput-gtk/src/window.rs:1164
+#: rustinput-gtk/src/window.rs:1172
 msgid "Ask before receiving more than"
 msgstr "Preguntar antes de recibir más de"
 
-#: rustinput-gtk/src/window.rs:1165
+#: rustinput-gtk/src/window.rs:1173
 msgid "Files copied on another computer that come along with the pointer. 0: never ask"
 msgstr "Archivos copiados en otro equipo que llegan con el puntero. 0: no preguntar nunca"
 
-#: rustinput-gtk/src/window.rs:1189
+#: rustinput-gtk/src/window.rs:1197
 msgid "Progress, history and log"
 msgstr "Progreso, historial y registro"
 
-#: rustinput-gtk/src/window.rs:1192
+#: rustinput-gtk/src/window.rs:1200
 msgid "Open"
 msgstr "Abrir"
 
-#: rustinput-gtk/src/window.rs:1324
+#: rustinput-gtk/src/window.rs:1332
 msgid "Sharing the mouse and keyboard"
 msgstr "Compartiendo el ratón y el teclado"
 
-#: rustinput-gtk/src/window.rs:1325
+#: rustinput-gtk/src/window.rs:1333
 msgid "Capture and emulation are on"
 msgstr "La captura y la emulación están activadas"
 
-#: rustinput-gtk/src/window.rs:1328
+#: rustinput-gtk/src/window.rs:1336
 msgid "Input capture is off"
 msgstr "La captura de entrada está desactivada"
 
-#: rustinput-gtk/src/window.rs:1329
+#: rustinput-gtk/src/window.rs:1337
 msgid "Needed for every connection"
 msgstr "Necesaria para todas las conexiones"
 
-#: rustinput-gtk/src/window.rs:1345
+#: rustinput-gtk/src/window.rs:1353
 msgid "Sending"
 msgstr "Envío"
 
-#: rustinput-gtk/src/window.rs:1346
+#: rustinput-gtk/src/window.rs:1354
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "Al pasar un borde de la pantalla, el ratón y el teclado van al equipo siguiente"
 
-#: rustinput-gtk/src/window.rs:1359
+#: rustinput-gtk/src/window.rs:1367
 msgid "Receiving"
 msgstr "Recepción"
 
-#: rustinput-gtk/src/window.rs:1360
+#: rustinput-gtk/src/window.rs:1368
 msgid "The other computers can control this one"
 msgstr "Los otros equipos pueden controlar este"
 
-#: rustinput-gtk/src/window.rs:1363
+#: rustinput-gtk/src/window.rs:1371
 msgid "Input emulation is off"
 msgstr "La emulación de entrada está desactivada"
 
-#: rustinput-gtk/src/window.rs:1364
+#: rustinput-gtk/src/window.rs:1372
 msgid "Needed for the other computers to control this one"
 msgstr "Necesaria para que los otros equipos controlen este"
 
-#: rustinput-gtk/src/window.rs:1381
+#: rustinput-gtk/src/window.rs:1389
 msgid "Paused: no other computer controls this one"
 msgstr "En pausa: ningún otro equipo controla este"
 
-#: rustinput-gtk/src/window.rs:1405
+#: rustinput-gtk/src/window.rs:1413
 msgid "Relaunch required"
 msgstr "Es necesario reiniciar"
 
-#: rustinput-gtk/src/window.rs:1406
+#: rustinput-gtk/src/window.rs:1414
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "Accesibilidad concedida: reiniciar para activar la captura y la emulación"
 
-#: rustinput-gtk/src/window.rs:1409
+#: rustinput-gtk/src/window.rs:1417
 msgid "Relaunch"
 msgstr "Reiniciar"
 
-#: rustinput-gtk/src/window.rs:1413
+#: rustinput-gtk/src/window.rs:1421
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "Conceder el permiso de Accesibilidad para activarla"
 
-#: rustinput-gtk/src/window.rs:1414
+#: rustinput-gtk/src/window.rs:1422
 msgid "Grant"
 msgstr "Conceder"
 
-#: rustinput-gtk/src/window.rs:1454
+#: rustinput-gtk/src/window.rs:1462
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Cuando este equipo intenta conectarse, {name} pregunta si autorizarlo y muestra un código. Al introducirlo aquí, ambos equipos quedan autorizados entre sí: para el control, el portapapeles y los archivos."
 
-#: rustinput-gtk/src/window.rs:1460
+#: rustinput-gtk/src/window.rs:1468
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Cuando este equipo intenta conectarse, el otro equipo pregunta si autorizarlo y muestra un código. Al introducirlo aquí, ambos equipos quedan autorizados entre sí: para el control, el portapapeles y los archivos."
 
-#: rustinput-gtk/src/window.rs:1501
+#: rustinput-gtk/src/window.rs:1509
 msgid "Authorize with {name}"
 msgstr "Autorizar con {name}"
 
-#: rustinput-gtk/src/window.rs:1502
+#: rustinput-gtk/src/window.rs:1510
 msgid "Authorize with the other computer"
 msgstr "Autorizar con el otro equipo"
 
-#: rustinput-gtk/src/window.rs:1539
+#: rustinput-gtk/src/window.rs:1547
 msgid "Authorizing…"
 msgstr "Autorizando…"
 
-#: rustinput-gtk/src/window.rs:1663
+#: rustinput-gtk/src/window.rs:1671
 msgid "Update now"
 msgstr "Actualizar ahora"
 
-#: rustinput-gtk/src/window.rs:1665
+#: rustinput-gtk/src/window.rs:1673
 msgid "Download"
 msgstr "Descargar"
 
@@ -1402,3 +1422,93 @@ msgstr "No hay archivos copiados: primero hay que copiar archivos en el gestor d
 #: src/radial/mod.rs:193
 msgid "Point at an action and let go"
 msgstr "Apuntar a una acción y soltar"
+
+#: CHANGELOG.md:12
+msgctxt "changelog"
+msgid "After an update, the window shows what is new, once."
+msgstr "Tras una actualización, la ventana muestra las novedades una sola vez."
+
+#: CHANGELOG.md:13
+msgctxt "changelog"
+msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
+msgstr "La lista de equipos muestra qué versión de RustInput tiene cada uno y avisa cuando alguno es más antiguo que este."
+
+#: CHANGELOG.md:17
+msgctxt "changelog"
+msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
+msgstr "Linux: «Iniciar RustInput con la sesión», en «Preferencias», lo abre sin su ventana al iniciar sesión."
+
+#: CHANGELOG.md:21
+msgctxt "changelog"
+msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
+msgstr "`rustinput status`, `rustinput go <computer>` y `rustinput home` desde una terminal, y `rustinput status --waybar` para un módulo de Waybar."
+
+#: CHANGELOG.md:26
+msgctxt "changelog"
+msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
+msgstr "Buscar en las copias: encima de las tarjetas de la pestaña «Portapapeles», la búsqueda mira en el historial de todos los equipos a la vez."
+
+#: CHANGELOG.md:30
+msgctxt "changelog"
+msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
+msgstr "El portapapeles solo cuando lo pidas: desactiva «Llevar el portapapeles junto con el puntero» en «Preferencias»; entonces AltGr + Mayús derecho + C lo lleva al equipo donde está el puntero, o trae el del equipo del que vino."
+
+#: CHANGELOG.md:35
+msgctxt "changelog"
+msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
+msgstr "El icono de la bandeja muestra dónde están el ratón y el teclado (una marca azul mientras están en otro equipo), y su menú los lleva a cualquier equipo."
+
+#: CHANGELOG.md:40
+msgctxt "changelog"
+msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
+msgstr "Atajos de teclado: AltGr + Mayús derecho + 1 … 9 va a ese equipo, + 0 vuelve a este; el Mayús derecho mantenido 3 segundos siempre trae de vuelta el puntero. Están en «Preferencias»."
+
+#: CHANGELOG.md:45
+msgctxt "changelog"
+msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
+msgstr "Un equipo emparejado con uno de los tuyos se ofrece a los demás, que preguntan una vez si autorizarlo también."
+
+#: CHANGELOG.md:46
+msgctxt "changelog"
+msgid "Names of other computers can no longer hide characters that turn the text around."
+msgstr "Los nombres de otros equipos ya no pueden ocultar caracteres que invierten el sentido del texto."
+
+#: CHANGELOG.md:50
+msgctxt "changelog"
+msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
+msgstr "La sección «En esta red» de la pestaña «Equipos» encuentra los demás equipos cercanos con RustInput y los añade con un clic. Está desactivada hasta que actives «Mostrar este equipo a los demás» en cada equipo."
+
+#: CHANGELOG.md:55
+msgctxt "changelog"
+msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
+msgstr "La ventana de transferencias indica qué no se envió o no llegó, y por qué: enlaces a carpetas, archivos que cambiaron o desaparecieron mientras se enviaban (el resto sigue), nombres no permitidos en el otro sistema."
+
+#: CHANGELOG.md:60
+msgctxt "changelog"
+msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
+msgstr "Las copias grandes que llegan con el puntero piden confirmación antes (más de 1 GB; se ajusta con «Preguntar antes de recibir más de», en «Preferencias»)."
+
+#: CHANGELOG.md:61
+msgctxt "changelog"
+msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
+msgstr "Una transferencia que no cabe en el otro equipo se rechaza antes de empezar, indicando los tamaños."
+
+#: CHANGELOG.md:65
+msgctxt "changelog"
+msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
+msgstr "Una transferencia cortada por la red, un reinicio o un equipo apagado continúa desde el byte donde se detuvo."
+
+#: CHANGELOG.md:69
+msgctxt "changelog"
+msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
+msgstr "«Portapapeles» en el menú radial abre la pestaña «Portapapeles»."
+
+#: CHANGELOG.md:73
+msgctxt "changelog"
+msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
+msgstr "El historial del portapapeles de cada equipo, solo en memoria: recupera cualquier copia de cualquier equipo."
+
+#: CHANGELOG.md:77
+msgctxt "changelog"
+msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
+msgstr "La pestaña «Portapapeles» muestra lo que copió cada equipo, y «Copiar aquí» lo trae."

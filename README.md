@@ -490,6 +490,9 @@ language has every text (see [DOC.md](DOC.md#languages)). A new language is one 
   <em>The Preferences page: style and language, whether to look for new versions, and the file transfers.</em>
 </p>
 
+After an update the window shows once what is new, from [CHANGELOG.md](CHANGELOG.md), and the list of connections
+shows the version of RustInput each computer runs, so one left behind stands out ("older than this one, update it").
+
 The first time the window opens, it asks whether RustInput should look for new versions. If so, it asks GitHub for the
 number of the latest release when it starts and every 12 hours, and nothing else (see the
 [privacy policy](#privacy-policy)). When there is a newer one:
@@ -1224,6 +1227,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 - [x] Start with the session on Linux, from Preferences
+- [x] What is new after an update, once; the version of RustInput of each computer in the list
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here

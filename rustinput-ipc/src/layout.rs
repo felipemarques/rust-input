@@ -152,6 +152,10 @@ pub struct Peer {
     /// paused there by its user
     #[serde(default)]
     pub paused: bool,
+    /// the version of its RustInput, when it described itself (empty from
+    /// a RustInput before 0.48.0)
+    #[serde(default)]
+    pub version: String,
 }
 
 /// a computer next to another one, as seen from that one

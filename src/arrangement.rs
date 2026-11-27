@@ -155,6 +155,9 @@ pub(crate) struct Description {
     pub(crate) os: String,
     /// the revision of the arrangement it has
     pub(crate) revision: u64,
+    /// the version of its RustInput (0.48.0; empty from an older one)
+    #[serde(default)]
+    pub(crate) version: String,
 }
 
 /// what the other devices bring to the service
@@ -250,6 +253,7 @@ impl Arrangement {
             monitors: own_monitors().map(|(m, ..)| m).unwrap_or_default(),
             os: std::env::consts::OS.to_owned(),
             revision: *self.revision.borrow(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
         }
     }
 

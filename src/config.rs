@@ -116,6 +116,8 @@ struct ConfigToml {
     /// the new version the user was told about with a notification of the
     /// system, so once per version
     update_notified: Option<String>,
+    /// the version whose news the window showed last (0.48.0)
+    whats_new_seen: Option<String>,
     /// whether the authorized computers see what the clipboard of this one
     /// holds, in their Clipboard tab (on when not set)
     show_clipboard: Option<bool>,
@@ -833,6 +835,18 @@ impl Config {
         self.config_toml
             .as_ref()
             .and_then(|c| c.update_notified.clone())
+    }
+
+    /// the version whose news the window showed last (`whats_new_seen`)
+    pub fn whats_new_seen(&self) -> Option<String> {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.whats_new_seen.clone())
+    }
+
+    pub fn set_whats_new_seen(&mut self, version: String) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.whats_new_seen = Some(version);
     }
 
     pub fn set_update_notified(&mut self, version: String) {

@@ -452,19 +452,31 @@ msgstr "配置で設定"
 msgid "Round trip time of the pings to this computer"
 msgstr "このコンピューターへの ping の往復時間"
 
-#: rustinput-gtk/src/client_row.rs:239
+#: rustinput-gtk/src/client_row.rs:247
 msgid "Paused on that computer: it neither controls nor is controlled"
 msgstr "そのコンピューターで一時停止中：操作することも、操作されることもありません"
 
-#: rustinput-gtk/src/client_row.rs:245
+#: rustinput-gtk/src/client_row.rs:260
+msgid "RustInput {version}, the same as this one"
+msgstr "RustInput {version}（このコンピューターと同じ）"
+
+#: rustinput-gtk/src/client_row.rs:264
+msgid "RustInput {version}: older than this one ({local}), update it"
+msgstr "RustInput {version}: このコンピューターより古い（{local}）。更新してください"
+
+#: rustinput-gtk/src/client_row.rs:271
+msgid "RustInput {version}: newer than this one ({local})"
+msgstr "RustInput {version}: このコンピューターより新しい（{local}）"
+
+#: rustinput-gtk/src/client_row.rs:286
 msgid "Its version: unknown · this one: {local}"
 msgstr "相手のバージョン：不明 · このコンピューター：{local}"
 
-#: rustinput-gtk/src/client_row.rs:250
+#: rustinput-gtk/src/client_row.rs:291
 msgid "Its version: {peer} · the same"
 msgstr "相手のバージョン：{peer} · 同じ"
 
-#: rustinput-gtk/src/client_row.rs:252
+#: rustinput-gtk/src/client_row.rs:293
 msgid "Its version: {peer} · this one: {local}"
 msgstr "相手のバージョン：{peer} · このコンピューター：{local}"
 
@@ -484,35 +496,35 @@ msgstr "今はしない"
 msgid "Authorize a computer?"
 msgstr "コンピューターを許可しますか?"
 
-#: rustinput-gtk/src/lib.rs:268
+#: rustinput-gtk/src/lib.rs:269
 msgid "Quit"
 msgstr "終了"
 
-#: rustinput-gtk/src/lib.rs:269
+#: rustinput-gtk/src/lib.rs:270
 msgid "_File"
 msgstr "ファイル(_F)"
 
-#: rustinput-gtk/src/lib.rs:497
+#: rustinput-gtk/src/lib.rs:498
 msgid "{name} and this computer authorized each other"
 msgstr "{name} とこのコンピューターが互いに承認されました"
 
-#: rustinput-gtk/src/lib.rs:502
+#: rustinput-gtk/src/lib.rs:503
 msgid "Not authorized: {error}"
 msgstr "承認されませんでした：{error}"
 
-#: rustinput-gtk/src/lib.rs:509
+#: rustinput-gtk/src/lib.rs:510
 msgid "{address} connected"
 msgstr "{address} と接続しました"
 
-#: rustinput-gtk/src/lib.rs:516
+#: rustinput-gtk/src/lib.rs:517
 msgid "The mouse came from {address}"
 msgstr "マウスが {address} から移ってきました"
 
-#: rustinput-gtk/src/lib.rs:522
+#: rustinput-gtk/src/lib.rs:523
 msgid "{address} disconnected"
 msgstr "{address} との接続が切れました"
 
-#: rustinput-gtk/src/lib.rs:616
+#: rustinput-gtk/src/lib.rs:618
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "{name} からファイルを {count} 個受信しました。貼り付けできます"
 
@@ -799,6 +811,14 @@ msgstr "{name} からの {files}、貼り付け済み"
 msgid "{files} from {name}, not pasted"
 msgstr "{name} からの {files}、貼り付けられていません"
 
+#: rustinput-gtk/src/whats_new.rs:120
+msgid "OK"
+msgstr "OK"
+
+#: rustinput-gtk/src/whats_new.rs:129
+msgid "What is new in RustInput {version}"
+msgstr "RustInput {version} の新機能"
+
 #: rustinput-gtk/src/window/clipboard.rs:118
 msgid "Bring the clipboard along with the pointer"
 msgstr "クリップボードをポインターと一緒に送る"
@@ -1081,271 +1101,271 @@ msgstr "コンピューターをクリックすると、マウスが出ていく
 msgid "Connection settings"
 msgstr "接続先の設定"
 
-#: rustinput-gtk/src/window.rs:308
+#: rustinput-gtk/src/window.rs:316
 msgid "Arrangement applied"
 msgstr "配置を適用しました"
 
-#: rustinput-gtk/src/window.rs:313
+#: rustinput-gtk/src/window.rs:321
 msgid "{name} did not show the numbers of its monitors: {error}"
 msgstr "{name} にモニター番号を表示できませんでした：{error}"
 
-#: rustinput-gtk/src/window.rs:321
+#: rustinput-gtk/src/window.rs:329
 msgid "The screen of {name} did not lock: {error}"
 msgstr "{name} の画面をロックできませんでした：{error}"
 
-#: rustinput-gtk/src/window.rs:330
+#: rustinput-gtk/src/window.rs:338
 msgid "Arrangement sent to {name}"
 msgstr "配置を {name} に送信しました"
 
-#: rustinput-gtk/src/window.rs:331
+#: rustinput-gtk/src/window.rs:339
 msgid "Arrangement not sent to {name}: {error}"
 msgstr "配置を {name} に送信できませんでした：{error}"
 
-#: rustinput-gtk/src/window.rs:340
+#: rustinput-gtk/src/window.rs:348
 msgid "{name} changed the arrangement"
 msgstr "{name} が配置を変更しました"
 
-#: rustinput-gtk/src/window.rs:354
+#: rustinput-gtk/src/window.rs:362
 msgid "{names} does not touch a computer this one reaches: move it next to one"
 msgstr "{names} は、このコンピューターが到達できるコンピューターに接していません。いずれかの隣に移動してください"
 
-#: rustinput-gtk/src/window.rs:359
+#: rustinput-gtk/src/window.rs:367
 msgid "Made from the connections as they are now: arrange and apply"
 msgstr "現在の接続先から作成しました。配置を調整して適用してください"
 
-#: rustinput-gtk/src/window.rs:361
+#: rustinput-gtk/src/window.rs:369
 msgid "Changes not applied yet"
 msgstr "変更はまだ適用されていません"
 
-#: rustinput-gtk/src/window.rs:363
+#: rustinput-gtk/src/window.rs:371
 msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
 msgstr "{names} から画面サイズが通知されませんでした。そのコンピューターの RustInput を 0.26.0 以降にアップデートしてください"
 
-#: rustinput-gtk/src/window.rs:368
+#: rustinput-gtk/src/window.rs:376
 msgid "Applied on the computers of the arrangement"
 msgstr "配置内のコンピューターに適用しました"
 
-#: rustinput-gtk/src/window.rs:388
+#: rustinput-gtk/src/window.rs:396
 msgid "Where the mouse leaves {name}"
 msgstr "マウスが {name} から出ていく位置"
 
-#: rustinput-gtk/src/window.rs:394
+#: rustinput-gtk/src/window.rs:402
 msgid "Nowhere"
 msgstr "なし"
 
-#: rustinput-gtk/src/window.rs:395
+#: rustinput-gtk/src/window.rs:403
 msgid "It touches no other computer"
 msgstr "他のコンピューターに接していません"
 
-#: rustinput-gtk/src/window.rs:402
+#: rustinput-gtk/src/window.rs:410
 msgid "Left edge: {name}"
 msgstr "左端：{name}"
 
-#: rustinput-gtk/src/window.rs:403
+#: rustinput-gtk/src/window.rs:411
 msgid "Right edge: {name}"
 msgstr "右端：{name}"
 
-#: rustinput-gtk/src/window.rs:404
+#: rustinput-gtk/src/window.rs:412
 msgid "Top edge: {name}"
 msgstr "上端：{name}"
 
-#: rustinput-gtk/src/window.rs:405
+#: rustinput-gtk/src/window.rs:413
 msgid "Bottom edge: {name}"
 msgstr "下端：{name}"
 
-#: rustinput-gtk/src/window.rs:408
+#: rustinput-gtk/src/window.rs:416
 msgid "The whole edge of both, the place along it in proportion"
 msgstr "両方の端全体。端に沿った位置は比例して対応します"
 
-#: rustinput-gtk/src/window.rs:410
+#: rustinput-gtk/src/window.rs:418
 msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
 msgstr "{part}（接している部分）。オンにすると、両方の端全体を比例して使います"
 
-#: rustinput-gtk/src/window.rs:415
+#: rustinput-gtk/src/window.rs:423
 msgid "{part}, where they touch: the edge is shared"
 msgstr "{part}（接している部分）：端は共有されています"
 
-#: rustinput-gtk/src/window.rs:428
+#: rustinput-gtk/src/window.rs:436
 msgid "Whole edge, in proportion"
 msgstr "端全体を比例して使用"
 
-#: rustinput-gtk/src/window.rs:943
+#: rustinput-gtk/src/window.rs:951
 msgid "As the system ({language})"
 msgstr "システムに合わせる（{language}）"
 
-#: rustinput-gtk/src/window.rs:966
+#: rustinput-gtk/src/window.rs:974
 msgid "The windows change language when RustInput starts again"
 msgstr "RustInput を再起動すると、ウィンドウの言語が変わります"
 
-#: rustinput-gtk/src/window.rs:969
+#: rustinput-gtk/src/window.rs:977
 msgid "Restart now"
 msgstr "今すぐ再起動"
 
-#: rustinput-gtk/src/window.rs:1041
+#: rustinput-gtk/src/window.rs:1049
 msgid "Asking GitHub…"
 msgstr "GitHub に問い合わせ中…"
 
-#: rustinput-gtk/src/window.rs:1043
+#: rustinput-gtk/src/window.rs:1051
 msgid "Could not ask GitHub: {error}"
 msgstr "GitHub に問い合わせできませんでした：{error}"
 
-#: rustinput-gtk/src/window.rs:1045
+#: rustinput-gtk/src/window.rs:1053
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr "RustInput {version} が公開されています。このコンピューターは {current} です"
 
-#: rustinput-gtk/src/window.rs:1050
+#: rustinput-gtk/src/window.rs:1058
 msgid "{version} is the latest version"
 msgstr "{version} が最新バージョンです"
 
-#: rustinput-gtk/src/window.rs:1061
+#: rustinput-gtk/src/window.rs:1069
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr "RustInput で新しいバージョンを確認しますか？起動時と 12 時間ごとに最新バージョンの番号を GitHub に問い合わせます。あなたやあなたのコンピューターに関する情報は送信されません。"
 
-#: rustinput-gtk/src/window.rs:1067
+#: rustinput-gtk/src/window.rs:1075
 msgid "No"
 msgstr "いいえ"
 
-#: rustinput-gtk/src/window.rs:1068
+#: rustinput-gtk/src/window.rs:1076
 msgid "Yes, look for them"
 msgstr "はい、確認します"
 
-#: rustinput-gtk/src/window.rs:1072
+#: rustinput-gtk/src/window.rs:1080
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr "RustInput {version} が公開されています。このコンピューターは {current} です。"
 
-#: rustinput-gtk/src/window.rs:1076
+#: rustinput-gtk/src/window.rs:1084
 msgid "Later"
 msgstr "後で"
 
-#: rustinput-gtk/src/window.rs:1125
+#: rustinput-gtk/src/window.rs:1133
 msgid "The update starts: Windows asks for administrator rights"
 msgstr "アップデートを開始します。Windows から管理者権限を求められます"
 
-#: rustinput-gtk/src/window.rs:1150
+#: rustinput-gtk/src/window.rs:1158
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr "ファイルマネージャーでコピーしたファイルがポインターと一緒に移動します。オフの場合は、「RustInput にコピー」で選択したファイルのみ送信されます"
 
-#: rustinput-gtk/src/window.rs:1156
+#: rustinput-gtk/src/window.rs:1164
 msgid "“Copy to RustInput” in the file manager"
 msgstr "ファイルマネージャーの「RustInput にコピー」"
 
-#: rustinput-gtk/src/window.rs:1157
+#: rustinput-gtk/src/window.rs:1165
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr "ファイルとフォルダーのメニュー内（Explorer、Nemo、Nautilus）"
 
-#: rustinput-gtk/src/window.rs:1160
+#: rustinput-gtk/src/window.rs:1168
 msgid "Show the transfers window"
 msgstr "転送ウィンドウを表示"
 
-#: rustinput-gtk/src/window.rs:1161
+#: rustinput-gtk/src/window.rs:1169
 msgid "With the progress, when files are sent or received"
 msgstr "ファイルの送受信時に進行状況を表示します"
 
-#: rustinput-gtk/src/window.rs:1164
+#: rustinput-gtk/src/window.rs:1172
 msgid "Ask before receiving more than"
 msgstr "次のサイズを超える受信は確認する"
 
-#: rustinput-gtk/src/window.rs:1165
+#: rustinput-gtk/src/window.rs:1173
 msgid "Files copied on another computer that come along with the pointer. 0: never ask"
 msgstr "別のコンピューターでコピーされ、ポインターと一緒に届くファイル。0: 確認しない"
 
-#: rustinput-gtk/src/window.rs:1189
+#: rustinput-gtk/src/window.rs:1197
 msgid "Progress, history and log"
 msgstr "進行状況、履歴、ログ"
 
-#: rustinput-gtk/src/window.rs:1192
+#: rustinput-gtk/src/window.rs:1200
 msgid "Open"
 msgstr "開く"
 
-#: rustinput-gtk/src/window.rs:1324
+#: rustinput-gtk/src/window.rs:1332
 msgid "Sharing the mouse and keyboard"
 msgstr "マウスとキーボードを共有中"
 
-#: rustinput-gtk/src/window.rs:1325
+#: rustinput-gtk/src/window.rs:1333
 msgid "Capture and emulation are on"
 msgstr "キャプチャとエミュレーションはオンです"
 
-#: rustinput-gtk/src/window.rs:1328
+#: rustinput-gtk/src/window.rs:1336
 msgid "Input capture is off"
 msgstr "入力キャプチャはオフです"
 
-#: rustinput-gtk/src/window.rs:1329
+#: rustinput-gtk/src/window.rs:1337
 msgid "Needed for every connection"
 msgstr "すべての接続先に必要です"
 
-#: rustinput-gtk/src/window.rs:1345
+#: rustinput-gtk/src/window.rs:1353
 msgid "Sending"
 msgstr "送信"
 
-#: rustinput-gtk/src/window.rs:1346
+#: rustinput-gtk/src/window.rs:1354
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "画面の端を越えると、マウスとキーボードが隣のコンピューターに移ります"
 
-#: rustinput-gtk/src/window.rs:1359
+#: rustinput-gtk/src/window.rs:1367
 msgid "Receiving"
 msgstr "受信"
 
-#: rustinput-gtk/src/window.rs:1360
+#: rustinput-gtk/src/window.rs:1368
 msgid "The other computers can control this one"
 msgstr "他のコンピューターからこのコンピューターを操作できます"
 
-#: rustinput-gtk/src/window.rs:1363
+#: rustinput-gtk/src/window.rs:1371
 msgid "Input emulation is off"
 msgstr "入力エミュレーションはオフです"
 
-#: rustinput-gtk/src/window.rs:1364
+#: rustinput-gtk/src/window.rs:1372
 msgid "Needed for the other computers to control this one"
 msgstr "他のコンピューターからこのコンピューターを操作するのに必要です"
 
-#: rustinput-gtk/src/window.rs:1381
+#: rustinput-gtk/src/window.rs:1389
 msgid "Paused: no other computer controls this one"
 msgstr "一時停止中：ほかのコンピューターからは操作されません"
 
-#: rustinput-gtk/src/window.rs:1405
+#: rustinput-gtk/src/window.rs:1413
 msgid "Relaunch required"
 msgstr "再起動が必要です"
 
-#: rustinput-gtk/src/window.rs:1406
+#: rustinput-gtk/src/window.rs:1414
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "アクセシビリティが許可されました。再起動するとキャプチャとエミュレーションがオンになります"
 
-#: rustinput-gtk/src/window.rs:1409
+#: rustinput-gtk/src/window.rs:1417
 msgid "Relaunch"
 msgstr "再起動"
 
-#: rustinput-gtk/src/window.rs:1413
+#: rustinput-gtk/src/window.rs:1421
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "オンにするには、アクセシビリティの権限を許可してください"
 
-#: rustinput-gtk/src/window.rs:1414
+#: rustinput-gtk/src/window.rs:1422
 msgid "Grant"
 msgstr "許可"
 
-#: rustinput-gtk/src/window.rs:1454
+#: rustinput-gtk/src/window.rs:1462
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "このコンピューターが接続しようとすると、{name} で承認するかどうかが確認され、コードが表示されます。そのコードをここに入力すると、両方のコンピューターが互いに承認されます（操作、クリップボード、ファイルが対象）。"
 
-#: rustinput-gtk/src/window.rs:1460
+#: rustinput-gtk/src/window.rs:1468
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "このコンピューターが接続しようとすると、相手のコンピューターで承認するかどうかが確認され、コードが表示されます。そのコードをここに入力すると、両方のコンピューターが互いに承認されます（操作、クリップボード、ファイルが対象）。"
 
-#: rustinput-gtk/src/window.rs:1501
+#: rustinput-gtk/src/window.rs:1509
 msgid "Authorize with {name}"
 msgstr "{name} との相互承認"
 
-#: rustinput-gtk/src/window.rs:1502
+#: rustinput-gtk/src/window.rs:1510
 msgid "Authorize with the other computer"
 msgstr "相手のコンピューターとの相互承認"
 
-#: rustinput-gtk/src/window.rs:1539
+#: rustinput-gtk/src/window.rs:1547
 msgid "Authorizing…"
 msgstr "承認中…"
 
-#: rustinput-gtk/src/window.rs:1663
+#: rustinput-gtk/src/window.rs:1671
 msgid "Update now"
 msgstr "今すぐアップデート"
 
-#: rustinput-gtk/src/window.rs:1665
+#: rustinput-gtk/src/window.rs:1673
 msgid "Download"
 msgstr "ダウンロード"
 
@@ -1392,3 +1412,93 @@ msgstr "コピーされたファイルがありません。先にファイルマ
 #: src/radial/mod.rs:193
 msgid "Point at an action and let go"
 msgstr "操作にポインターを合わせて離してください"
+
+#: CHANGELOG.md:12
+msgctxt "changelog"
+msgid "After an update, the window shows what is new, once."
+msgstr "アップデート後、ウィンドウに新機能が一度だけ表示されます。"
+
+#: CHANGELOG.md:13
+msgctxt "changelog"
+msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
+msgstr "コンピューターの一覧に、それぞれで動いている RustInput のバージョンが表示され、このコンピューターより古い場合はそのことが示されます。"
+
+#: CHANGELOG.md:17
+msgctxt "changelog"
+msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
+msgstr "Linux：「設定」の「セッション開始時に RustInput を起動」をオンにすると、ログイン時にウィンドウなしで起動します。"
+
+#: CHANGELOG.md:21
+msgctxt "changelog"
+msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
+msgstr "ターミナルから `rustinput status`、`rustinput go <computer>`、`rustinput home` を、Waybar のモジュールには `rustinput status --waybar` を使えます。"
+
+#: CHANGELOG.md:26
+msgctxt "changelog"
+msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
+msgstr "コピーを検索：「クリップボード」タブのカードの上で、すべてのコンピューターの履歴を一度に検索します。"
+
+#: CHANGELOG.md:30
+msgctxt "changelog"
+msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
+msgstr "クリップボードは必要なときだけ：「設定」で「クリップボードをポインターと一緒に送る」をオフにすると、AltGr + 右 Shift + C でポインターのあるコンピューターへクリップボードを送るか、ポインターの来たコンピューターのクリップボードをここへ取り込みます。"
+
+#: CHANGELOG.md:35
+msgctxt "changelog"
+msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
+msgstr "トレイアイコンにマウスとキーボードの場所が表示され（別のコンピューターにあるときは青い印）、そのメニューから任意のコンピューターへ移動できます。"
+
+#: CHANGELOG.md:40
+msgctxt "changelog"
+msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
+msgstr "キーボードショートカット：AltGr + 右 Shift + 1 … 9 でそのコンピューターへ、+ 0 でここに戻ります。右 Shift を3秒押し続けると、いつでもポインターが戻ります。「設定」にあります。"
+
+#: CHANGELOG.md:45
+msgctxt "changelog"
+msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
+msgstr "あなたのコンピューターのいずれかとペアリングされたコンピューターは他のコンピューターにも提示され、それらも承認するかどうかを一度だけ確認します。"
+
+#: CHANGELOG.md:46
+msgctxt "changelog"
+msgid "Names of other computers can no longer hide characters that turn the text around."
+msgstr "他のコンピューターの名前に、テキストの向きを反転させる文字を隠せなくなりました。"
+
+#: CHANGELOG.md:50
+msgctxt "changelog"
+msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
+msgstr "「コンピューター」タブの「このネットワーク」欄で、近くで RustInput を実行している他のコンピューターが見つかり、ワンクリックで追加できます。各コンピューターで「このコンピューターを他に表示する」をオンにするまではオフです。"
+
+#: CHANGELOG.md:55
+msgctxt "changelog"
+msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
+msgstr "転送ウィンドウに、送られなかったものや届かなかったものとその理由が表示されます：フォルダーへのリンク、送信中に変更または削除されたファイル（残りは続行）、相手のシステムで使えない名前。"
+
+#: CHANGELOG.md:60
+msgctxt "changelog"
+msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
+msgstr "ポインターと一緒に届く大きなコピーは、先に確認されます（1 GB 超。「設定」の「次のサイズを超える受信は確認する」で変更できます）。"
+
+#: CHANGELOG.md:61
+msgctxt "changelog"
+msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
+msgstr "相手のコンピューターに収まらない転送は、開始前にサイズを示して拒否されます。"
+
+#: CHANGELOG.md:65
+msgctxt "changelog"
+msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
+msgstr "ネットワーク、再起動、コンピューターの電源オフで中断された転送は、止まったバイトから再開します。"
+
+#: CHANGELOG.md:69
+msgctxt "changelog"
+msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
+msgstr "ラジアルメニューの「クリップボード」で「クリップボード」タブが開きます。"
+
+#: CHANGELOG.md:73
+msgctxt "changelog"
+msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
+msgstr "各コンピューターのクリップボード履歴をメモリーにだけ保存：どのコンピューターのどのコピーでも呼び戻せます。"
+
+#: CHANGELOG.md:77
+msgctxt "changelog"
+msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
+msgstr "「クリップボード」タブに各コンピューターがコピーした内容が表示され、「ここにコピー」で取り込めます。"
