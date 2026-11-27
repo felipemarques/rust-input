@@ -84,7 +84,9 @@ pub(crate) fn show(main: &Window, seen: Option<String>) {
         return;
     }
     main.request(FrontendRequest::WhatsNewSeen(current.to_owned()));
-    let Some(text) = since(CHANGELOG, seen.as_deref(), current) else {
+    // a checkout on Windows may have turned the lines into CRLF
+    let changelog = CHANGELOG.replace("\r\n", "\n");
+    let Some(text) = since(&changelog, seen.as_deref(), current) else {
         return;
     };
     // the versions in bold, each change translated

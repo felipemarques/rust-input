@@ -3,7 +3,8 @@
 
 #[test]
 fn the_changelog_tells_about_this_version() {
-    let changelog = include_str!("../CHANGELOG.md");
+    // a checkout on Windows may have turned the lines into CRLF
+    let changelog = include_str!("../CHANGELOG.md").replace("\r\n", "\n");
     let heading = format!("\n## {}\n", env!("CARGO_PKG_VERSION"));
     assert!(
         changelog.contains(&heading),
