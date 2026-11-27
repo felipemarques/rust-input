@@ -278,6 +278,26 @@ pub struct TransferInfo {
     pub left_out: Vec<LeftOut>,
 }
 
+/// A computer running RustInput found on the local network (0.40.0).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Discovered {
+    /// its host name
+    pub name: String,
+    pub address: IpAddr,
+    /// the port of its RustInput
+    pub port: u16,
+    /// the fingerprint it says its certificate has (not proven: adding it
+    /// does not authorize it)
+    pub fingerprint: String,
+    pub version: String,
+    /// as `std::env::consts::OS`: "linux", "windows", "macos"
+    pub os: String,
+    /// its fingerprint is authorized here
+    pub authorized: bool,
+    /// already among the computers of this one (by its address or name)
+    pub added: bool,
+}
+
 /// Something of a transfer that did not go or come as it was copied, and
 /// why. Also part of the file channel between devices, so `why` is a word
 /// a newer RustInput may add to, shown as `detail` when it is not known.
@@ -594,6 +614,11 @@ pub enum FrontendEvent {
         files: u32,
         bytes: u64,
     },
+    /// the computers running RustInput found on the network (0.40.0)
+    Discovered(Vec<Discovered>),
+    /// whether this computer tells the others about itself and looks for
+    /// them (`discovery`)
+    Discovery(bool),
     /// show the main window on its Clipboards tab (picked in the radial menu;
     /// [`FrontendEvent::ShowClipboard`] is whether the others see this one)
     ShowClipboardsTab,
@@ -737,6 +762,17 @@ pub enum FrontendRequest {
     /// the answer to [`FrontendEvent::AskTransfer`] `id`: receive the
     /// files or not
     AnswerTransfer { id: u64, receive: bool },
+    /// a window shows the computers found on the network (or no longer):
+    /// look for them now and then
+    Discover(bool),
+    /// tell the others about this computer and look for them, or not
+    SetDiscovery(bool),
+    /// adds a computer found on the network: its name, address and port
+    AddDiscovered {
+        name: String,
+        address: IpAddr,
+        port: u16,
+    },
     /// send files and folders to the connected devices right away (the
     /// "Copy to RustInput" menu item of file managers)
     SendFiles(Vec<std::path::PathBuf>),

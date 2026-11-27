@@ -6,6 +6,7 @@ mod clipboard;
 pub mod config;
 mod connect;
 mod crypto;
+pub(crate) mod discovery;
 mod dns;
 mod emulation;
 pub mod emulation_test;

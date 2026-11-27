@@ -44,6 +44,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | ⬆️ Tells of new versions, if you want it to: a sign on the tray icon and a notification; on Windows it updates with one click | ✅ ¹⁰ | ✅ ¹⁰ | ✅ ² | ✅ ² |
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
+| 📡 Find the computers running RustInput on the network and add them with one click, if you switch it on | ✅ ²¹ | ✅ ²¹ | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
 
 Used every day between **Windows 11** and **Linux Mint 22 (Cinnamon, X11)**: the ✅ in those two columns are tested by hand.
@@ -82,6 +83,8 @@ killed in the middle of a transfer, not yet by hand. Both computers need 0.37.0 
 [Large copies and free space](#large-copies-and-free-space)).
 ²⁰ New in 0.39.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Files that change or go
 away while they are sent are skipped instead of ending the transfer when both computers have 0.39.0 or newer.
+²¹ New in 0.40.0: tested in automated runs between two RustInput on one Linux (X11) computer, not yet by hand. Off until
+switched on, on both computers (see [Finding the computers on the network](#finding-the-computers-on-the-network)).
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -460,6 +463,23 @@ page. **Preferences > Updates** switches it on or off (`check_updates` in `confi
 **Check now**. Without `check_updates` there are no notifications, but **Check now** still shows a new version on the
 tray icon.
 
+## Finding the computers on the network
+
+Below the connections in the **Computers** tab, **On this network** lists the other computers running RustInput nearby,
+with their address, version and system, and **Add** makes one of them a connection, by its name and address. Switch on
+**Show this computer to the others** there, on each computer: it is off until you do, because it tells the network the
+name of this computer.
+
+- Adding a computer found this way does not authorize it: anyone on the network could claim to be one. Switch the new
+  connection on and move the pointer to it; it shows a code to enter here, as in
+  [Authorizing computers](#authorizing-computers). Computers authorized already say so in the list.
+- Switched on, RustInput tells the others about itself with UDP broadcasts on port 4241, when it starts and every
+  minute: its name, the fingerprint of its certificate, its port, its version and its system. While the Computers tab
+  shows, it asks the others every 5 seconds and they answer right away; switched off or closing, it says goodbye. A
+  firewall has to let UDP 4241 in (the Windows installer allows RustInput for every port).
+- Only the network of this computer is searched (broadcasts do not cross routers): add a computer on another network
+  with **Add computer**, by its name or address.
+
 ## Authorizing computers
 
 Every computer has a certificate fingerprint, shown in its window. Connections are encrypted and only accepted from
@@ -750,7 +770,9 @@ This program will not transfer any information to other networked systems unless
 or the person installing or operating it.
 
 RustInput sends keyboard, mouse, clipboard and file data only to the computers its user adds and authorizes, over
-encrypted connections on the local network. Those computers can also see what its clipboard holds, and its history,
+encrypted connections on the local network. If its user switches on **Show this computer to the others** (off by
+default), it tells the computers of its local network its name, the fingerprint of its certificate, its port, its
+version and its system, with UDP broadcasts, and listens for theirs. Those computers can also see what its clipboard holds, and its history,
 in their Clipboards tab, unless its user switches that off in Preferences. The history of the clipboard is kept in
 memory only, never written to disk. The installer and `update-rustinput.ps1` connect only to GitHub, to find
 and download releases of RustInput. If its user says yes when the window first asks (or switches it on in
@@ -1011,6 +1033,10 @@ file_manager_menu = true
 # by default, 0: never ask)
 ask_before_receiving_mb = 1024
 
+# tell the other computers on the network about this one and find theirs, with UDP
+# broadcasts on port 4241 (off by default, see the privacy policy)
+discovery = false
+
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
@@ -1107,6 +1133,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] History of the clipboard of every computer, in memory only
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
+- [x] Find the computers running RustInput on the network, if switched on
 
 
 ## Detailed OS Support

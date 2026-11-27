@@ -373,7 +373,7 @@
                                   </object>
                                 </child>
                                 <child>
-                                  <object class="GtkBox">
+                                  <object class="GtkBox" id="computers_box">
                                     <property name="orientation">vertical</property>
                                     <property name="spacing">24</property>
                                     <property name="hexpand">true</property>
