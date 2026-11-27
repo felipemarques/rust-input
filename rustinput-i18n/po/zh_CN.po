@@ -1415,95 +1415,100 @@ msgstr "指向一个操作并松开"
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
+msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
+msgstr "AI 代理（Claude Code、Claude Desktop 或任何 MCP 客户端）可以查看鼠标和键盘在哪台计算机上、将它们移到另一台计算机、发送文件并检查新版本：`claude mcp add rustinput -- rustinput mcp`。它永远不能授权计算机、输入内容或读取剪贴板。"
+
+#: CHANGELOG.md:16
+msgctxt "changelog"
 msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr "Português (Portugal)：窗口、菜单、新功能说明和 Windows 安装程序现在也支持葡萄牙的葡萄牙语。"
 
-#: CHANGELOG.md:16
+#: CHANGELOG.md:20
 msgctxt "changelog"
 msgid "After an update, the window shows what is new, once."
 msgstr "更新后，窗口会显示一次新功能。"
 
-#: CHANGELOG.md:17
+#: CHANGELOG.md:21
 msgctxt "changelog"
 msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr "电脑列表会显示每台电脑运行的 RustInput 版本，并在某台比本机旧时提示。"
 
-#: CHANGELOG.md:21
+#: CHANGELOG.md:25
 msgctxt "changelog"
 msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr "Linux：开启“首选项”中的“登录时启动 RustInput”后，登录时会在后台启动，不显示窗口。"
 
-#: CHANGELOG.md:25
+#: CHANGELOG.md:29
 msgctxt "changelog"
 msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr "可在终端中使用 `rustinput status`、`rustinput go <computer>` 和 `rustinput home`，`rustinput status --waybar` 可用作 Waybar 模块。"
 
-#: CHANGELOG.md:30
+#: CHANGELOG.md:34
 msgctxt "changelog"
 msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
 msgstr "搜索复制内容：在“剪贴板”标签页的卡片上方，一次搜索所有电脑的历史。"
 
-#: CHANGELOG.md:34
+#: CHANGELOG.md:38
 msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr "按需发送剪贴板：在“首选项”中关闭“剪贴板随指针一起过去”后，按 AltGr + 右 Shift + C 可把剪贴板发到指针所在的电脑，或取回指针来的那台电脑的剪贴板。"
 
-#: CHANGELOG.md:39
+#: CHANGELOG.md:43
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr "托盘图标显示鼠标和键盘当前在哪台电脑（在另一台电脑上时显示蓝色标记），其菜单可将它们移到任意电脑。"
 
-#: CHANGELOG.md:44
+#: CHANGELOG.md:48
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr "键盘快捷键：AltGr + 右 Shift + 1 … 9 切到对应电脑，+ 0 回到本机；按住右 Shift 3 秒，指针总会回到本机。可在“首选项”中找到。"
 
-#: CHANGELOG.md:49
+#: CHANGELOG.md:53
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr "与你的某台电脑配对的电脑会推荐给其他电脑，它们会询问一次是否也授权它。"
 
-#: CHANGELOG.md:50
+#: CHANGELOG.md:54
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr "其他电脑的名称不能再隐藏会反转文字方向的字符。"
 
-#: CHANGELOG.md:54
+#: CHANGELOG.md:58
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr "“电脑”标签页中的“此网络中”部分会找到附近运行 RustInput 的其他电脑，一键即可添加。默认关闭，需在每台电脑上开启“向其他电脑显示本机”。"
 
-#: CHANGELOG.md:59
+#: CHANGELOG.md:63
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr "传输窗口会说明哪些内容没有发出或没有收到及其原因：指向文件夹的链接、发送期间被修改或被删除的文件（其余继续传输）、对方系统不允许的名称。"
 
-#: CHANGELOG.md:64
+#: CHANGELOG.md:68
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr "随指针一起过来的大量复制内容会先询问（超过 1 GB，可在“首选项”的“接收超过此大小前先询问”中设置）。"
 
-#: CHANGELOG.md:65
+#: CHANGELOG.md:69
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr "对方电脑放不下的传输会在开始前被拒绝，并显示相关大小。"
 
-#: CHANGELOG.md:69
+#: CHANGELOG.md:73
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr "因网络、重启或电脑关机而中断的传输，会从中断的那个字节继续。"
 
-#: CHANGELOG.md:73
+#: CHANGELOG.md:77
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr "环形菜单中的“剪贴板”会打开“剪贴板”标签页。"
 
-#: CHANGELOG.md:77
+#: CHANGELOG.md:81
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr "每台电脑的剪贴板历史，仅保存在内存中：可取回任意电脑的任意一次复制。"
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr "“剪贴板”标签页显示每台电脑复制的内容，点击“复制到这里”即可取来。"

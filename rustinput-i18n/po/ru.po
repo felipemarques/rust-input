@@ -1435,95 +1435,100 @@ msgstr "Наведите на действие и отпустите"
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
+msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
+msgstr "ИИ-агент (Claude Code, Claude Desktop или любой клиент MCP) может видеть, где мышь и клавиатура, переводить их на другой компьютер, отправлять файлы и искать новую версию: `claude mcp add rustinput -- rustinput mcp`. Он никогда не авторизует компьютер, не набирает текст и не читает буфер обмена."
+
+#: CHANGELOG.md:16
+msgctxt "changelog"
 msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr "Português (Portugal): окна, меню, список новшеств и установщик для Windows теперь говорят и на европейском португальском."
 
-#: CHANGELOG.md:16
+#: CHANGELOG.md:20
 msgctxt "changelog"
 msgid "After an update, the window shows what is new, once."
 msgstr "После обновления окно один раз показывает, что нового."
 
-#: CHANGELOG.md:17
+#: CHANGELOG.md:21
 msgctxt "changelog"
 msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr "Список компьютеров показывает, какая версия RustInput на каждом, и сообщает, если она старее, чем на этом."
 
-#: CHANGELOG.md:21
+#: CHANGELOG.md:25
 msgctxt "changelog"
 msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr "Linux: параметр «Запускать RustInput вместе с сеансом» на вкладке «Параметры» запускает программу без окна при входе в систему."
 
-#: CHANGELOG.md:25
+#: CHANGELOG.md:29
 msgctxt "changelog"
 msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr "`rustinput status`, `rustinput go <computer>` и `rustinput home` из терминала, а также `rustinput status --waybar` для модуля Waybar."
 
-#: CHANGELOG.md:30
+#: CHANGELOG.md:34
 msgctxt "changelog"
 msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
 msgstr "Искать в копиях: поле над карточками вкладки «Буферы обмена» ищет сразу по истории всех компьютеров."
 
-#: CHANGELOG.md:34
+#: CHANGELOG.md:38
 msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr "Буфер обмена — только по запросу: выключите «Переносить буфер обмена вместе с указателем» на вкладке «Параметры», и тогда AltGr + правый Shift + C переносит его на компьютер, где находится указатель, или забирает буфер с компьютера, откуда указатель пришёл."
 
-#: CHANGELOG.md:39
+#: CHANGELOG.md:43
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr "Значок в области уведомлений показывает, где мышь и клавиатура (синий знак, пока они на другом компьютере), а его меню переводит их на любой компьютер."
 
-#: CHANGELOG.md:44
+#: CHANGELOG.md:48
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr "Сочетания клавиш: AltGr + правый Shift + 1 … 9 — на соответствующий компьютер, + 0 — обратно сюда; правый Shift, удерживаемый 3 секунды, всегда возвращает указатель. Они на вкладке «Параметры»."
 
-#: CHANGELOG.md:49
+#: CHANGELOG.md:53
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr "Компьютер, сопряжённый с одним из ваших, предлагается остальным, и они один раз спрашивают, авторизовать ли его тоже."
 
-#: CHANGELOG.md:50
+#: CHANGELOG.md:54
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr "Имена других компьютеров больше не могут скрывать символы, меняющие направление текста."
 
-#: CHANGELOG.md:54
+#: CHANGELOG.md:58
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr "Раздел «В этой сети» на вкладке «Компьютеры» находит другие компьютеры поблизости с RustInput и добавляет их одним щелчком. Выключен, пока на каждом компьютере не включён параметр «Показывать этот компьютер другим»."
 
-#: CHANGELOG.md:59
+#: CHANGELOG.md:63
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr "Окно передач сообщает, что не отправилось или не пришло, и почему: ссылки на папки, файлы, изменённые или удалённые во время отправки (остальное продолжается), имена, недопустимые в другой системе."
 
-#: CHANGELOG.md:64
+#: CHANGELOG.md:68
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr "Большие копии, приходящие вместе с указателем, сначала запрашивают подтверждение (более 1 GB, настраивается параметром «Спрашивать перед получением более» на вкладке «Параметры»)."
 
-#: CHANGELOG.md:65
+#: CHANGELOG.md:69
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr "Передача, которая не помещается на другом компьютере, отклоняется до начала, с указанием размеров."
 
-#: CHANGELOG.md:69
+#: CHANGELOG.md:73
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr "Передача, прерванная сетью, перезапуском или выключением компьютера, продолжается с того байта, на котором остановилась."
 
-#: CHANGELOG.md:73
+#: CHANGELOG.md:77
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr "Пункт «Буферы обмена» в радиальном меню открывает вкладку «Буферы обмена»."
 
-#: CHANGELOG.md:77
+#: CHANGELOG.md:81
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr "История буфера обмена каждого компьютера, только в памяти: верните любую копию любого компьютера."
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr "Вкладка «Буферы обмена» показывает, что скопировал каждый компьютер, а «Скопировать сюда» переносит это сюда."
