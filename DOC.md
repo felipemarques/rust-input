@@ -241,6 +241,62 @@ Files go out in two ways:
   sends neither the files nor their paths as text, so the clipboard of the
   other device keeps what it has.
 
+### Going on where it stopped (0.37.0)
+
+With a peer that announced `CAP_FILE_RESUME` (which implies `CAP_FILES`), a
+transfer is offered with `OfferResumable(id, key, entries, continued)`
+instead of `Offer`. `key` is the hex of a SHA-256 of the local paths and of
+the entries (paths, sizes, modification times): the same files, unchanged,
+always get the same key. Older peers never see the new frames, and get
+`Offer` as before.
+
+```mermaid
+sequenceDiagram
+    Sender->>Receiver: OfferResumable(id, key, entries, continued)
+    Receiver-->>Sender: AcceptAt(id, file, offset, tail) or Decline(id, reason)
+    Sender->>Receiver: Start(id, file, offset)
+    loop the rest of the files, from there
+        Sender->>Receiver: Data(id, bytes)
+    end
+    Receiver-->>Sender: Complete(id)
+```
+
+- The receiver writes `<folder>.resume` next to the folder of the
+  transfer: the fingerprint of the sender, the key and the entries. When the
+  connection is lost the folder stays (a non-resumable transfer is removed
+  as before). Offered the same key by the same fingerprint with the same
+  entries, it finds the folder and answers where the data goes on: every
+  file before `file` (counting files only) is complete, and `offset` bytes
+  of that one are there, found from the sizes on disk; `tail` is the
+  SHA-256 of the last bytes before `offset` (up to 4 MiB). Files after it
+  that are there are removed, a longer file is had again. A new transfer
+  answers `AcceptAt(0, 0)`.
+- The sender checks that file: unchanged (size and modification time of the
+  offer) and with the same last bytes, it begins there; with different last
+  bytes it begins at the start of that file; a changed file ends the
+  transfer. `Start` says where it begins, and the receiver takes only the
+  position it asked for or the start of that file.
+- The sender does not give up a resumable transfer when its connection is
+  lost: it waits (`TransferState::Interrupted`) and offers it again, with
+  `continued`, on the next connection to that device, in either direction.
+  The input channel usually times out too, which removes the peer, so the
+  side that opened the file channel keeps its address while a resumable
+  transfer with that device waits (`standby`) and connects again every
+  5 seconds, without waiting for the pointer to cross. The receiver shows
+  the transfer as interrupted, and the same entry goes on when it is offered
+  again.
+- Cancelled on the receiver while interrupted, what arrived is removed and
+  an offer with `continued` of that key from that device is declined for
+  the rest of the run; one without (the user sent the files again) is
+  taken. Partial folders outlive restarts and are removed by the cleanup at
+  startup once their `.resume` was not touched for 7 days.
+- The daemon may write as SYSTEM in the folder of the user: files kept to go
+  on with are opened without following links (`O_NOFOLLOW`,
+  `FILE_FLAG_OPEN_REPARSE_POINT`), and a link found in their place is
+  removed and had again.
+- A window that connects to the service gets the list of the transfers
+  with `Sync` (0.37.0), so interrupted ones show although nothing moves.
+
 Every transfer is written to a log (`transfers.log` in
 `$XDG_STATE_HOME/rustinput`, `%LOCALAPPDATA%\rustinput` or
 `~/Library/Logs/rustinput`) with its files and sizes.

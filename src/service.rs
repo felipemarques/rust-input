@@ -116,6 +116,8 @@ pub struct Service {
     peer_states: HashMap<ClientHandle, (bool, bool)>,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
+    /// the last of them, for a window that connects later
+    transfers: Vec<TransferInfo>,
     /// bytes and pings of the input channel, reported once a second
     netstats: NetStats,
     /// light or dark windows, as configured
@@ -319,6 +321,7 @@ impl Service {
             file_channel,
             file_options,
             transfer_reports,
+            transfers: Vec::new(),
             netstats,
             theme,
             pairing,
@@ -395,6 +398,7 @@ impl Service {
                 event = self.capture.event() => self.handle_capture_event(event),
                 event = self.resolver.event() => self.handle_resolver_event(event),
                 Some(transfers) = self.transfer_reports.recv() => {
+                    self.transfers = transfers.clone();
                     self.notify_frontend(FrontendEvent::Transfers(transfers));
                 }
                 _ = self.config.changed() => self.handle_config_change(),
@@ -843,6 +847,7 @@ impl Service {
         self.notify_frontend(FrontendEvent::KeepClipboardHistory(
             self.keep_clipboard_history,
         ));
+        self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
     }
 
     /// Pauses RustInput on this computer, or lets it go on: paused, the

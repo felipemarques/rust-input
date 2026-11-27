@@ -583,39 +583,51 @@ msgstr "{files} إلى {name}: فشل الإرسال"
 msgid "Receiving {files} from {name} failed"
 msgstr "{files} من {name}: فشل الاستلام"
 
-#: rustinput-gtk/src/transfers.rs:79
+#: rustinput-gtk/src/transfers.rs:71
+msgid "Sending {files} to {name}: interrupted"
+msgstr "{files} إلى {name}: توقّف الإرسال"
+
+#: rustinput-gtk/src/transfers.rs:74
+msgid "Receiving {files} from {name}: interrupted"
+msgstr "{files} من {name}: توقّف الاستلام"
+
+#: rustinput-gtk/src/transfers.rs:93
+msgid "{size}, the last {rest} in {time} ({speed}/s): it went on where it had stopped"
+msgstr "{size}، آخر {rest} في {time} ({speed}/ث): استُكمل من حيث توقّف"
+
+#: rustinput-gtk/src/transfers.rs:102
 msgid "{size} in {time} ({speed}/s)"
 msgstr "{size} في {time} ({speed}/ث)"
 
-#: rustinput-gtk/src/transfers.rs:89
+#: rustinput-gtk/src/transfers.rs:106
 msgid "Listing the files…"
 msgstr "جارٍ سرد الملفات…"
 
-#: rustinput-gtk/src/transfers.rs:90
+#: rustinput-gtk/src/transfers.rs:107
 msgid "{size}, waiting for the transfer before it"
 msgstr "{size}، بانتظار انتهاء النقل السابق"
 
-#: rustinput-gtk/src/transfers.rs:95
+#: rustinput-gtk/src/transfers.rs:112
 msgid "{done} of {size}"
 msgstr "{done} من {size}"
 
-#: rustinput-gtk/src/transfers.rs:112
+#: rustinput-gtk/src/transfers.rs:129
 msgid "{time} left"
 msgstr "المتبقي: {time}"
 
-#: rustinput-gtk/src/transfers.rs:120
+#: rustinput-gtk/src/transfers.rs:137
 msgid "{took}. On the clipboard: paste them in a folder to move them there"
 msgstr "{took}. في الحافظة: الصقها في مجلد لنقلها إليه"
 
-#: rustinput-gtk/src/transfers.rs:124
+#: rustinput-gtk/src/transfers.rs:141
 msgid "{size}, moved to where they were pasted. Nothing is left in the temporary folder"
 msgstr "{size}، نُقلت إلى حيث لُصقت. لم يتبقَّ شيء في المجلد المؤقت"
 
-#: rustinput-gtk/src/transfers.rs:129
+#: rustinput-gtk/src/transfers.rs:146
 msgid "Removed from the temporary folder without being pasted"
 msgstr "أُزيلت من المجلد المؤقت دون لصقها"
 
-#: rustinput-gtk/src/transfers.rs:131
+#: rustinput-gtk/src/transfers.rs:148
 msgid "{reason}, after {done} of {count} file"
 msgid_plural "{reason}, after {done} of {count} files"
 msgstr[0] "{reason}، بعد {done} من {count} ملف"
@@ -625,23 +637,27 @@ msgstr[3] "{reason}، بعد {done} من {count} ملفات"
 msgstr[4] "{reason}، بعد {done} من {count} ملفًا"
 msgstr[5] "{reason}، بعد {done} من {count} ملف"
 
-#: rustinput-gtk/src/transfers.rs:230
+#: rustinput-gtk/src/transfers.rs:154
+msgid "{done} of {size}. The connection was lost: it goes on from here when {name} is back"
+msgstr "{done} من {size}. انقطع الاتصال: يُستكمل من هنا عند عودة {name}"
+
+#: rustinput-gtk/src/transfers.rs:255
 msgid "Open log"
 msgstr "فتح السجل"
 
-#: rustinput-gtk/src/transfers.rs:231
+#: rustinput-gtk/src/transfers.rs:256
 msgid "Everything sent and received, with every file"
 msgstr "كل ما أُرسل واستُلم، مع كل ملف"
 
-#: rustinput-gtk/src/transfers.rs:238
+#: rustinput-gtk/src/transfers.rs:263
 msgid "Remove unpasted files"
 msgstr "إزالة الملفات غير الملصقة"
 
-#: rustinput-gtk/src/transfers.rs:239
+#: rustinput-gtk/src/transfers.rs:264
 msgid "Removes the received files that were not pasted from the temporary folder"
 msgstr "يزيل من المجلد المؤقت الملفات المستلمة التي لم تُلصق"
 
-#: rustinput-gtk/src/transfers.rs:399
+#: rustinput-gtk/src/transfers.rs:425
 msgid "Open the temporary folder with the received files"
 msgstr "فتح المجلد المؤقت الذي يحتوي على الملفات المستلمة"
 
@@ -697,15 +713,23 @@ msgstr "{files} إلى {name}: {percent}%"
 msgid "{files} from {name}: {percent}%"
 msgstr "{files} من {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:287
+#: rustinput-gtk/src/tray/mod.rs:279
+msgid "{files} to {name}: interrupted at {percent}%"
+msgstr "{files} إلى {name}: توقّف عند {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:280
+msgid "{files} from {name}: interrupted at {percent}%"
+msgstr "{files} من {name}: توقّف عند {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:295
 msgid "{files} from {name}, ready to paste"
 msgstr "{files} من {name}، بانتظار اللصق"
 
-#: rustinput-gtk/src/tray/mod.rs:296
+#: rustinput-gtk/src/tray/mod.rs:304
 msgid "{files} from {name}, pasted"
 msgstr "{files} من {name}، تم اللصق"
 
-#: rustinput-gtk/src/tray/mod.rs:305
+#: rustinput-gtk/src/tray/mod.rs:313
 msgid "{files} from {name}, not pasted"
 msgstr "{files} من {name}، لم يتم اللصق"
 

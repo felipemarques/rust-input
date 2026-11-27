@@ -28,6 +28,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🖼️ Clipboard: images, including screenshots (Print Screen, Flameshot) | ✅ | ✅ | ✅ ² | ✅ ² |
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
+| 🔁 A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped | ✅ ¹⁸ | ✅ ¹⁸ | ✅ ² | ✅ ² |
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
@@ -71,6 +72,9 @@ hand.
 password manager are recognized on Windows and X11, not yet on Wayland and macOS (see [The Clipboards tab](#the-clipboards-tab)).
 ¹⁷ New in 0.35.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Not on Wayland yet: RustInput
 can not tell there when something is copied.
+¹⁸ New in 0.37.0: tested in automated runs between two Linux (X11) computers, with the network cut off and each of them
+killed in the middle of a transfer, not yet by hand. Both computers need 0.37.0 or newer (see
+[Going on where it stopped](#going-on-where-it-stopped)).
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -179,9 +183,28 @@ other, and once everything arrived the clipboard there holds them: paste them in
   left, and whether the received files were pasted. It opens by itself when a transfer takes more than a moment and
   can be reopened from the tray icon or the main window, where it can also cancel transfers.
 - Everything sent and received is written to a log, with every file and its size: **Open log** in that window.
+- A transfer that is cut off goes on from the byte where it stopped, see below.
 - Files travel over a connection of their own, encrypted with TLS, so mouse and keyboard stay responsive during large
   transfers. It uses TCP on the same port number as the rest of RustInput (4242 by default): firewalls have to let
   TCP through as well.
+
+### Going on where it stopped
+
+When the connection is lost in the middle of a transfer (the Wi-Fi drops, a cable comes out, the other computer is
+turned off, goes to sleep or RustInput closes there), nothing that arrived is thrown away: the transfer shows as
+**interrupted**, with how much arrived, and goes on from the first byte that is missing as soon as the two computers
+reach each other again, by itself, without sending anything twice.
+
+- The receiving computer keeps what arrived, also when it is turned off or restarted, for a week. The sending one keeps
+  the transfer while RustInput runs there; if it was closed or restarted, copying the same files again (**Copy to
+  RustInput**) goes on where the earlier transfer stopped, as long as the files did not change.
+- Before going on, both computers compare the last bytes that arrived with those of the file (a SHA-256 of up to
+  4 MB): if they differ, for example because the file was changed, that file is sent again from its start. A file that
+  changed since it was copied ends the transfer, with the reason.
+- **Cancel** on either computer ends it for good: cancelled on the receiving one, what arrived is removed and the
+  transfer is not taken when it comes back by itself; copying the files again still sends them. **Remove unpasted
+  files** in the transfers window also removes what arrived of interrupted transfers.
+- Both computers need RustInput 0.37.0 or newer; with an older one a transfer that is cut off fails, as before.
 
 **Send copied files automatically** (off by default, in the tray menu and in the main window) also sends whatever is
 copied in a file manager (Ctrl+C) whenever the pointer moves to the other computer, like the rest of the clipboard.
@@ -1045,6 +1068,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Windows: the lock screen, the screen to log on and the prompts of User Account Control
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
+- [x] File transfers go on from the byte where they stopped after the connection was lost
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] See what every computer copied, in one tab, and bring it here with one click

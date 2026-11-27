@@ -4,16 +4,116 @@
 //! [`rustinput_ipc::received_dir`]; the clipboard then points at its top level
 //! items, and pasting them in a file manager moves them to wherever the user
 //! pastes. Folders left over by an earlier run are removed at startup.
+//!
+//! A resumable transfer (0.37.0) also gets `<its folder>.resume`, with the
+//! device it comes from, its key and its entries: when its connection is
+//! lost, what arrived stays, and when the same files are offered again the
+//! transfer goes on at the first byte that is missing, found from the sizes
+//! of the files on disk. Such folders outlive restarts for [`PARTIAL_MAX_AGE`].
 
 use std::{
     fs, io,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::{fs::File, io::AsyncWriteExt};
 
-use super::wire::Entry;
+use super::wire::{Entry, Position, TAIL_HASH};
+
+/// what both sides compare of a partial file before going on with it: the
+/// SHA-256 of its last bytes, up to this many
+pub(crate) const TAIL: u64 = 4 * 1024 * 1024;
+
+/// partial transfers nobody went on with are removed after this long
+const PARTIAL_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+
+/// the extension of the file kept next to the folder of a resumable transfer
+const RESUME: &str = "resume";
+
+/// `<folder>.resume`: what a resumable transfer is
+#[derive(Serialize, Deserialize)]
+struct Kept {
+    /// fingerprint of the sending device
+    from: String,
+    key: String,
+    entries: Vec<Entry>,
+}
+
+fn resume_file(root: &Path) -> PathBuf {
+    let mut name = root.as_os_str().to_owned();
+    name.push(".");
+    name.push(RESUME);
+    PathBuf::from(name)
+}
+
+/// Opens an existing plain file, not following a link in its place: the
+/// daemon may run as SYSTEM in the folder of its user (see [`no_links`]).
+pub(crate) fn open_plain(path: &Path, write: bool) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(write);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // FILE_FLAG_OPEN_REPARSE_POINT: a link (or junction) is opened
+        // itself, and refused below
+        options.custom_flags(0x0020_0000);
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // FILE_ATTRIBUTE_REPARSE_POINT
+        if metadata.file_attributes() & 0x400 != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{path:?} is a link"),
+            ));
+        }
+    }
+    if !metadata.is_file() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("{path:?} is not a file"),
+        ));
+    }
+    Ok(file)
+}
+
+/// The SHA-256 of the last bytes of `file` before `offset` (up to
+/// [`TAIL`]), what [`Position::tail`] holds. Blocking.
+pub(crate) fn tail_hash(file: &mut fs::File, offset: u64) -> io::Result<[u8; TAIL_HASH]> {
+    if offset == 0 {
+        return Ok([0; TAIL_HASH]);
+    }
+    let start = offset.saturating_sub(TAIL);
+    file.seek(SeekFrom::Start(start))?;
+    let mut hasher = Sha256::new();
+    let mut left = offset - start;
+    let mut buffer = vec![0; 256 * 1024];
+    while left > 0 {
+        let want = left.min(buffer.len() as u64) as usize;
+        let read = file.read(&mut buffer[..want])?;
+        if read == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                "the file is shorter than its position",
+            ));
+        }
+        hasher.update(&buffer[..read]);
+        left -= read as u64;
+    }
+    Ok(hasher.finalize().into())
+}
 
 /// Whether `dir` and the folder it is in are folders and not links
 /// (symbolic links, junctions): the daemon may run as SYSTEM in the folder of
@@ -25,7 +125,18 @@ fn no_links(dir: &Path) -> bool {
     plain(dir) && dir.parent().is_none_or(plain)
 }
 
-/// Removes all but the `keep` newest transfers below `dir`.
+/// how long ago `path` was last changed
+fn age(path: &Path) -> Duration {
+    fs::metadata(path)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| t.elapsed().ok())
+        .unwrap_or_default()
+}
+
+/// Removes all but the `keep` newest transfers below `dir`. Partial
+/// resumable transfers stay, unless nothing went on with them for
+/// [`PARTIAL_MAX_AGE`].
 pub(crate) fn cleanup(dir: &Path, keep: usize) {
     if !no_links(dir) {
         log::warn!("{dir:?} or the folder it is in is a link: nothing is removed");
@@ -36,10 +147,23 @@ pub(crate) fn cleanup(dir: &Path, keep: usize) {
     };
     // the folder names start with the time they were created; links among
     // them are not followed
+    let entries: Vec<PathBuf> = entries.filter_map(Result::ok).map(|e| e.path()).collect();
+    // partial transfers nobody went on with for long, and `.resume` files
+    // whose folder is gone
+    for kept in entries
+        .iter()
+        .filter(|p| p.extension().is_some_and(|e| e == RESUME))
+    {
+        let root = kept.with_extension("");
+        let folder = fs::symlink_metadata(&root).is_ok_and(|m| m.is_dir());
+        if !folder || age(kept) > PARTIAL_MAX_AGE {
+            remove_partial(&root);
+        }
+    }
     let mut transfers: Vec<PathBuf> = entries
-        .filter_map(Result::ok)
-        .filter(|e| fs::symlink_metadata(e.path()).is_ok_and(|m| m.is_dir()))
-        .map(|e| e.path())
+        .into_iter()
+        .filter(|p| fs::symlink_metadata(p).is_ok_and(|m| m.is_dir()))
+        .filter(|p| fs::symlink_metadata(resume_file(p)).is_err())
         .collect();
     transfers.sort();
     let remove = transfers.len().saturating_sub(keep);
@@ -140,26 +264,271 @@ pub(crate) struct Receiving {
     pub(crate) bytes: u64,
     pub(crate) files_done: usize,
     pub(crate) bytes_done: u64,
+    /// resumable: where the data goes on, until [`Receiving::begin`]
+    waiting: Option<Position>,
+    /// resumable: `<root>.resume`
+    kept: Option<PathBuf>,
 }
 
 fn time(seconds: u64) -> SystemTime {
     UNIX_EPOCH + Duration::from_secs(seconds)
 }
 
+/// the paths of an offer inside the folder of the transfer, refused if one
+/// would leave it
+fn checked(entries: Vec<Entry>) -> io::Result<Vec<(Entry, PathBuf)>> {
+    let mut checked = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let Some(path) = safe_path(&entry.path) else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("unsafe path in the offer: {:?}", entry.path),
+            ));
+        };
+        checked.push((entry, path));
+    }
+    Ok(checked)
+}
+
+/// The folder of a partial transfer of `key` from `from` below `dir`, kept
+/// with the same `entries`. Blocking.
+fn find_kept(dir: &Path, from: &str, key: &str, entries: &[Entry]) -> Option<PathBuf> {
+    for path in fs::read_dir(dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+    {
+        if path.extension().is_none_or(|e| e != RESUME) {
+            continue;
+        }
+        let Ok(text) = fs::read(&path) else {
+            continue;
+        };
+        let Ok(kept) = serde_json::from_slice::<Kept>(&text) else {
+            continue;
+        };
+        if kept.from != from || kept.key != key || kept.entries != entries {
+            continue;
+        }
+        let root = path.with_extension("");
+        if fs::symlink_metadata(&root).is_ok_and(|m| m.is_dir()) {
+            return Some(root);
+        }
+    }
+    None
+}
+
 impl Receiving {
     /// Creates the folder of the transfer below `dir` with the folders of the
     /// offer, ready for the contents of its files.
     pub(crate) async fn start(dir: &Path, id: u32, entries: Vec<Entry>) -> io::Result<Self> {
-        let mut checked = Vec::with_capacity(entries.len());
-        for entry in entries {
-            let Some(path) = safe_path(&entry.path) else {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    format!("unsafe path in the offer: {:?}", entry.path),
-                ));
-            };
-            checked.push((entry, path));
+        let mut receiving = Self::create(dir, id, checked(entries)?).await?;
+        if let Err(e) = receiving.advance().await {
+            receiving.discard().await;
+            return Err(e);
         }
+        Ok(receiving)
+    }
+
+    /// The receiving side of a resumable transfer: what was kept of the
+    /// same files from `from` (offered with the same `key`), or a new folder
+    /// like [`Receiving::start`]. Returns where the data has to go on; the
+    /// sender then says where it does, see [`Receiving::begin`].
+    pub(crate) async fn resumable(
+        dir: &Path,
+        id: u32,
+        from: &str,
+        key: &str,
+        entries: Vec<Entry>,
+    ) -> io::Result<(Self, Position)> {
+        let checked = checked(entries)?;
+        if !no_links(dir) {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("{dir:?} or the folder it is in is a link, not a folder"),
+            ));
+        }
+        let found = {
+            let (dir, from, key) = (dir.to_path_buf(), from.to_owned(), key.to_owned());
+            let entries: Vec<Entry> = checked.iter().map(|(e, _)| e.clone()).collect();
+            tokio::task::spawn_blocking(move || find_kept(&dir, &from, &key, &entries))
+                .await
+                .map_err(io::Error::other)?
+        };
+        if let Some(root) = found {
+            let kept = resume_file(&root);
+            let touched = kept.clone();
+            let (mut receiving, position) = tokio::task::spawn_blocking(move || {
+                // touched, so that it is not taken for forgotten
+                let _ = open_plain(&touched, true).and_then(|f| f.set_modified(SystemTime::now()));
+                Self::reopen(root, checked)
+            })
+            .await
+            .map_err(io::Error::other)??;
+            receiving.kept = Some(kept);
+            receiving.waiting = Some(position);
+            return Ok((receiving, position));
+        }
+        let mut receiving = Self::create(dir, id, checked).await?;
+        let kept = resume_file(&receiving.root);
+        let text = serde_json::to_vec(&Kept {
+            from: from.to_owned(),
+            key: key.to_owned(),
+            entries: receiving.entries.iter().map(|(e, _)| e.clone()).collect(),
+        })?;
+        let written = async {
+            // never over something already there
+            let mut file = tokio::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&kept)
+                .await?;
+            file.write_all(&text).await?;
+            file.flush().await
+        };
+        if let Err(e) = written.await {
+            receiving.discard().await;
+            return Err(e);
+        }
+        receiving.kept = Some(kept);
+        receiving.waiting = Some(Position::default());
+        Ok((receiving, Position::default()))
+    }
+
+    /// What is on disk of a partial transfer in `root`: every file before
+    /// the first one that is shorter than it should be (or missing). What
+    /// comes after it is removed, so it can be created again. Blocking.
+    fn reopen(root: PathBuf, entries: Vec<(Entry, PathBuf)>) -> io::Result<(Self, Position)> {
+        let mut position = Position::default();
+        let (mut files_done, mut bytes_done) = (0, 0);
+        let mut next = entries.len();
+        for (index, (entry, relative)) in entries.iter().enumerate() {
+            if entry.dir {
+                continue;
+            }
+            let path = root.join(relative);
+            let length = match fs::symlink_metadata(&path) {
+                Ok(m) if m.is_file() => Some(m.len()),
+                Ok(_) => {
+                    // not what was written there: a link, a folder
+                    let _ = fs::remove_file(&path).or_else(|_| fs::remove_dir_all(&path));
+                    None
+                }
+                Err(_) => None,
+            };
+            match length {
+                Some(length) if length == entry.size => {
+                    files_done += 1;
+                    bytes_done += length;
+                    position.file += 1;
+                }
+                Some(length) if length < entry.size => {
+                    position.offset = length;
+                    let mut file = open_plain(&path, false)?;
+                    position.tail = tail_hash(&mut file, length)?;
+                    bytes_done += length;
+                    next = index;
+                    break;
+                }
+                Some(_) => {
+                    // longer than it should be: had again
+                    fs::remove_file(&path)?;
+                    next = index;
+                    break;
+                }
+                None => {
+                    next = index;
+                    break;
+                }
+            }
+        }
+        // later files are created anew when their turn comes
+        for (entry, relative) in entries.iter().skip(next + 1) {
+            if !entry.dir {
+                let path = root.join(relative);
+                if fs::symlink_metadata(&path).is_ok() {
+                    fs::remove_file(&path)?;
+                }
+            }
+        }
+        let files = entries.iter().filter(|(e, _)| !e.dir).count();
+        let bytes = entries.iter().map(|(e, _)| e.size).sum();
+        let receiving = Self {
+            root,
+            entries,
+            next,
+            current: None,
+            files,
+            bytes,
+            files_done,
+            bytes_done,
+            waiting: None,
+            kept: None,
+        };
+        Ok((receiving, position))
+    }
+
+    /// The sender begins the data at `file`, `offset` bytes into it: where
+    /// [`Receiving::resumable`] said, or 0 to have that file again.
+    pub(crate) async fn begin(&mut self, file: u32, offset: u64) -> io::Result<()> {
+        let Some(at) = self.waiting.take() else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the transfer began already",
+            ));
+        };
+        if file != at.file || (offset != at.offset && offset != 0) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "asked to go on at file {} byte {}, the sender begins at file {file} byte {offset}",
+                    at.file, at.offset
+                ),
+            ));
+        }
+        // the folders up to here, which may be empty
+        for (entry, relative) in &self.entries[..self.next.min(self.entries.len())] {
+            if entry.dir {
+                tokio::fs::create_dir_all(self.root.join(relative)).await?;
+            }
+        }
+        if self.next < self.entries.len() {
+            let (entry, relative) = &self.entries[self.next];
+            let path = self.root.join(relative);
+            if at.offset > 0 && offset == 0 {
+                // what is here is not what the sender has
+                self.bytes_done -= at.offset;
+                tokio::fs::remove_file(&path).await?;
+            } else if offset > 0 {
+                let (size, modified) = (entry.size, entry.modified);
+                let opened = path.clone();
+                let file = tokio::task::spawn_blocking(move || {
+                    let mut file = open_plain(&opened, true)?;
+                    file.set_len(offset)?;
+                    file.seek(SeekFrom::End(0))?;
+                    Ok::<_, io::Error>(file)
+                })
+                .await
+                .map_err(io::Error::other)??;
+                self.next += 1;
+                self.current = Some(Current {
+                    file: File::from_std(file),
+                    path,
+                    remaining: size - offset,
+                    modified,
+                });
+            }
+        }
+        self.advance().await
+    }
+
+    /// where the transfer was kept, for resumable ones
+    pub(crate) fn kept(&self) -> bool {
+        self.kept.is_some()
+    }
+
+    /// A new folder for the transfer below `dir`.
+    async fn create(dir: &Path, id: u32, checked: Vec<(Entry, PathBuf)>) -> io::Result<Self> {
         let created = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -183,7 +552,7 @@ impl Receiving {
         }
         let files = checked.iter().filter(|(e, _)| !e.dir).count();
         let bytes = checked.iter().map(|(e, _)| e.size).sum();
-        let mut receiving = Self {
+        Ok(Self {
             root,
             entries: checked,
             next: 0,
@@ -192,12 +561,9 @@ impl Receiving {
             bytes,
             files_done: 0,
             bytes_done: 0,
-        };
-        if let Err(e) = receiving.advance().await {
-            receiving.discard().await;
-            return Err(e);
-        }
-        Ok(receiving)
+            waiting: None,
+            kept: None,
+        })
     }
 
     /// creates the next entries up to the next file that has contents
@@ -259,6 +625,12 @@ impl Receiving {
 
     /// the next bytes of the transfer
     pub(crate) async fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        if self.waiting.is_some() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "data before the sender said where it begins",
+            ));
+        }
         let Some(current) = self.current.as_mut() else {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -283,7 +655,7 @@ impl Receiving {
     }
 
     pub(crate) fn is_complete(&self) -> bool {
-        self.current.is_none() && self.next == self.entries.len()
+        self.waiting.is_none() && self.current.is_none() && self.next == self.entries.len()
     }
 
     /// name of the file being received
@@ -297,6 +669,11 @@ impl Receiving {
     /// Finishes a complete transfer: sets the times of the folders and
     /// returns the copied items, which go to the clipboard.
     pub(crate) fn finish(self) -> Vec<PathBuf> {
+        if let Some(kept) = &self.kept {
+            if let Err(e) = fs::remove_file(kept) {
+                log::warn!("could not remove {kept:?}: {e}");
+            }
+        }
         // after their contents, which change the time of a folder
         for (entry, relative) in self.entries.iter().rev() {
             if let (true, Some(modified)) = (entry.dir, entry.modified) {
@@ -323,6 +700,31 @@ impl Receiving {
         drop(self.current);
         if let Err(e) = tokio::fs::remove_dir_all(&self.root).await {
             log::warn!("could not remove {:?}: {e}", self.root);
+        }
+        if let Some(kept) = &self.kept {
+            let _ = tokio::fs::remove_file(kept).await;
+        }
+    }
+
+    /// The folder of the transfer and its `.resume`, to remove a partial
+    /// transfer later (see [`remove_partial`]).
+    pub(crate) fn partial(&self) -> PathBuf {
+        self.root.clone()
+    }
+}
+
+/// Removes a partial transfer that was kept to go on with: its folder and
+/// its `.resume`.
+pub(crate) fn remove_partial(root: &Path) {
+    if fs::symlink_metadata(root).is_ok_and(|m| m.is_dir()) {
+        if let Err(e) = fs::remove_dir_all(root) {
+            log::warn!("could not remove {root:?}: {e}");
+        }
+    }
+    let kept = resume_file(root);
+    if let Err(e) = fs::remove_file(&kept) {
+        if e.kind() != io::ErrorKind::NotFound {
+            log::warn!("could not remove {kept:?}: {e}");
         }
     }
 }
@@ -446,6 +848,191 @@ mod tests {
             .unwrap();
         receiving.write(&[0; 50]).await.unwrap();
         receiving.discard().await;
+        assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
+    }
+
+    fn resume_entries() -> Vec<Entry> {
+        vec![
+            entry("Pasta", true, 0),
+            entry("Pasta/a.bin", false, 10),
+            entry("Pasta/vazia", true, 0),
+            entry("Pasta/b.bin", false, 6),
+            entry("c.bin", false, 4),
+        ]
+    }
+
+    fn sha(bytes: &[u8]) -> [u8; TAIL_HASH] {
+        Sha256::digest(bytes).into()
+    }
+
+    #[tokio::test]
+    async fn a_lost_transfer_goes_on_where_it_stopped() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 1, "fp", "k1", resume_entries())
+            .await
+            .unwrap();
+        assert_eq!(at, Position::default());
+        assert!(!receiving.is_complete(), "nothing before the sender begins");
+        assert!(receiving.write(b"x").await.is_err());
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"0123456789").await.unwrap();
+        receiving.write(b"abc").await.unwrap();
+        // the connection is lost: dropped, not discarded
+        drop(receiving);
+
+        // another sender, or other files, start anew
+        let (other, at) = Receiving::resumable(dir.path(), 2, "outro", "k1", resume_entries())
+            .await
+            .unwrap();
+        assert_eq!(at, Position::default());
+        other.discard().await;
+
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 3, "fp", "k1", resume_entries())
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (1, 3));
+        assert_eq!(at.tail, sha(b"abc"));
+        assert_eq!((receiving.files_done, receiving.bytes_done), (1, 13));
+        // only where it stopped, or that file again
+        assert!(receiving.begin(1, 2).await.is_err());
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 4, "fp", "k1", resume_entries())
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (1, 3));
+        receiving.begin(1, 3).await.unwrap();
+        receiving.write(b"def").await.unwrap();
+        receiving.write(b"wxyz").await.unwrap();
+        assert!(receiving.is_complete());
+        let top = receiving.finish();
+        assert_eq!(fs::read(top[0].join("a.bin")).unwrap(), b"0123456789");
+        assert_eq!(fs::read(top[0].join("b.bin")).unwrap(), b"abcdef");
+        assert!(top[0].join("vazia").is_dir());
+        assert_eq!(fs::read(&top[1]).unwrap(), b"wxyz");
+        // nothing is kept to go on with any more
+        let kept: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(Result::ok)
+            .filter(|e| e.path().extension().is_some_and(|x| x == RESUME))
+            .collect();
+        assert!(kept.is_empty());
+    }
+
+    #[tokio::test]
+    async fn what_the_sender_does_not_have_is_had_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", resume_entries())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"0123").await.unwrap();
+        drop(receiving);
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 2, "fp", "k", resume_entries())
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (0, 4));
+        // the sender's file is different: from its start
+        receiving.begin(0, 0).await.unwrap();
+        assert_eq!(receiving.bytes_done, 0);
+        receiving.write(b"ABCDEFGHIJ").await.unwrap();
+        receiving.write(b"abcdef").await.unwrap();
+        receiving.write(b"wxyz").await.unwrap();
+        let top = receiving.finish();
+        assert_eq!(fs::read(top[0].join("a.bin")).unwrap(), b"ABCDEFGHIJ");
+    }
+
+    #[tokio::test]
+    async fn a_complete_kept_transfer_is_complete_at_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries = vec![entry("um.txt", false, 2), entry("dois.txt", false, 0)];
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"ok").await.unwrap();
+        // the last byte arrived, the answer did not
+        drop(receiving);
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 2, "fp", "k", entries)
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (2, 0));
+        receiving.begin(2, 0).await.unwrap();
+        assert!(receiving.is_complete());
+    }
+
+    #[tokio::test]
+    async fn a_longer_or_linked_file_is_had_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries = vec![entry("a.bin", false, 4), entry("b.bin", false, 4)];
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"1234").await.unwrap();
+        receiving.write(b"56").await.unwrap();
+        let root = receiving.partial();
+        drop(receiving);
+        fs::write(root.join("b.bin"), b"123456789").unwrap();
+        let (receiving, at) = Receiving::resumable(dir.path(), 2, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (1, 0));
+        assert!(!root.join("b.bin").exists());
+        drop(receiving);
+        #[cfg(unix)]
+        {
+            let elsewhere = tempfile::tempdir().unwrap();
+            let target = elsewhere.path().join("alvo");
+            fs::write(&target, b"12").unwrap();
+            std::os::unix::fs::symlink(&target, root.join("b.bin")).unwrap();
+            let (mut receiving, at) = Receiving::resumable(dir.path(), 3, "fp", "k", entries)
+                .await
+                .unwrap();
+            assert_eq!((at.file, at.offset), (1, 0), "a link is not gone on with");
+            receiving.begin(1, 0).await.unwrap();
+            receiving.write(b"abcd").await.unwrap();
+            assert_eq!(
+                fs::read(&target).unwrap(),
+                b"12",
+                "nothing written through it"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn plain_files_are_opened_without_following_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("f");
+        fs::write(&file, b"abc").unwrap();
+        let link = dir.path().join("l");
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        assert!(open_plain(&file, false).is_ok());
+        assert!(open_plain(&link, false).is_err());
+        assert!(open_plain(dir.path(), false).is_err());
+        let mut opened = open_plain(&file, false).unwrap();
+        assert_eq!(tail_hash(&mut opened, 2).unwrap(), sha(b"ab"));
+        assert_eq!(tail_hash(&mut opened, 0).unwrap(), [0; TAIL_HASH]);
+        assert!(tail_hash(&mut opened, 4).is_err());
+    }
+
+    #[tokio::test]
+    async fn kept_transfers_outlive_the_cleanup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", resume_entries())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"01").await.unwrap();
+        let root = receiving.partial();
+        drop(receiving);
+        fs::create_dir(dir.path().join("000000000000001-9")).unwrap();
+        fs::write(dir.path().join("000000000000002-9.resume"), b"{}").unwrap();
+        cleanup(dir.path(), 0);
+        assert!(root.is_dir(), "kept to go on with");
+        assert!(resume_file(&root).is_file());
+        assert!(!dir.path().join("000000000000001-9").exists());
+        assert!(!dir.path().join("000000000000002-9.resume").exists());
+        remove_partial(&root);
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 0);
     }
 

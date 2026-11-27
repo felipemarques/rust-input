@@ -252,12 +252,19 @@ pub struct TransferInfo {
     /// the folder holding the received files
     #[serde(default)]
     pub location: Option<String>,
+    /// Went on where it stopped: the bytes that were there already then.
+    /// `started_ms` is when it went on, so the speed counts the rest only.
+    #[serde(default)]
+    pub resumed_bytes: Option<u64>,
 }
 
 impl TransferInfo {
-    /// still waiting or running
+    /// still waiting, running or waiting to go on: can be cancelled
     pub fn active(&self) -> bool {
-        matches!(self.state, TransferState::Waiting | TransferState::Running)
+        matches!(
+            self.state,
+            TransferState::Waiting | TransferState::Running | TransferState::Interrupted
+        )
     }
 }
 
@@ -273,6 +280,9 @@ pub enum TransferState {
     /// the received files were removed from the temporary folder unpasted
     Removed,
     Failed(String),
+    /// The connection was lost: what arrived is kept, and the transfer goes
+    /// on from there when the other device is connected again (0.37.0).
+    Interrupted,
 }
 
 /// what happens to copied files, see the configuration file

@@ -47,6 +47,12 @@ pub const CAP_EDGE_SPAN: u32 = 1 << 4;
 /// device can tell paused from not available
 pub const CAP_PAUSE: u32 = 1 << 5;
 
+/// capability flag: the file channel of the peer takes transfers that go on
+/// from where they stopped when its connection is lost (the frames
+/// `OfferResumable`, `AcceptAt` and `Start` of the file channel, see the
+/// RustInput documentation); implies [`CAP_FILES`]
+pub const CAP_FILE_RESUME: u32 = 1 << 6;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///

@@ -34,7 +34,7 @@ use std::{
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::ClientHandle;
 use rustinput_proto::{
-    CAP_CLIPBOARD, CAP_CLIPBOARD_HTML, CAP_FILES, ClipboardFrame, ClipboardKind,
+    CAP_CLIPBOARD, CAP_CLIPBOARD_HTML, CAP_FILE_RESUME, CAP_FILES, ClipboardFrame, ClipboardKind,
 };
 use tokio::{sync::oneshot, task::spawn_local};
 
@@ -214,7 +214,7 @@ impl ClipboardHandle {
     /// the capability flags to announce to peers
     pub(crate) fn capabilities(&self) -> u32 {
         match (self.enabled, self.files) {
-            (true, true) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML | CAP_FILES,
+            (true, true) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML | CAP_FILES | CAP_FILE_RESUME,
             (true, false) => CAP_CLIPBOARD | CAP_CLIPBOARD_HTML,
             _ => 0,
         }
@@ -405,6 +405,7 @@ impl Manager {
                             peer,
                             fingerprint,
                             connect_to,
+                            resume: flags & CAP_FILE_RESUME != 0,
                         });
                     } else {
                         files.remove_peer(peer);

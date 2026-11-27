@@ -575,61 +575,77 @@ msgstr "Invio di {files} a {name} non riuscito"
 msgid "Receiving {files} from {name} failed"
 msgstr "Ricezione di {files} da {name} non riuscita"
 
-#: rustinput-gtk/src/transfers.rs:79
+#: rustinput-gtk/src/transfers.rs:71
+msgid "Sending {files} to {name}: interrupted"
+msgstr "Invio di {files} a {name}: interrotto"
+
+#: rustinput-gtk/src/transfers.rs:74
+msgid "Receiving {files} from {name}: interrupted"
+msgstr "Ricezione di {files} da {name}: interrotta"
+
+#: rustinput-gtk/src/transfers.rs:93
+msgid "{size}, the last {rest} in {time} ({speed}/s): it went on where it had stopped"
+msgstr "{size}, gli ultimi {rest} in {time} ({speed}/s): è ripresa da dove si era fermata"
+
+#: rustinput-gtk/src/transfers.rs:102
 msgid "{size} in {time} ({speed}/s)"
 msgstr "{size} in {time} ({speed}/s)"
 
-#: rustinput-gtk/src/transfers.rs:89
+#: rustinput-gtk/src/transfers.rs:106
 msgid "Listing the files…"
 msgstr "Preparazione dell'elenco dei file…"
 
-#: rustinput-gtk/src/transfers.rs:90
+#: rustinput-gtk/src/transfers.rs:107
 msgid "{size}, waiting for the transfer before it"
 msgstr "{size}, in attesa del trasferimento precedente"
 
-#: rustinput-gtk/src/transfers.rs:95
+#: rustinput-gtk/src/transfers.rs:112
 msgid "{done} of {size}"
 msgstr "{done} di {size}"
 
-#: rustinput-gtk/src/transfers.rs:112
+#: rustinput-gtk/src/transfers.rs:129
 msgid "{time} left"
 msgstr "Tempo rimanente: {time}"
 
-#: rustinput-gtk/src/transfers.rs:120
+#: rustinput-gtk/src/transfers.rs:137
 msgid "{took}. On the clipboard: paste them in a folder to move them there"
 msgstr "{took}. Negli appunti: incollali in una cartella per spostarli lì"
 
-#: rustinput-gtk/src/transfers.rs:124
+#: rustinput-gtk/src/transfers.rs:141
 msgid "{size}, moved to where they were pasted. Nothing is left in the temporary folder"
 msgstr "{size}, spostati dove sono stati incollati. Nella cartella temporanea non resta nulla"
 
-#: rustinput-gtk/src/transfers.rs:129
+#: rustinput-gtk/src/transfers.rs:146
 msgid "Removed from the temporary folder without being pasted"
 msgstr "Rimossi dalla cartella temporanea senza essere stati incollati"
 
-#: rustinput-gtk/src/transfers.rs:131
+#: rustinput-gtk/src/transfers.rs:148
 msgid "{reason}, after {done} of {count} file"
 msgid_plural "{reason}, after {done} of {count} files"
 msgstr[0] "{reason}, dopo {done} file su {count}"
 msgstr[1] "{reason}, dopo {done} file su {count}"
 
-#: rustinput-gtk/src/transfers.rs:230
+#: rustinput-gtk/src/transfers.rs:154
+msgid "{done} of {size}. The connection was lost: it goes on from here when {name} is back"
+msgstr "{done} di {size}. La connessione è caduta: riprende da qui quando {name} torna"
+
+#: rustinput-gtk/src/transfers.rs:255
 msgid "Open log"
 msgstr "Apri registro"
 
-#: rustinput-gtk/src/transfers.rs:231
+#: rustinput-gtk/src/transfers.rs:256
 msgid "Everything sent and received, with every file"
 msgstr "Tutto ciò che è stato inviato e ricevuto, file per file"
 
-#: rustinput-gtk/src/transfers.rs:238
+#: rustinput-gtk/src/transfers.rs:263
 msgid "Remove unpasted files"
 msgstr "Rimuovi i file non incollati"
 
-#: rustinput-gtk/src/transfers.rs:239
+#: rustinput-gtk/src/transfers.rs:264
 msgid "Removes the received files that were not pasted from the temporary folder"
 msgstr "Rimuove dalla cartella temporanea i file ricevuti che non sono stati incollati"
 
-#: rustinput-gtk/src/transfers.rs:399
+#: rustinput-gtk/src/transfers.rs:425
 msgid "Open the temporary folder with the received files"
 msgstr "Apri la cartella temporanea con i file ricevuti"
 
@@ -685,15 +701,23 @@ msgstr "{files} a {name}: {percent}%"
 msgid "{files} from {name}: {percent}%"
 msgstr "{files} da {name}: {percent}%"
 
-#: rustinput-gtk/src/tray/mod.rs:287
+#: rustinput-gtk/src/tray/mod.rs:279
+msgid "{files} to {name}: interrupted at {percent}%"
+msgstr "{files} a {name}: interrotto al {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:280
+msgid "{files} from {name}: interrupted at {percent}%"
+msgstr "{files} da {name}: interrotto al {percent}%"
+
+#: rustinput-gtk/src/tray/mod.rs:295
 msgid "{files} from {name}, ready to paste"
 msgstr "{files} da {name}, da incollare"
 
-#: rustinput-gtk/src/tray/mod.rs:296
+#: rustinput-gtk/src/tray/mod.rs:304
 msgid "{files} from {name}, pasted"
 msgstr "Hai incollato {files} da {name}"
 
-#: rustinput-gtk/src/tray/mod.rs:305
+#: rustinput-gtk/src/tray/mod.rs:313
 msgid "{files} from {name}, not pasted"
 msgstr "Non hai incollato {files} da {name}"
 
