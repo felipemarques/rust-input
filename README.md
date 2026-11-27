@@ -982,8 +982,10 @@ On macOS the same is done by the menu bar item.
 
 Without a system tray, closing the window quits RustInput as before.
 
-To start RustInput with the session without opening the window, set `RUSTINPUT_HIDDEN=1`, for example in an
-autostart entry: `Exec=env RUSTINPUT_HIDDEN=1 rustinput`. The window is still shown when there is no tray to reach it.
+To start RustInput with the session without opening the window, switch on **Start RustInput with the session** in
+Preferences (Linux and the BSDs, 0.47.0): it writes `~/.config/autostart/io.github.felipemarques.RustInput.desktop`,
+which starts this RustInput (the AppImage it runs from, if so) with `RUSTINPUT_HIDDEN=1`. The window is still shown
+when there is no tray to reach it. On Windows the installer starts it with Windows.
 
 To connect a device you want to control, simply click the `Add` button and enter the hostname
 of the device.
@@ -1221,6 +1223,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] History of the clipboard of every computer, in memory only
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
+- [x] Start with the session on Linux, from Preferences
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here

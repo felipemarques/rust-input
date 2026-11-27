@@ -484,35 +484,35 @@ msgstr "今はしない"
 msgid "Authorize a computer?"
 msgstr "コンピューターを許可しますか?"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:268
 msgid "Quit"
 msgstr "終了"
 
-#: rustinput-gtk/src/lib.rs:267
+#: rustinput-gtk/src/lib.rs:269
 msgid "_File"
 msgstr "ファイル(_F)"
 
-#: rustinput-gtk/src/lib.rs:495
+#: rustinput-gtk/src/lib.rs:497
 msgid "{name} and this computer authorized each other"
 msgstr "{name} とこのコンピューターが互いに承認されました"
 
-#: rustinput-gtk/src/lib.rs:500
+#: rustinput-gtk/src/lib.rs:502
 msgid "Not authorized: {error}"
 msgstr "承認されませんでした：{error}"
 
-#: rustinput-gtk/src/lib.rs:507
+#: rustinput-gtk/src/lib.rs:509
 msgid "{address} connected"
 msgstr "{address} と接続しました"
 
-#: rustinput-gtk/src/lib.rs:514
+#: rustinput-gtk/src/lib.rs:516
 msgid "The mouse came from {address}"
 msgstr "マウスが {address} から移ってきました"
 
-#: rustinput-gtk/src/lib.rs:520
+#: rustinput-gtk/src/lib.rs:522
 msgid "{address} disconnected"
 msgstr "{address} との接続が切れました"
 
-#: rustinput-gtk/src/lib.rs:614
+#: rustinput-gtk/src/lib.rs:616
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "{name} からファイルを {count} 個受信しました。貼り付けできます"
 
@@ -1044,6 +1044,18 @@ msgstr "右 Shift をすばやく2回: 次のコンピューター"
 #: rustinput-gtk/src/window/shortcuts.rs:58
 msgid "The right Shift held for 3 seconds: back to this computer, always"
 msgstr "右 Shift を3秒押し続ける: いつでもこのコンピューターに戻る"
+
+#: rustinput-gtk/src/window/shortcuts.rs:99
+msgid "Starting"
+msgstr "起動"
+
+#: rustinput-gtk/src/window/shortcuts.rs:102
+msgid "Start RustInput with the session"
+msgstr "セッション開始時に RustInput を起動"
+
+#: rustinput-gtk/src/window/shortcuts.rs:103
+msgid "Without its window, in the tray. Off: start it from the menu of applications"
+msgstr "ウィンドウなしでトレイに常駐。オフ: アプリケーションメニューから起動"
 
 #: rustinput-gtk/src/window.rs:109
 msgid "Undo changes"

@@ -483,35 +483,35 @@ msgstr ""
 msgid "Authorize a computer?"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:268
 msgid "Quit"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:267
+#: rustinput-gtk/src/lib.rs:269
 msgid "_File"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:495
+#: rustinput-gtk/src/lib.rs:497
 msgid "{name} and this computer authorized each other"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:500
+#: rustinput-gtk/src/lib.rs:502
 msgid "Not authorized: {error}"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:507
+#: rustinput-gtk/src/lib.rs:509
 msgid "{address} connected"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:514
+#: rustinput-gtk/src/lib.rs:516
 msgid "The mouse came from {address}"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:520
+#: rustinput-gtk/src/lib.rs:522
 msgid "{address} disconnected"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:614
+#: rustinput-gtk/src/lib.rs:616
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr ""
 
@@ -1051,6 +1051,18 @@ msgstr ""
 
 #: rustinput-gtk/src/window/shortcuts.rs:58
 msgid "The right Shift held for 3 seconds: back to this computer, always"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:99
+msgid "Starting"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:102
+msgid "Start RustInput with the session"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:103
+msgid "Without its window, in the tray. Off: start it from the menu of applications"
 msgstr ""
 
 #: rustinput-gtk/src/window.rs:109

@@ -90,6 +90,47 @@ impl Window {
         }));
     }
 
+    /// Starting RustInput with the session, before the file transfers in
+    /// Preferences (Linux and the BSDs, 0.47.0): the window sets it, the
+    /// service has nothing to do with it.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    pub(super) fn setup_autostart(&self) {
+        let group = adw::PreferencesGroup::builder()
+            .title(tr("Starting"))
+            .build();
+        let row = adw::ActionRow::builder()
+            .title(tr("Start RustInput with the session"))
+            .subtitle(tr(
+                "Without its window, in the tray. Off: start it from the menu of applications",
+            ))
+            .build();
+        let switch = gtk::Switch::builder()
+            .valign(gtk::Align::Center)
+            .active(crate::autostart::is_on())
+            .build();
+        row.add_suffix(&switch);
+        row.set_activatable_widget(Some(&switch));
+        group.add(&row);
+        let files = self.imp().files_group.get();
+        if let Some(parent) = files.parent().and_then(|p| p.downcast::<gtk::Box>().ok()) {
+            parent.insert_child_after(&group, files.prev_sibling().as_ref());
+        }
+        switch.connect_active_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |switch| {
+                let on = switch.is_active();
+                if let Err(e) = crate::autostart::set(on) {
+                    log::warn!("starting with the session: {e}");
+                    window.show_toast(&e.to_string());
+                    switch.set_active(crate::autostart::is_on());
+                } else {
+                    log::info!("RustInput starts with the session: {on}");
+                }
+            }
+        ));
+    }
+
     /// whether the shortcuts are on, as the service has it
     pub(crate) fn set_hotkeys(&self, on: bool) {
         if let Some(s) = self.imp().shortcuts.borrow().as_ref() {
