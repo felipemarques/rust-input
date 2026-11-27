@@ -95,8 +95,47 @@ impl Window {
                 }
             }
         ));
+        // whether the clipboard goes along with the pointer (0.44.0), in the
+        // group of the other switches of the clipboard
+        let along_row = adw::ActionRow::builder()
+            .title(tr("Bring the clipboard along with the pointer"))
+            .subtitle(tr(
+                "Off: what is copied here goes to another computer only with \
+                AltGr + right Shift + C, the radial menu or the Clipboards tab",
+            ))
+            .build();
+        let along = gtk::Switch::builder().valign(gtk::Align::Center).build();
+        along_row.add_suffix(&along);
+        along_row.set_activatable_widget(Some(&along));
+        if let Some(group) = imp
+            .keep_history_switch
+            .ancestor(adw::PreferencesGroup::static_type())
+            .and_then(|g| g.downcast::<adw::PreferencesGroup>().ok())
+        {
+            group.add(&along_row);
+        }
+        along.connect_active_notify(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |switch| {
+                if !window.imp().updating_show_clipboard.get() {
+                    window.request(FrontendRequest::SetClipboardAlong(switch.is_active()));
+                }
+            }
+        ));
+        imp.along_switch.replace(Some(along));
         // this computer first, before the service answers
         self.card(None, "");
+    }
+
+    /// whether the clipboard goes along with the pointer, as the service has it
+    pub(crate) fn set_clipboard_along(&self, along: bool) {
+        let imp = self.imp();
+        imp.updating_show_clipboard.set(true);
+        if let Some(switch) = imp.along_switch.borrow().as_ref() {
+            switch.set_active(along);
+        }
+        imp.updating_show_clipboard.set(false);
     }
 
     /// shows the Clipboards tab, from the tray or the radial menu

@@ -584,6 +584,7 @@ fn build_ui(app: &Application) {
                     } => introduction::ask(&window, &by, &name, &fingerprint),
                     FrontendEvent::Discovery(on) => window.set_discovery(on),
                     FrontendEvent::Hotkeys(on) => window.set_hotkeys(on),
+                    FrontendEvent::ClipboardAlong(along) => window.set_clipboard_along(along),
                     FrontendEvent::AskTransfer {
                         id,
                         peer,

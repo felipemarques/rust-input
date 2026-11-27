@@ -513,7 +513,7 @@ msgstr "El ratón llegó desde {address}"
 msgid "{address} disconnected"
 msgstr "{address}: desconectado"
 
-#: rustinput-gtk/src/lib.rs:613
+#: rustinput-gtk/src/lib.rs:614
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Archivos recibidos de {name}: {count}, listos para pegar"
 
@@ -803,153 +803,161 @@ msgstr "{files} de {name}, todo pegado"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} de {name}, sin pegar"
 
-#: rustinput-gtk/src/window/clipboard.rs:261
+#: rustinput-gtk/src/window/clipboard.rs:101
+msgid "Bring the clipboard along with the pointer"
+msgstr "Llevar el portapapeles junto con el puntero"
+
+#: rustinput-gtk/src/window/clipboard.rs:102
+msgid "Off: what is copied here goes to another computer only with AltGr + right Shift + C, the radial menu or the Clipboards tab"
+msgstr "Desactivado: lo que se copia aquí solo va a otro equipo con AltGr + Mayús derecho + C, el menú radial o la pestaña Portapapeles"
+
+#: rustinput-gtk/src/window/clipboard.rs:300
 msgid "Copying…"
 msgstr "Copiando…"
 
-#: rustinput-gtk/src/window/clipboard.rs:281
+#: rustinput-gtk/src/window/clipboard.rs:320
 msgid "Copy here"
 msgstr "Copiar aquí"
 
-#: rustinput-gtk/src/window/clipboard.rs:285
+#: rustinput-gtk/src/window/clipboard.rs:324
 msgid "Back on the clipboard"
 msgstr "De vuelta en el portapapeles"
 
-#: rustinput-gtk/src/window/clipboard.rs:286
+#: rustinput-gtk/src/window/clipboard.rs:325
 msgid "Could not put it back on the clipboard: {error}"
 msgstr "No se pudo volver a poner en el portapapeles: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:290
+#: rustinput-gtk/src/window/clipboard.rs:329
 msgid "The files of {name} are on their way here"
 msgstr "Los archivos de {name} están en camino"
 
-#: rustinput-gtk/src/window/clipboard.rs:294
+#: rustinput-gtk/src/window/clipboard.rs:333
 msgid "Copied here from {name}"
 msgstr "Copiado aquí desde {name}"
 
-#: rustinput-gtk/src/window/clipboard.rs:295
+#: rustinput-gtk/src/window/clipboard.rs:334
 msgid "Could not copy from {name}: {error}"
 msgstr "No se pudo copiar desde {name}: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:336
+#: rustinput-gtk/src/window/clipboard.rs:375
 msgid "Asking…"
 msgstr "Preguntando…"
 
-#: rustinput-gtk/src/window/clipboard.rs:359
+#: rustinput-gtk/src/window/clipboard.rs:398
 msgid "Put it on the clipboard of this computer"
 msgstr "Ponerlo en el portapapeles de este equipo"
 
-#: rustinput-gtk/src/window/clipboard.rs:389
+#: rustinput-gtk/src/window/clipboard.rs:428
 msgid "Clear"
 msgstr "Borrar"
 
-#: rustinput-gtk/src/window/clipboard.rs:390
+#: rustinput-gtk/src/window/clipboard.rs:429
 msgid "Forget the history of this computer"
 msgstr "Olvidar el historial de este equipo"
 
-#: rustinput-gtk/src/window/clipboard.rs:445
+#: rustinput-gtk/src/window/clipboard.rs:484
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "El portapapeles no se comparte en este equipo (clipboard = false)"
 
-#: rustinput-gtk/src/window/clipboard.rs:448
+#: rustinput-gtk/src/window/clipboard.rs:487
 msgid "Does not show its clipboard"
 msgstr "No muestra su portapapeles"
 
-#: rustinput-gtk/src/window/clipboard.rs:450
+#: rustinput-gtk/src/window/clipboard.rs:489
 msgid "Could not be asked: {error}"
 msgstr "No se pudo preguntar: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:481
+#: rustinput-gtk/src/window/clipboard.rs:520
 msgid "No history is kept on this computer: switch it on in Preferences."
 msgstr "No se guarda historial en este equipo: actívalo en Preferencias."
 
-#: rustinput-gtk/src/window/clipboard.rs:484
+#: rustinput-gtk/src/window/clipboard.rs:523
 msgid "It keeps no history of its clipboard."
 msgstr "No guarda historial de su portapapeles."
 
-#: rustinput-gtk/src/window/clipboard.rs:485
+#: rustinput-gtk/src/window/clipboard.rs:524
 msgid "New copies can not be noticed on its system yet (Wayland): no history."
 msgstr "Todavía no se pueden notar copias nuevas en su sistema (Wayland): sin historial."
 
-#: rustinput-gtk/src/window/clipboard.rs:488
+#: rustinput-gtk/src/window/clipboard.rs:527
 msgid "Its RustInput is older, without a history."
 msgstr "Su RustInput es más antiguo, sin historial."
 
-#: rustinput-gtk/src/window/clipboard.rs:508
+#: rustinput-gtk/src/window/clipboard.rs:547
 msgid "History"
 msgstr "Historial"
 
-#: rustinput-gtk/src/window/clipboard.rs:510
+#: rustinput-gtk/src/window/clipboard.rs:549
 msgid "History · {count} copy before"
 msgid_plural "History · {count} copies before"
 msgstr[0] "Historial · {count} copia anterior"
 msgstr[1] "Historial · {count} copias anteriores"
 
-#: rustinput-gtk/src/window/clipboard.rs:527
+#: rustinput-gtk/src/window/clipboard.rs:566
 msgid "Show fewer"
 msgstr "Mostrar menos"
 
-#: rustinput-gtk/src/window/clipboard.rs:529
+#: rustinput-gtk/src/window/clipboard.rs:568
 msgid "Show all {count}"
 msgstr "Mostrar las {count}"
 
-#: rustinput-gtk/src/window/clipboard.rs:552
+#: rustinput-gtk/src/window/clipboard.rs:591
 msgid "Formatted text"
 msgstr "Texto con formato"
 
-#: rustinput-gtk/src/window/clipboard.rs:554
+#: rustinput-gtk/src/window/clipboard.rs:593
 msgid "Text"
 msgstr "Texto"
 
-#: rustinput-gtk/src/window/clipboard.rs:560
+#: rustinput-gtk/src/window/clipboard.rs:599
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} carácter"
 msgstr[1] "{count} caracteres"
 
-#: rustinput-gtk/src/window/clipboard.rs:570
+#: rustinput-gtk/src/window/clipboard.rs:609
 msgid "Image, {width} × {height}"
 msgstr "Imagen, {width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:588
+#: rustinput-gtk/src/window/clipboard.rs:627
 msgid "Image"
 msgstr "Imagen"
 
-#: rustinput-gtk/src/window/clipboard.rs:599
+#: rustinput-gtk/src/window/clipboard.rs:638
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} archivo o carpeta"
 msgstr[1] "{count} archivos y carpetas"
 
-#: rustinput-gtk/src/window/clipboard.rs:644
+#: rustinput-gtk/src/window/clipboard.rs:683
 msgid "Copy"
 msgstr "Copiar"
 
-#: rustinput-gtk/src/window/clipboard.rs:670
+#: rustinput-gtk/src/window/clipboard.rs:709
 msgid "Empty"
 msgstr "Vacío"
 
-#: rustinput-gtk/src/window/clipboard.rs:696
+#: rustinput-gtk/src/window/clipboard.rs:735
 msgid "{count} line"
 msgid_plural "{count} lines"
 msgstr[0] "{count} línea"
 msgstr[1] "{count} líneas"
 
-#: rustinput-gtk/src/window/clipboard.rs:736
+#: rustinput-gtk/src/window/clipboard.rs:775
 msgid "and {count} more"
 msgid_plural "and {count} more"
 msgstr[0] "y {count} más"
 msgstr[1] "y {count} más"
 
-#: rustinput-gtk/src/window/clipboard.rs:763
+#: rustinput-gtk/src/window/clipboard.rs:802
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "Un gestor de contraseñas lo marcó como secreto: no se muestra, pero se puede copiar."
 
-#: rustinput-gtk/src/window/clipboard.rs:771
+#: rustinput-gtk/src/window/clipboard.rs:810
 msgid "Password, hidden"
 msgstr "Contraseña, oculta"
 
-#: rustinput-gtk/src/window/imp.rs:259
+#: rustinput-gtk/src/window/imp.rs:261
 msgid "Failed to relaunch RustInput"
 msgstr "No se pudo reiniciar RustInput"
 
@@ -1014,18 +1022,22 @@ msgid "Back to this computer"
 msgstr "De vuelta a este equipo"
 
 #: rustinput-gtk/src/window/shortcuts.rs:45
+msgid "The clipboard to the computer the pointer is on, or here from where it came"
+msgstr "El portapapeles al equipo donde está el puntero, o aquí desde el equipo del que vino"
+
+#: rustinput-gtk/src/window/shortcuts.rs:49
 msgid "To the other computer and back, or the next one"
 msgstr "Al otro equipo y de vuelta, o al siguiente"
 
-#: rustinput-gtk/src/window/shortcuts.rs:47
+#: rustinput-gtk/src/window/shortcuts.rs:51
 msgid "The next / the previous computer"
 msgstr "El siguiente / el anterior"
 
-#: rustinput-gtk/src/window/shortcuts.rs:50
+#: rustinput-gtk/src/window/shortcuts.rs:54
 msgid "The right Shift twice quickly: the next computer"
 msgstr "El Mayús derecho dos veces rápido: el siguiente equipo"
 
-#: rustinput-gtk/src/window/shortcuts.rs:54
+#: rustinput-gtk/src/window/shortcuts.rs:58
 msgid "The right Shift held for 3 seconds: back to this computer, always"
 msgstr "El Mayús derecho mantenido 3 segundos: de vuelta a este equipo, siempre"
 

@@ -41,6 +41,10 @@ impl Window {
             ),
             ("AltGr + ⇧ + 0", tr("Back to this computer")),
             (
+                "AltGr + ⇧ + C",
+                tr("The clipboard to the computer the pointer is on, or here from where it came"),
+            ),
+            (
                 "AltGr + ⇧",
                 tr("To the other computer and back, or the next one"),
             ),

@@ -33,6 +33,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🧾 What did not go or come, and why: links to folders, files that changed or went away while they were sent, names not allowed there | ✅ ²⁰ | ✅ ²⁰ | ✅ ² | ✅ ² |
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
+| ✋ The clipboard only when you ask (AltGr + right Shift + C), instead of along with the pointer | ✅ ²⁶ | ✅ ²⁶ | ✅ ² | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | ⌨️ Keyboard shortcuts to go to a computer, the next one or back here | ✅ ²³ | ✅ ²³ | ✅ ²⁴ | ✅ ²⁴ |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
@@ -93,6 +94,7 @@ switched on, on both computers (see [Finding the computers on the network](#find
 ²⁴ While the pointer is on another computer; with the pointer on this one they need X11 or Windows, like the radial
 menu.
 ²⁵ New in 0.43.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
+²⁶ New in 0.44.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -149,6 +151,15 @@ transferred when it differs from what the two devices exchanged last.
 > - Files are not transferred, and neither is content larger than 64 MiB.
 
 To turn the clipboard synchronization off, set `clipboard = false` in the [configuration](#configuration) file.
+
+### Only when you ask
+
+By default what is copied goes along with the pointer. Switch off **Bring the clipboard along with the pointer** in
+Preferences (`clipboard_along = false`) and the clipboard of this computer stays here until you ask:
+**AltGr + right Shift + C** with the pointer on another computer takes what you copied here there, and with the pointer
+back here brings what the computer it came from holds. The radial menu (**Send the clipboard**) and the Clipboards tab
+work as well. The switch is for what this computer sends: switch it off on each computer that should keep its clipboard
+to itself.
 
 ### The Clipboards tab
 
@@ -277,6 +288,7 @@ To turn file transfers off altogether, set `clipboard_files = false` in the [con
 | **AltGr + →** / **AltGr + ←** | The next / the previous computer (this one counts as the first) |
 | **Right Shift** twice, quickly | The next computer |
 | **Right Shift** held for 3 seconds | Back to this computer, always |
+| **AltGr + right Shift + C** | The clipboard of this computer to the one the pointer is on; with the pointer here, the clipboard of the computer it came from to this one |
 
 A shortcut fires when its keys are let go, and only if nothing else was pressed meanwhile, so AltGr + Q still types
 "/" and Shift + 1 still types "!". The keys are only watched, never taken from the applications. Without AltGr, the
@@ -1074,6 +1086,11 @@ discovery = false
 # more (on by default)
 hotkeys = true
 
+# the clipboard of this computer goes along with the pointer by itself (on by
+# default); off, only with AltGr + right Shift + C, the radial menu or the
+# Clipboards tab
+clipboard_along = true
+
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
@@ -1174,6 +1191,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here
 - [x] The tray icon shows where the mouse and keyboard are, and moves them to any computer
+- [x] The clipboard only when you ask (AltGr + right Shift + C)
 
 
 ## Detailed OS Support

@@ -101,6 +101,9 @@ struct ConfigToml {
     /// keyboard shortcuts to move between the computers (on by default,
     /// 0.42.0)
     hotkeys: Option<bool>,
+    /// the clipboard of this computer goes along with the pointer by itself
+    /// (on by default); otherwise only when asked (0.44.0)
+    clipboard_along: Option<bool>,
     /// "system", "light" or "dark": a string, so a value this version does
     /// not know does not make the whole file unreadable
     theme: Option<String>,
@@ -677,6 +680,20 @@ impl Config {
             .as_ref()
             .and_then(|c| c.hotkeys)
             .unwrap_or(true)
+    }
+
+    /// whether the clipboard of this computer goes along with the pointer by
+    /// itself (`clipboard_along`, on by default)
+    pub fn clipboard_along(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.clipboard_along)
+            .unwrap_or(true)
+    }
+
+    pub fn set_clipboard_along(&mut self, along: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.clipboard_along = Some(along);
     }
 
     pub fn set_hotkeys(&mut self, on: bool) {
