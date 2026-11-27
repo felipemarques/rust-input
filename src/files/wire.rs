@@ -6,6 +6,7 @@
 
 use std::io;
 
+use rustinput_ipc::LeftOut;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -29,6 +30,7 @@ const ABORT: u8 = 7;
 const OFFER_RESUMABLE: u8 = 8;
 const ACCEPT_AT: u8 = 9;
 const START: u8 = 10;
+const SKIP: u8 = 11;
 
 /// length of [`Position::tail`]: a SHA-256
 pub(crate) const TAIL_HASH: usize = 32;
@@ -68,6 +70,17 @@ struct Resumable {
     continued: bool,
     #[serde(default)]
     automatic: bool,
+    #[serde(default)]
+    left_out: Vec<LeftOut>,
+}
+
+/// the payload of [`Frame::Skip`]
+#[derive(Serialize, Deserialize)]
+struct Skipped {
+    file: u32,
+    why: String,
+    #[serde(default)]
+    detail: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -101,6 +114,8 @@ pub(crate) enum Frame {
         /// sent by itself, because the files were copied when the pointer
         /// moved to the receiver (0.38.0): large ones ask the user there
         automatic: bool,
+        /// what was copied but is not sent, and why (0.39.0)
+        left_out: Vec<LeftOut>,
     },
     /// the answer to [`Frame::OfferResumable`]: the receiver wants the data
     /// from `at` on (the start, for a new transfer)
@@ -109,6 +124,16 @@ pub(crate) enum Frame {
     /// it: the position of [`Frame::AcceptAt`], or the start of that file
     /// when what the receiver has of it is not what the sender has
     Start { id: u32, file: u32, offset: u64 },
+    /// The `file`-th file is not sent after all (it changed, went away or
+    /// can not be read, `why` and `detail` as in [`LeftOut`]): the receiver
+    /// removes what it has of it, and the data goes on with the next file
+    /// (0.39.0, only in resumable transfers).
+    Skip {
+        id: u32,
+        file: u32,
+        why: String,
+        detail: String,
+    },
 }
 
 impl Frame {
@@ -123,7 +148,8 @@ impl Frame {
             | Frame::Abort { id }
             | Frame::OfferResumable { id, .. }
             | Frame::AcceptAt { id, .. }
-            | Frame::Start { id, .. } => *id,
+            | Frame::Start { id, .. }
+            | Frame::Skip { id, .. } => *id,
         }
     }
 }
@@ -171,6 +197,7 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
             entries,
             continued,
             automatic,
+            left_out,
             ..
         } => (
             OFFER_RESUMABLE,
@@ -179,6 +206,17 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
                 entries: entries.clone(),
                 continued: *continued,
                 automatic: *automatic,
+                left_out: left_out.clone(),
+            })?,
+        ),
+        Frame::Skip {
+            file, why, detail, ..
+        } => (
+            SKIP,
+            serde_json::to_vec(&Skipped {
+                file: *file,
+                why: why.clone(),
+                detail: detail.clone(),
             })?,
         ),
         Frame::AcceptAt { at, .. } => {
@@ -246,6 +284,7 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Resu
                 entries,
                 continued,
                 automatic,
+                left_out,
             } = serde_json::from_slice(&rest)
                 .map_err(|e| invalid(format!("invalid offer: {e}")))?;
             if key.is_empty() || key.len() > 128 {
@@ -257,6 +296,17 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Resu
                 entries,
                 continued,
                 automatic,
+                left_out,
+            }
+        }
+        SKIP => {
+            let Skipped { file, why, detail } =
+                serde_json::from_slice(&rest).map_err(|e| invalid(format!("invalid skip: {e}")))?;
+            Frame::Skip {
+                id,
+                file,
+                why,
+                detail,
             }
         }
         ACCEPT_AT => {
@@ -342,6 +392,13 @@ mod tests {
                 }],
                 continued: true,
                 automatic: true,
+                left_out: vec![LeftOut::new("Pasta/link", "link", "")],
+            },
+            Frame::Skip {
+                id: 8,
+                file: 2,
+                why: "changed".into(),
+                detail: String::new(),
             },
             Frame::AcceptAt {
                 id: 8,

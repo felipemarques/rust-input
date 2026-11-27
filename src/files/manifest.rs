@@ -9,6 +9,7 @@ use std::{
     time::UNIX_EPOCH,
 };
 
+use rustinput_ipc::{LEFT_OUT_LINK, LEFT_OUT_SPECIAL, LEFT_OUT_UNREADABLE, LeftOut};
 use sha2::{Digest, Sha256};
 
 use super::wire::Entry;
@@ -19,6 +20,8 @@ pub(crate) struct Manifest {
     pub(crate) entries: Vec<Entry>,
     /// local path of every file entry, in the order of `entries`
     pub(crate) sources: Vec<PathBuf>,
+    /// what was copied but is not sent, and why
+    pub(crate) left_out: Vec<LeftOut>,
 }
 
 impl Manifest {
@@ -68,7 +71,12 @@ pub(crate) fn scan(paths: &[PathBuf]) -> io::Result<Manifest> {
             continue;
         };
         let name = unique_name(&name.to_string_lossy(), &mut taken);
-        add(&mut manifest, path, name)?;
+        if let Err(e) = add(&mut manifest, path, name.clone()) {
+            log::warn!("skipping {path:?}: {e}");
+            manifest
+                .left_out
+                .push(LeftOut::new(name, LEFT_OUT_UNREADABLE, e.to_string()));
+        }
     }
     if manifest.entries.is_empty() {
         return Err(io::Error::new(
@@ -85,12 +93,18 @@ fn add(manifest: &mut Manifest, path: &Path, name: String) -> io::Result<()> {
         Ok(m) => m,
         Err(e) => {
             log::warn!("skipping {path:?}: {e}");
+            manifest
+                .left_out
+                .push(LeftOut::new(name, LEFT_OUT_UNREADABLE, e.to_string()));
             return Ok(());
         }
     };
     if metadata.is_dir() {
         if link.file_type().is_symlink() {
             log::warn!("skipping {path:?}: link to a folder");
+            manifest
+                .left_out
+                .push(LeftOut::new(name, LEFT_OUT_LINK, ""));
             return Ok(());
         }
         manifest.entries.push(Entry {
@@ -103,14 +117,22 @@ fn add(manifest: &mut Manifest, path: &Path, name: String) -> io::Result<()> {
             Ok(dir) => dir.filter_map(Result::ok).collect::<Vec<_>>(),
             Err(e) => {
                 log::warn!("can not read the folder {path:?}: {e}");
+                manifest
+                    .left_out
+                    .push(LeftOut::new(name, LEFT_OUT_UNREADABLE, e.to_string()));
                 return Ok(());
             }
         };
         children.sort_by_key(|c| c.file_name());
         for child in children {
             let child_name = format!("{name}/{}", child.file_name().to_string_lossy());
-            if let Err(e) = add(manifest, &child.path(), child_name) {
+            if let Err(e) = add(manifest, &child.path(), child_name.clone()) {
                 log::warn!("skipping {:?}: {e}", child.path());
+                manifest.left_out.push(LeftOut::new(
+                    child_name,
+                    LEFT_OUT_UNREADABLE,
+                    e.to_string(),
+                ));
             }
         }
     } else if metadata.is_file() {
@@ -123,6 +145,9 @@ fn add(manifest: &mut Manifest, path: &Path, name: String) -> io::Result<()> {
         manifest.sources.push(path.to_owned());
     } else {
         log::warn!("skipping {path:?}: not a regular file");
+        manifest
+            .left_out
+            .push(LeftOut::new(name, LEFT_OUT_SPECIAL, ""));
     }
     Ok(())
 }

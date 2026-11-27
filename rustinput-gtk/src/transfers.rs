@@ -14,7 +14,10 @@ use std::{
 
 use adw::prelude::*;
 use gtk::{gio, glib};
-use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState, human_size};
+use rustinput_ipc::{
+    FileOptions, FrontendRequest, LEFT_OUT_CHANGED, LEFT_OUT_GONE, LEFT_OUT_LINK, LEFT_OUT_SPECIAL,
+    LEFT_OUT_UNREADABLE, LeftOut, TransferInfo, TransferState, human_size, visible_name,
+};
 
 use crate::{
     i18n::{tr, trf, trn},
@@ -119,7 +122,12 @@ pub(crate) fn details(t: &TransferInfo, now_ms: u64) -> String {
             if let Some(current) = &t.current {
                 parts.insert(
                     0,
-                    format!("{}/{}: {current}", (t.files_done + 1).min(t.files), t.files),
+                    format!(
+                        "{}/{}: {}",
+                        (t.files_done + 1).min(t.files),
+                        t.files,
+                        visible_name(current)
+                    ),
                 );
             }
             // the first moments say little about the speed
@@ -189,11 +197,82 @@ fn open(path: &Path) {
     }
 }
 
+/// why something did not go or come as it was
+fn why(item: &LeftOut) -> String {
+    match item.why.as_str() {
+        LEFT_OUT_LINK => tr("a link to a folder").to_owned(),
+        LEFT_OUT_UNREADABLE => trf("could not be read: {error}", &[("error", &item.detail)]),
+        LEFT_OUT_SPECIAL => tr("not a file or a folder").to_owned(),
+        LEFT_OUT_CHANGED => tr("changed while it was sent").to_owned(),
+        LEFT_OUT_GONE => tr("removed before it was sent").to_owned(),
+        // a newer RustInput
+        _ if item.detail.is_empty() => item.why.clone(),
+        _ => item.detail.clone(),
+    }
+}
+
+/// the name of a path of a transfer, without its folders
+fn name_of(path: &str) -> &str {
+    path.rsplit('/').next().unwrap_or(path)
+}
+
+/// What of a transfer did not go or come as it was: a short line, and all
+/// of it for the tooltip. Empty when everything did.
+pub(crate) fn left_out(t: &TransferInfo) -> (String, String) {
+    const SHOWN: usize = 3;
+    let mut short = Vec::new();
+    let mut long = Vec::new();
+    let (renamed, missing): (Vec<&LeftOut>, Vec<&LeftOut>) =
+        t.left_out.iter().partition(|i| i.came());
+    let list = |items: &[&LeftOut], each: &dyn Fn(&LeftOut) -> String| {
+        let mut text: Vec<String> = items.iter().take(SHOWN).map(|i| each(i)).collect();
+        if items.len() > SHOWN {
+            text.push(trf("{count} more", &[("count", &(items.len() - SHOWN))]));
+        }
+        text.join(", ")
+    };
+    let missed = |i: &LeftOut| format!("{} ({})", visible_name(name_of(&i.path)), why(i));
+    let moved = |i: &LeftOut| {
+        format!(
+            "{} → {}",
+            visible_name(name_of(&i.path)),
+            visible_name(&i.detail)
+        )
+    };
+    if !missing.is_empty() {
+        let values: [(&str, &dyn std::fmt::Display); 1] = [("list", &list(&missing, &missed))];
+        short.push(match t.sending {
+            true => trf("Not sent: {list}", &values),
+            false => trf("Did not come: {list}", &values),
+        });
+        long.extend(
+            missing
+                .iter()
+                .map(|i| format!("{} ({})", visible_name(&i.path), why(i))),
+        );
+    }
+    if !renamed.is_empty() {
+        let values: [(&str, &dyn std::fmt::Display); 1] = [("list", &list(&renamed, &moved))];
+        short.push(trf(
+            "Renamed, the name is not allowed here: {list}",
+            &values,
+        ));
+        long.extend(
+            renamed
+                .iter()
+                .map(|i| format!("{} → {}", visible_name(&i.path), visible_name(&i.detail))),
+        );
+    }
+    (short.join(". "), long.join("\n"))
+}
+
 struct Row {
     row: gtk::ListBoxRow,
     icon: gtk::Image,
     title: gtk::Label,
     details: gtk::Label,
+    /// what did not go or come as it was
+    notes: gtk::Label,
     bar: gtk::ProgressBar,
     cancel: gtk::Button,
     folder: gtk::Button,
@@ -358,6 +437,10 @@ impl Transfers {
                 row.icon.set_icon_name(Some(icon(t)));
                 row.title.set_label(&title(t));
                 row.details.set_label(&details(t, now));
+                let (notes, all) = left_out(t);
+                row.notes.set_label(&notes);
+                row.notes.set_tooltip_text(Some(&all));
+                row.notes.set_visible(!notes.is_empty());
                 row.bar.set_fraction(fraction(t));
                 row.bar.set_visible(t.state != TransferState::Removed);
                 row.cancel.set_visible(t.active());
@@ -405,6 +488,12 @@ impl Transfers {
             .wrap(true)
             .css_classes(["dim-label"])
             .build();
+        let notes = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .visible(false)
+            .css_classes(["warning", "caption"])
+            .build();
         let bar = gtk::ProgressBar::builder().margin_top(4).build();
         let text = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
@@ -413,6 +502,7 @@ impl Transfers {
             .build();
         text.append(&title);
         text.append(&details);
+        text.append(&notes);
         text.append(&bar);
         let cancel = gtk::Button::builder()
             .icon_name("process-stop-symbolic")
@@ -460,6 +550,7 @@ impl Transfers {
             icon,
             title,
             details,
+            notes,
             bar,
             cancel,
             folder,
@@ -471,6 +562,7 @@ impl Transfers {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rustinput_ipc::LEFT_OUT_RENAMED;
 
     fn transfer(sending: bool, state: TransferState) -> TransferInfo {
         TransferInfo {
@@ -487,6 +579,7 @@ mod tests {
             finished_ms: None,
             location: None,
             resumed_bytes: None,
+            left_out: Vec::new(),
         }
     }
 
@@ -523,5 +616,31 @@ mod tests {
         assert_eq!(duration(45), "45 s");
         assert_eq!(duration(200), "3 min 20 s");
         assert_eq!(duration(3900), "1 h 5 min");
+    }
+
+    #[test]
+    fn what_did_not_come_is_told() {
+        let mut t = transfer(false, TransferState::Done);
+        assert_eq!(left_out(&t), (String::new(), String::new()));
+        t.left_out = vec![
+            LeftOut::new("Pasta/volta", LEFT_OUT_LINK, ""),
+            LeftOut::new("Pasta/a.txt", LEFT_OUT_CHANGED, ""),
+            LeftOut::new("Pasta/b.txt", LEFT_OUT_GONE, ""),
+            LeftOut::new("Pasta/c.txt", LEFT_OUT_UNREADABLE, "Permission denied"),
+            LeftOut::new("Pasta/x:y.txt", LEFT_OUT_RENAMED, "x_y.txt"),
+            LeftOut::new("Pasta/foto\u{202e}gpj.exe", LEFT_OUT_RENAMED, "fotogpj.exe"),
+        ];
+        let (short, all) = left_out(&t);
+        assert_eq!(
+            short,
+            "Did not come: volta (a link to a folder), a.txt (changed while it was sent), \
+            b.txt (removed before it was sent), 1 more. \
+            Renamed, the name is not allowed here: x:y.txt → x_y.txt, \
+            foto⟨U+202E⟩gpj.exe → fotogpj.exe"
+        );
+        assert_eq!(all.lines().count(), 6);
+        assert!(all.contains("Pasta/c.txt (could not be read: Permission denied)"));
+        t.sending = true;
+        assert!(left_out(&t).0.starts_with("Not sent: volta"));
     }
 }

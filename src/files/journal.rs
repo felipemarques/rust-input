@@ -38,10 +38,11 @@ impl Journal {
         let Some(file) = self.file.as_mut() else {
             return;
         };
-        let mut entry = format!("{}  {text}\n", local_time());
+        let mut entry = format!("{}  {}\n", local_time(), rustinput_ipc::visible_name(text));
         for (path, size) in files.iter().take(MAX_FILES) {
             entry.push_str(&format!(
-                "                     {path} ({})\n",
+                "                     {} ({})\n",
+                rustinput_ipc::visible_name(path),
                 rustinput_ipc::human_size(*size)
             ));
         }

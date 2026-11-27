@@ -252,7 +252,7 @@ fn line(t: &TransferInfo) -> String {
         TransferState::Running => match &t.current {
             Some(file) => {
                 let values: [(&str, &dyn std::fmt::Display); 5] = [
-                    ("file", &shorten(file, 40)),
+                    ("file", &shorten(&rustinput_ipc::visible_name(file), 40)),
                     ("done", &(t.files_done + 1).min(t.files)),
                     ("total", &t.files),
                     ("name", name),
@@ -377,6 +377,7 @@ mod tests {
             finished_ms: None,
             location: None,
             resumed_bytes: None,
+            left_out: Vec::new(),
         }
     }
 

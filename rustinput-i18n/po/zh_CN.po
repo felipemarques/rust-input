@@ -541,129 +541,165 @@ msgstr "RustInput {version} 已发布"
 msgid "This computer has {current}"
 msgstr "本机版本为 {current}"
 
-#: rustinput-gtk/src/transfers.rs:35
+#: rustinput-gtk/src/transfers.rs:38
 msgid "{count} file"
 msgid_plural "{count} files"
 msgstr[0] "{count} 个文件"
 
-#: rustinput-gtk/src/transfers.rs:41
+#: rustinput-gtk/src/transfers.rs:44
 msgid "{s} s"
 msgstr "{s} 秒"
 
-#: rustinput-gtk/src/transfers.rs:42
+#: rustinput-gtk/src/transfers.rs:45
 msgid "{m} min {s} s"
 msgstr "{m} 分 {s} 秒"
 
-#: rustinput-gtk/src/transfers.rs:43
+#: rustinput-gtk/src/transfers.rs:46
 msgid "{h} h {m} min"
 msgstr "{h} 小时 {m} 分"
 
-#: rustinput-gtk/src/transfers.rs:56
+#: rustinput-gtk/src/transfers.rs:59
 msgid "Preparing files for {name}"
 msgstr "正在为 {name} 准备文件"
 
-#: rustinput-gtk/src/transfers.rs:59
+#: rustinput-gtk/src/transfers.rs:62
 msgid "Sending {files} to {name}"
 msgstr "正在向 {name} 发送 {files}"
 
-#: rustinput-gtk/src/transfers.rs:62
+#: rustinput-gtk/src/transfers.rs:65
 msgid "Receiving {files} from {name}"
 msgstr "正在从 {name} 接收 {files}"
 
-#: rustinput-gtk/src/transfers.rs:64
+#: rustinput-gtk/src/transfers.rs:67
 msgid "{files} sent to {name}"
 msgstr "已向 {name} 发送 {files}"
 
-#: rustinput-gtk/src/transfers.rs:65
+#: rustinput-gtk/src/transfers.rs:68
 msgid "{files} from {name}: ready to paste"
 msgstr "来自 {name} 的 {files}：可以粘贴"
 
-#: rustinput-gtk/src/transfers.rs:66
+#: rustinput-gtk/src/transfers.rs:69
 msgid "{files} from {name}: pasted"
 msgstr "来自 {name} 的 {files}：已粘贴"
 
-#: rustinput-gtk/src/transfers.rs:67
+#: rustinput-gtk/src/transfers.rs:70
 msgid "{files} from {name}: not pasted"
 msgstr "来自 {name} 的 {files}：未粘贴"
 
-#: rustinput-gtk/src/transfers.rs:68
+#: rustinput-gtk/src/transfers.rs:71
 msgid "Sending {files} to {name} failed"
 msgstr "向 {name} 发送 {files} 失败"
 
-#: rustinput-gtk/src/transfers.rs:69
+#: rustinput-gtk/src/transfers.rs:72
 msgid "Receiving {files} from {name} failed"
 msgstr "从 {name} 接收 {files} 失败"
 
-#: rustinput-gtk/src/transfers.rs:71
+#: rustinput-gtk/src/transfers.rs:74
 msgid "Sending {files} to {name}: interrupted"
 msgstr "向 {name} 发送 {files}：已中断"
 
-#: rustinput-gtk/src/transfers.rs:74
+#: rustinput-gtk/src/transfers.rs:77
 msgid "Receiving {files} from {name}: interrupted"
 msgstr "从 {name} 接收 {files}：已中断"
 
-#: rustinput-gtk/src/transfers.rs:93
+#: rustinput-gtk/src/transfers.rs:96
 msgid "{size}, the last {rest} in {time} ({speed}/s): it went on where it had stopped"
 msgstr "{size}，最后 {rest} 用时 {time}（{speed}/s）：从中断处继续"
 
-#: rustinput-gtk/src/transfers.rs:102
+#: rustinput-gtk/src/transfers.rs:105
 msgid "{size} in {time} ({speed}/s)"
 msgstr "{size}，用时 {time}（{speed}/s）"
 
-#: rustinput-gtk/src/transfers.rs:106
+#: rustinput-gtk/src/transfers.rs:109
 msgid "Listing the files…"
 msgstr "正在列出文件…"
 
-#: rustinput-gtk/src/transfers.rs:107
+#: rustinput-gtk/src/transfers.rs:110
 msgid "{size}, waiting for the transfer before it"
 msgstr "{size}，正在等待前一个传输完成"
 
-#: rustinput-gtk/src/transfers.rs:112
+#: rustinput-gtk/src/transfers.rs:115
 msgid "{done} of {size}"
 msgstr "{done} / {size}"
 
-#: rustinput-gtk/src/transfers.rs:129
+#: rustinput-gtk/src/transfers.rs:132
 msgid "{time} left"
 msgstr "剩余 {time}"
 
-#: rustinput-gtk/src/transfers.rs:137
+#: rustinput-gtk/src/transfers.rs:140
 msgid "{took}. On the clipboard: paste them in a folder to move them there"
 msgstr "{took}。已放入剪贴板：粘贴到文件夹即可将文件移到那里"
 
-#: rustinput-gtk/src/transfers.rs:141
+#: rustinput-gtk/src/transfers.rs:144
 msgid "{size}, moved to where they were pasted. Nothing is left in the temporary folder"
 msgstr "{size}，已移到粘贴的位置。临时文件夹中没有残留"
 
-#: rustinput-gtk/src/transfers.rs:146
+#: rustinput-gtk/src/transfers.rs:149
 msgid "Removed from the temporary folder without being pasted"
 msgstr "未粘贴，已从临时文件夹中移除"
 
-#: rustinput-gtk/src/transfers.rs:148
+#: rustinput-gtk/src/transfers.rs:151
 msgid "{reason}, after {done} of {count} file"
 msgid_plural "{reason}, after {done} of {count} files"
 msgstr[0] "{reason}，已传输 {count} 个文件中的 {done} 个"
 
-#: rustinput-gtk/src/transfers.rs:154
+#: rustinput-gtk/src/transfers.rs:157
 msgid "{done} of {size}. The connection was lost: it goes on from here when {name} is back"
 msgstr "{done} / {size}。连接已断开：{name} 恢复后从此处继续"
 
-#: rustinput-gtk/src/transfers.rs:255
+#: rustinput-gtk/src/transfers.rs:198
+msgid "a link to a folder"
+msgstr "指向文件夹的链接"
+
+#: rustinput-gtk/src/transfers.rs:199
+msgid "could not be read: {error}"
+msgstr "无法读取：{error}"
+
+#: rustinput-gtk/src/transfers.rs:200
+msgid "not a file or a folder"
+msgstr "既不是文件也不是文件夹"
+
+#: rustinput-gtk/src/transfers.rs:201
+msgid "changed while it was sent"
+msgstr "发送期间被修改"
+
+#: rustinput-gtk/src/transfers.rs:202
+msgid "removed before it was sent"
+msgstr "发送前已被删除"
+
+#: rustinput-gtk/src/transfers.rs:225
+msgid "{count} more"
+msgstr "另外 {count} 个"
+
+#: rustinput-gtk/src/transfers.rs:234
+msgid "Not sent: {list}"
+msgstr "未发送：{list}"
+
+#: rustinput-gtk/src/transfers.rs:235
+msgid "Did not come: {list}"
+msgstr "未收到：{list}"
+
+#: rustinput-gtk/src/transfers.rs:241
+msgid "Renamed, the name is not allowed here: {list}"
+msgstr "已重命名，此处不允许该名称：{list}"
+
+#: rustinput-gtk/src/transfers.rs:315
 msgid "Open log"
 msgstr "打开日志"
 
-#: rustinput-gtk/src/transfers.rs:256
+#: rustinput-gtk/src/transfers.rs:316
 msgid "Everything sent and received, with every file"
 msgstr "所有发送和接收的内容，包括每个文件"
 
-#: rustinput-gtk/src/transfers.rs:263
+#: rustinput-gtk/src/transfers.rs:323
 msgid "Remove unpasted files"
 msgstr "移除未粘贴的文件"
 
-#: rustinput-gtk/src/transfers.rs:264
+#: rustinput-gtk/src/transfers.rs:324
 msgid "Removes the received files that were not pasted from the temporary folder"
 msgstr "从临时文件夹中移除已接收但未粘贴的文件"
 
-#: rustinput-gtk/src/transfers.rs:425
+#: rustinput-gtk/src/transfers.rs:496
 msgid "Open the temporary folder with the received files"
 msgstr "打开存放已接收文件的临时文件夹"
 

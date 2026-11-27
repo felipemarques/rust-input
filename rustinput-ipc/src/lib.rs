@@ -25,6 +25,22 @@ pub mod layout;
 
 /// "512 bytes", "1.5 KB", "120.3 MB", "2.1 GB" (powers of 1024, like file
 /// managers)
+/// A file name as it can be shown safely: the characters that change the
+/// direction of the text (which make "photo\u{202e}gpj.exe" look like
+/// "photoexe.jpg") and other control characters as ⟨U+202E⟩.
+pub fn visible_name(name: &str) -> String {
+    name.chars()
+        .map(|c| {
+            let bidi = matches!(c, '\u{200e}' | '\u{200f}' | '\u{061c}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
+            if bidi || c.is_control() {
+                format!("⟨U+{:04X}⟩", c as u32)
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 pub fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1024 {
@@ -256,6 +272,53 @@ pub struct TransferInfo {
     /// `started_ms` is when it went on, so the speed counts the rest only.
     #[serde(default)]
     pub resumed_bytes: Option<u64>,
+    /// what of the copied files did not go or come as it was, and why
+    /// (0.39.0)
+    #[serde(default)]
+    pub left_out: Vec<LeftOut>,
+}
+
+/// Something of a transfer that did not go or come as it was copied, and
+/// why. Also part of the file channel between devices, so `why` is a word
+/// a newer RustInput may add to, shown as `detail` when it is not known.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LeftOut {
+    /// path inside the transfer, components separated by `/`
+    pub path: String,
+    /// one of the `LEFT_OUT_*` words
+    pub why: String,
+    /// the error, or the new name for [`LEFT_OUT_RENAMED`]
+    #[serde(default)]
+    pub detail: String,
+}
+
+/// left out: a link to a folder, which could lead into itself
+pub const LEFT_OUT_LINK: &str = "link";
+/// left out: it could not be read (`detail`: the error)
+pub const LEFT_OUT_UNREADABLE: &str = "unreadable";
+/// left out: neither a file nor a folder (a socket, a device)
+pub const LEFT_OUT_SPECIAL: &str = "special";
+/// left out: it changed while it was sent
+pub const LEFT_OUT_CHANGED: &str = "changed";
+/// left out: it was removed before it was sent
+pub const LEFT_OUT_GONE: &str = "gone";
+/// came, but with another name (`detail`), its own is not allowed on the
+/// receiving system
+pub const LEFT_OUT_RENAMED: &str = "renamed";
+
+impl LeftOut {
+    pub fn new(path: impl Into<String>, why: &str, detail: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            why: why.to_owned(),
+            detail: detail.into(),
+        }
+    }
+
+    /// came anyway, with another name
+    pub fn came(&self) -> bool {
+        self.why == LEFT_OUT_RENAMED
+    }
 }
 
 impl TransferInfo {

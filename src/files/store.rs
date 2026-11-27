@@ -18,6 +18,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use rustinput_ipc::{LEFT_OUT_RENAMED, LeftOut};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::{fs::File, io::AsyncWriteExt};
@@ -304,6 +305,8 @@ pub(crate) struct Receiving {
     waiting: Option<Position>,
     /// resumable: `<root>.resume`
     kept: Option<PathBuf>,
+    /// paths of the offer with names not allowed here, and what they became
+    pub(crate) renamed: Vec<LeftOut>,
 }
 
 fn time(seconds: u64) -> SystemTime {
@@ -324,6 +327,19 @@ fn checked(entries: Vec<Entry>) -> io::Result<Vec<(Entry, PathBuf)>> {
         checked.push((entry, path));
     }
     Ok(checked)
+}
+
+/// The entries whose own name (the last component) is not allowed here,
+/// with the name they get: those are told, their folders only once.
+fn renamed(checked: &[(Entry, PathBuf)]) -> Vec<LeftOut> {
+    checked
+        .iter()
+        .filter_map(|(entry, path)| {
+            let own = entry.path.rsplit('/').next().unwrap_or(&entry.path);
+            let new = path.file_name()?.to_string_lossy();
+            (own != new).then(|| LeftOut::new(entry.path.clone(), LEFT_OUT_RENAMED, new))
+        })
+        .collect()
 }
 
 /// The folder of a partial transfer of `key` from `from` below `dir`, kept
@@ -515,6 +531,7 @@ impl Receiving {
         let files = entries.iter().filter(|(e, _)| !e.dir).count();
         let bytes = entries.iter().map(|(e, _)| e.size).sum();
         let receiving = Self {
+            renamed: renamed(&entries),
             root,
             entries,
             next,
@@ -618,6 +635,7 @@ impl Receiving {
         let files = checked.iter().filter(|(e, _)| !e.dir).count();
         let bytes = checked.iter().map(|(e, _)| e.size).sum();
         Ok(Self {
+            renamed: renamed(&checked),
             root,
             entries: checked,
             next: 0,
@@ -717,6 +735,47 @@ impl Receiving {
             self.advance().await?;
         }
         Ok(())
+    }
+
+    /// The `file`-th file (counting files only) is not sent after all: what
+    /// is here of it goes. Returns its path in the offer.
+    pub(crate) async fn skip(&mut self, file: u32) -> io::Result<String> {
+        let Some(index) = self
+            .entries
+            .iter()
+            .enumerate()
+            .filter(|(_, (e, _))| !e.dir)
+            .map(|(i, _)| i)
+            .nth(file as usize)
+        else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("no file {file} to skip"),
+            ));
+        };
+        let (entry, relative) = &self.entries[index];
+        let (path, offered) = (self.root.join(relative), entry.path.clone());
+        let current = self.current.is_some() && index + 1 == self.next;
+        if !current && index >= self.next {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("file {file} to skip did not begin yet"),
+            ));
+        }
+        if current {
+            let current = self.current.take().expect("current file");
+            // what will not come, so that the progress still ends at the end
+            self.bytes_done += current.remaining;
+            self.files_done += 1;
+            drop(current);
+        }
+        if fs::symlink_metadata(&path).is_ok() {
+            tokio::fs::remove_file(&path).await?;
+        }
+        if current {
+            self.advance().await?;
+        }
+        Ok(offered)
     }
 
     pub(crate) fn is_complete(&self) -> bool {
@@ -1140,6 +1199,53 @@ mod tests {
             elsewhere.path().join("b.txt").exists(),
             "nothing removed there"
         );
+    }
+
+    #[tokio::test]
+    async fn a_skipped_file_goes_and_the_next_comes() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries = vec![
+            entry("a.txt", false, 4),
+            entry("b.txt", false, 4),
+            entry("c.txt", false, 4),
+        ];
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", entries)
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"aaaa").await.unwrap();
+        // b.txt: two bytes, then it changed on the sender
+        receiving.write(b"bb").await.unwrap();
+        assert_eq!(receiving.skip(1).await.unwrap(), "b.txt");
+        assert!(receiving.skip(9).await.is_err(), "no such file");
+        receiving.write(b"cccc").await.unwrap();
+        // a.txt changed after it was sent
+        assert_eq!(receiving.skip(0).await.unwrap(), "a.txt");
+        assert!(receiving.is_complete());
+        assert_eq!(receiving.bytes_done, 12);
+        let top = receiving.finish();
+        let names: Vec<_> = top
+            .iter()
+            .filter(|p| p.exists())
+            .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["c.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn names_not_allowed_here_are_told() {
+        let checked = checked(vec![
+            entry("Pasta", true, 0),
+            entry("Pasta/foto\u{202e}gpj.exe", false, 1),
+            entry("Pasta/ok.txt", false, 1),
+        ])
+        .unwrap();
+        let renamed = renamed(&checked);
+        assert_eq!(renamed.len(), 1);
+        assert_eq!(renamed[0].path, "Pasta/foto\u{202e}gpj.exe");
+        assert_eq!(renamed[0].detail, "fotogpj.exe");
+        assert!(renamed[0].came());
     }
 
     #[cfg(unix)]
