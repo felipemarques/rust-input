@@ -511,7 +511,7 @@ msgstr ""
 msgid "{address} disconnected"
 msgstr ""
 
-#: rustinput-gtk/src/lib.rs:598
+#: rustinput-gtk/src/lib.rs:599
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr ""
 
@@ -939,7 +939,7 @@ msgstr ""
 msgid "Password, hidden"
 msgstr ""
 
-#: rustinput-gtk/src/window/imp.rs:257
+#: rustinput-gtk/src/window/imp.rs:259
 msgid "Failed to relaunch RustInput"
 msgstr ""
 
@@ -983,295 +983,331 @@ msgstr ""
 msgid "{name} added: switch it on and move the pointer to it, it shows a code to enter here"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:108
-msgid "Undo changes"
+#: rustinput-gtk/src/window/shortcuts.rs:24
+msgid "Keyboard shortcuts"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:25
+msgid "They fire when the keys are let go, only if nothing else was pressed: AltGr + Q still types"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:31
+msgid "Move between the computers with the keyboard"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:40
+msgid "To that computer, in the order of the list"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:42
+msgid "Back to this computer"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:45
+msgid "To the other computer and back, or the next one"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:47
+msgid "The next / the previous computer"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:50
+msgid "The right Shift twice quickly: the next computer"
+msgstr ""
+
+#: rustinput-gtk/src/window/shortcuts.rs:54
+msgid "The right Shift held for 3 seconds: back to this computer, always"
 msgstr ""
 
 #: rustinput-gtk/src/window.rs:109
+msgid "Undo changes"
+msgstr ""
+
+#: rustinput-gtk/src/window.rs:110
 msgid "Apply"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:115
+#: rustinput-gtk/src/window.rs:116
 msgid "Identify monitors"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:118
+#: rustinput-gtk/src/window.rs:119
 msgid "Shows the number of each monitor on it for a few seconds, on every computer"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:138
+#: rustinput-gtk/src/window.rs:139
 msgid "Click a computer to see where the mouse leaves it and to choose whole edges."
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:153
+#: rustinput-gtk/src/window.rs:154
 msgid "Connection settings"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:307
+#: rustinput-gtk/src/window.rs:308
 msgid "Arrangement applied"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:312
+#: rustinput-gtk/src/window.rs:313
 msgid "{name} did not show the numbers of its monitors: {error}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:320
+#: rustinput-gtk/src/window.rs:321
 msgid "The screen of {name} did not lock: {error}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:329
+#: rustinput-gtk/src/window.rs:330
 msgid "Arrangement sent to {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:330
+#: rustinput-gtk/src/window.rs:331
 msgid "Arrangement not sent to {name}: {error}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:339
+#: rustinput-gtk/src/window.rs:340
 msgid "{name} changed the arrangement"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:353
+#: rustinput-gtk/src/window.rs:354
 msgid "{names} does not touch a computer this one reaches: move it next to one"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:358
+#: rustinput-gtk/src/window.rs:359
 msgid "Made from the connections as they are now: arrange and apply"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:360
+#: rustinput-gtk/src/window.rs:361
 msgid "Changes not applied yet"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:362
+#: rustinput-gtk/src/window.rs:363
 msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:367
+#: rustinput-gtk/src/window.rs:368
 msgid "Applied on the computers of the arrangement"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:387
+#: rustinput-gtk/src/window.rs:388
 msgid "Where the mouse leaves {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:393
+#: rustinput-gtk/src/window.rs:394
 msgid "Nowhere"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:394
+#: rustinput-gtk/src/window.rs:395
 msgid "It touches no other computer"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:401
+#: rustinput-gtk/src/window.rs:402
 msgid "Left edge: {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:402
+#: rustinput-gtk/src/window.rs:403
 msgid "Right edge: {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:403
+#: rustinput-gtk/src/window.rs:404
 msgid "Top edge: {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:404
+#: rustinput-gtk/src/window.rs:405
 msgid "Bottom edge: {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:407
+#: rustinput-gtk/src/window.rs:408
 msgid "The whole edge of both, the place along it in proportion"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:409
+#: rustinput-gtk/src/window.rs:410
 msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:414
+#: rustinput-gtk/src/window.rs:415
 msgid "{part}, where they touch: the edge is shared"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:427
+#: rustinput-gtk/src/window.rs:428
 msgid "Whole edge, in proportion"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:923
+#: rustinput-gtk/src/window.rs:924
 msgid "As the system ({language})"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:946
+#: rustinput-gtk/src/window.rs:947
 msgid "The windows change language when RustInput starts again"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:949
+#: rustinput-gtk/src/window.rs:950
 msgid "Restart now"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1021
+#: rustinput-gtk/src/window.rs:1022
 msgid "Asking GitHub…"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1023
+#: rustinput-gtk/src/window.rs:1024
 msgid "Could not ask GitHub: {error}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1025
+#: rustinput-gtk/src/window.rs:1026
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1030
+#: rustinput-gtk/src/window.rs:1031
 msgid "{version} is the latest version"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1041
+#: rustinput-gtk/src/window.rs:1042
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1047
+#: rustinput-gtk/src/window.rs:1048
 msgid "No"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1048
+#: rustinput-gtk/src/window.rs:1049
 msgid "Yes, look for them"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1052
+#: rustinput-gtk/src/window.rs:1053
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1056
+#: rustinput-gtk/src/window.rs:1057
 msgid "Later"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1105
+#: rustinput-gtk/src/window.rs:1106
 msgid "The update starts: Windows asks for administrator rights"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1130
+#: rustinput-gtk/src/window.rs:1131
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1136
+#: rustinput-gtk/src/window.rs:1137
 msgid "“Copy to RustInput” in the file manager"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1137
+#: rustinput-gtk/src/window.rs:1138
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1140
+#: rustinput-gtk/src/window.rs:1141
 msgid "Show the transfers window"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1141
+#: rustinput-gtk/src/window.rs:1142
 msgid "With the progress, when files are sent or received"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1144
+#: rustinput-gtk/src/window.rs:1145
 msgid "Ask before receiving more than"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1145
+#: rustinput-gtk/src/window.rs:1146
 msgid "Files copied on another computer that come along with the pointer. 0: never ask"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1169
+#: rustinput-gtk/src/window.rs:1170
 msgid "Progress, history and log"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1172
+#: rustinput-gtk/src/window.rs:1173
 msgid "Open"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1304
+#: rustinput-gtk/src/window.rs:1305
 msgid "Sharing the mouse and keyboard"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1305
+#: rustinput-gtk/src/window.rs:1306
 msgid "Capture and emulation are on"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1308
+#: rustinput-gtk/src/window.rs:1309
 msgid "Input capture is off"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1309
+#: rustinput-gtk/src/window.rs:1310
 msgid "Needed for every connection"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1325
+#: rustinput-gtk/src/window.rs:1326
 msgid "Sending"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1326
+#: rustinput-gtk/src/window.rs:1327
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1339
+#: rustinput-gtk/src/window.rs:1340
 msgid "Receiving"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1340
+#: rustinput-gtk/src/window.rs:1341
 msgid "The other computers can control this one"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1343
+#: rustinput-gtk/src/window.rs:1344
 msgid "Input emulation is off"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1344
+#: rustinput-gtk/src/window.rs:1345
 msgid "Needed for the other computers to control this one"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1361
+#: rustinput-gtk/src/window.rs:1362
 msgid "Paused: no other computer controls this one"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1385
+#: rustinput-gtk/src/window.rs:1386
 msgid "Relaunch required"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1386
+#: rustinput-gtk/src/window.rs:1387
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1389
+#: rustinput-gtk/src/window.rs:1390
 msgid "Relaunch"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1393
+#: rustinput-gtk/src/window.rs:1394
 msgid "Grant the Accessibility permission to turn it on"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1394
+#: rustinput-gtk/src/window.rs:1395
 msgid "Grant"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1434
+#: rustinput-gtk/src/window.rs:1435
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1440
+#: rustinput-gtk/src/window.rs:1441
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1481
+#: rustinput-gtk/src/window.rs:1482
 msgid "Authorize with {name}"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1482
+#: rustinput-gtk/src/window.rs:1483
 msgid "Authorize with the other computer"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1519
+#: rustinput-gtk/src/window.rs:1520
 msgid "Authorizing…"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1643
+#: rustinput-gtk/src/window.rs:1644
 msgid "Update now"
 msgstr ""
 
-#: rustinput-gtk/src/window.rs:1645
+#: rustinput-gtk/src/window.rs:1646
 msgid "Download"
 msgstr ""
 
@@ -1283,38 +1319,38 @@ msgstr ""
 msgid "Send to the other computer, ready to be pasted there"
 msgstr ""
 
-#: src/radial/mod.rs:100
+#: src/radial/mod.rs:140
 msgid "Go to {name}"
 msgstr ""
 
-#: src/radial/mod.rs:104
+#: src/radial/mod.rs:144
 msgid "Send the clipboard"
 msgstr ""
 
-#: src/radial/mod.rs:108
+#: src/radial/mod.rs:148
 msgid "Send copied files"
 msgstr ""
 
-#: src/radial/mod.rs:113
+#: src/radial/mod.rs:153
 msgid "Free the pointer"
 msgstr ""
 
-#: src/radial/mod.rs:114
+#: src/radial/mod.rs:154
 msgid "Keep the pointer here"
 msgstr ""
 
-#: src/radial/mod.rs:129
+#: src/radial/mod.rs:169
 msgid "Lock {name}"
 msgstr ""
 
-#: src/radial/mod.rs:133
+#: src/radial/mod.rs:173
 msgid "Lock all computers"
 msgstr ""
 
-#: src/radial/mod.rs:149
+#: src/radial/mod.rs:189
 msgid "No files copied: copy files in the file manager first"
 msgstr ""
 
-#: src/radial/mod.rs:153
+#: src/radial/mod.rs:193
 msgid "Point at an action and let go"
 msgstr ""

@@ -98,6 +98,9 @@ struct ConfigToml {
     /// when the user says so (1024, 0: never asked)
     ask_before_receiving_mb: Option<u64>,
     radial_menu: Option<bool>,
+    /// keyboard shortcuts to move between the computers (on by default,
+    /// 0.42.0)
+    hotkeys: Option<bool>,
     /// "system", "light" or "dark": a string, so a value this version does
     /// not know does not make the whole file unreadable
     theme: Option<String>,
@@ -665,6 +668,20 @@ impl Config {
             .as_ref()
             .and_then(|c| c.radial_menu)
             .unwrap_or(true)
+    }
+
+    /// whether the keyboard shortcuts to move between the computers are on
+    /// (`hotkeys`, on by default)
+    pub fn hotkeys(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.hotkeys)
+            .unwrap_or(true)
+    }
+
+    pub fn set_hotkeys(&mut self, on: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.hotkeys = Some(on);
     }
 
     /// whether the windows are light, dark or as the system (`theme`)

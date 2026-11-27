@@ -24,6 +24,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
+use crate::hotkeys::{self, Hotkey, Hotkeys};
 use fonts::Fonts;
 use rustinput_i18n::{tr, trf};
 use rustinput_ipc::ClientHandle;
@@ -50,6 +51,9 @@ pub(crate) enum Action {
     /// the main window on its Clipboards tab
     ShowClipboards,
     ShowWindow,
+    /// not a slice: a keyboard shortcut to move between the computers,
+    /// watched by the same thread (see [`crate::hotkeys`], 0.42.0)
+    Hotkey(Hotkey),
 }
 
 /// a slice of the wheel
@@ -64,6 +68,10 @@ pub(crate) struct Item {
 pub(crate) struct Menu {
     items: Arc<Mutex<Vec<Item>>>,
     away: Arc<AtomicBool>,
+    /// holding Ctrl+Alt shows the wheel (`radial_menu`)
+    wheel: Arc<AtomicBool>,
+    /// the keyboard shortcuts are watched (`hotkeys`)
+    hotkeys: Arc<AtomicBool>,
 }
 
 impl Menu {
@@ -83,6 +91,38 @@ impl Menu {
 
     fn away(&self) -> bool {
         self.away.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_wheel(&self, on: bool) {
+        self.wheel.store(on, Ordering::Relaxed);
+    }
+
+    fn wheel(&self) -> bool {
+        self.wheel.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_hotkeys(&self, on: bool) {
+        self.hotkeys.store(on, Ordering::Relaxed);
+    }
+
+    /// Feeds a key to the shortcuts, while the pointer is here and they
+    /// are on: the shortcut that fires goes to `chosen`.
+    fn shortcut(
+        &self,
+        state: &mut Hotkeys,
+        key: hotkeys::Key,
+        pressed: bool,
+        chosen: &UnboundedSender<Action>,
+    ) {
+        if self.away() || !self.hotkeys.load(Ordering::Relaxed) {
+            // the computer the pointer is on watches them
+            state.reset();
+            return;
+        }
+        if let Some(hotkey) = state.key(key, pressed, std::time::Instant::now()) {
+            log::info!("keyboard shortcut: {hotkey:?}");
+            let _ = chosen.send(Action::Hotkey(hotkey));
+        }
     }
 }
 

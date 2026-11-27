@@ -633,6 +633,9 @@ pub enum FrontendEvent {
     },
     /// the computers running RustInput found on the network (0.40.0)
     Discovered(Vec<Discovered>),
+    /// whether the keyboard shortcuts to move between the computers are on
+    /// (`hotkeys`, 0.42.0)
+    Hotkeys(bool),
     /// The authorized computer `by` was paired with the computer
     /// `fingerprint` called `name` (or tells about it, one of those it was
     /// paired with): authorize it here too? Answered with
@@ -791,6 +794,9 @@ pub enum FrontendRequest {
     /// a window shows the computers found on the network (or no longer):
     /// look for them now and then
     Discover(bool),
+    /// switches the keyboard shortcuts to move between the computers on or
+    /// off
+    SetHotkeys(bool),
     /// the answer to [`FrontendEvent::Introduction`] of `fingerprint`
     AnswerIntroduction {
         fingerprint: String,

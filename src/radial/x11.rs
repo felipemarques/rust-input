@@ -27,6 +27,8 @@ use x11rb::{
     wrapper::ConnectionExt as _,
 };
 
+use crate::hotkeys::{self, Hotkeys};
+
 use super::{
     Action, Fonts, Menu, Texts, Wheel,
     chord::{Chord, Key, Step},
@@ -105,6 +107,7 @@ struct State {
     screen: xproto::Screen,
     keys: KeyMap,
     chord: Chord,
+    hotkeys: Hotkeys,
     overlay: Option<Overlay>,
     menu: Menu,
     chosen: UnboundedSender<Action>,
@@ -141,6 +144,7 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Err
         screen,
         keys,
         chord: Chord::default(),
+        hotkeys: Hotkeys::default(),
         overlay: None,
         menu,
         chosen,
@@ -159,8 +163,12 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Err
         while let Some(event) = state.conn.poll_for_event().map_err(err)? {
             let now = Instant::now();
             let step = match event {
-                Event::XinputRawKeyPress(e) => state.chord.key(state.keys.key(e.detail), true, now),
+                Event::XinputRawKeyPress(e) => {
+                    state.shortcut(e.detail, true);
+                    state.chord.key(state.keys.key(e.detail), true, now)
+                }
                 Event::XinputRawKeyRelease(e) => {
+                    state.shortcut(e.detail, false);
                     state.chord.key(state.keys.key(e.detail), false, now)
                 }
                 Event::MappingNotify(_) => {
@@ -280,9 +288,19 @@ pub(crate) fn put_pixels(
 }
 
 impl State {
+    /// the X keycode `keycode` went down or up, for the shortcuts
+    fn shortcut(&mut self, keycode: u32, pressed: bool) {
+        // X keycodes are those of evdev plus 8
+        let key = hotkeys::Key::from_linux(keycode.saturating_sub(8));
+        self.menu
+            .shortcut(&mut self.hotkeys, key, pressed, &self.chosen);
+    }
+
     fn step(&mut self, step: Step) -> Result<(), Error> {
         match step {
             Step::Nothing => Ok(()),
+            // only the shortcuts are watched
+            Step::Open if !self.menu.wheel() => Ok(()),
             Step::Open => self.open(),
             Step::Pick => self.close(true),
             Step::Cancel => self.close(false),
