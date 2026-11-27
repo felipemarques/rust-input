@@ -468,35 +468,51 @@ msgstr "对方版本：{peer} · 与本机相同"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "对方版本：{peer} · 本机：{local}"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/introduction.rs:43
+msgid "Authorize {name} here too?"
+msgstr "也在这里授权 {name}？"
+
+#: rustinput-gtk/src/introduction.rs:49
+msgid "{by} was paired with {name}. Authorized here too, the two can control each other and share the clipboard and files. Compare the fingerprint with the one {name} shows."
+msgstr "{by} 已与 {name} 配对。如果也在这里授权，两台电脑就能互相控制并共享剪贴板和文件。请将指纹与 {name} 显示的指纹进行比对。"
+
+#: rustinput-gtk/src/introduction.rs:65
+msgid "Not now"
+msgstr "暂不"
+
+#: rustinput-gtk/src/introduction.rs:106
+msgid "Authorize a computer?"
+msgstr "授权一台电脑？"
+
+#: rustinput-gtk/src/lib.rs:266
 msgid "Quit"
 msgstr "退出"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:267
 msgid "_File"
 msgstr "文件(_F)"
 
-#: rustinput-gtk/src/lib.rs:480
+#: rustinput-gtk/src/lib.rs:481
 msgid "{name} and this computer authorized each other"
 msgstr "{name} 与本机已相互授权"
 
-#: rustinput-gtk/src/lib.rs:485
+#: rustinput-gtk/src/lib.rs:486
 msgid "Not authorized: {error}"
 msgstr "未授权：{error}"
 
-#: rustinput-gtk/src/lib.rs:492
+#: rustinput-gtk/src/lib.rs:493
 msgid "{address} connected"
 msgstr "{address} 已连接"
 
-#: rustinput-gtk/src/lib.rs:499
+#: rustinput-gtk/src/lib.rs:500
 msgid "The mouse came from {address}"
 msgstr "鼠标来自 {address}"
 
-#: rustinput-gtk/src/lib.rs:505
+#: rustinput-gtk/src/lib.rs:506
 msgid "{address} disconnected"
 msgstr "{address} 已断开连接"
 
-#: rustinput-gtk/src/lib.rs:592
+#: rustinput-gtk/src/lib.rs:598
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "已收到来自 {name} 的 {count} 个文件，可以粘贴"
 

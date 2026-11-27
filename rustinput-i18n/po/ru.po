@@ -470,35 +470,51 @@ msgstr "Версия там: {peer} · такая же"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "Версия там: {peer} · здесь: {local}"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/introduction.rs:43
+msgid "Authorize {name} here too?"
+msgstr "Разрешить {name} и здесь?"
+
+#: rustinput-gtk/src/introduction.rs:49
+msgid "{by} was paired with {name}. Authorized here too, the two can control each other and share the clipboard and files. Compare the fingerprint with the one {name} shows."
+msgstr "{by} сопряжён с {name}. Если разрешить и здесь, они смогут управлять друг другом и обмениваться буфером обмена и файлами. Сравните отпечаток с тем, что показывает {name}."
+
+#: rustinput-gtk/src/introduction.rs:65
+msgid "Not now"
+msgstr "Не сейчас"
+
+#: rustinput-gtk/src/introduction.rs:106
+msgid "Authorize a computer?"
+msgstr "Разрешить компьютер?"
+
+#: rustinput-gtk/src/lib.rs:266
 msgid "Quit"
 msgstr "Выйти"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:267
 msgid "_File"
 msgstr "_Файл"
 
-#: rustinput-gtk/src/lib.rs:480
+#: rustinput-gtk/src/lib.rs:481
 msgid "{name} and this computer authorized each other"
 msgstr "{name} и этот компьютер взаимно авторизованы"
 
-#: rustinput-gtk/src/lib.rs:485
+#: rustinput-gtk/src/lib.rs:486
 msgid "Not authorized: {error}"
 msgstr "Авторизация не выполнена: {error}"
 
-#: rustinput-gtk/src/lib.rs:492
+#: rustinput-gtk/src/lib.rs:493
 msgid "{address} connected"
 msgstr "{address} подключён"
 
-#: rustinput-gtk/src/lib.rs:499
+#: rustinput-gtk/src/lib.rs:500
 msgid "The mouse came from {address}"
 msgstr "Мышь перешла с {address}"
 
-#: rustinput-gtk/src/lib.rs:505
+#: rustinput-gtk/src/lib.rs:506
 msgid "{address} disconnected"
 msgstr "{address} отключён"
 
-#: rustinput-gtk/src/lib.rs:592
+#: rustinput-gtk/src/lib.rs:598
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Получено файлов с {name}: {count}, можно вставить"
 

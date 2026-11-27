@@ -410,16 +410,11 @@ fn proof(key: &[u8], side: &[u8]) -> Vec<u8> {
 
 /// the name the other device gave, made safe to show and store
 fn clean_name(name: &str, fingerprint: &str) -> String {
-    let name: String = name
-        .chars()
-        .filter(|c| !c.is_control())
-        .take(MAX_NAME)
-        .collect();
-    let name = name.trim();
+    let name = rustinput_ipc::plain_text(name, MAX_NAME);
     if name.is_empty() {
         short(fingerprint)
     } else {
-        name.to_owned()
+        name
     }
 }
 

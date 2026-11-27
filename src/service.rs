@@ -129,6 +129,11 @@ pub struct Service {
     discovered_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<Discovered>>,
     discovered: Vec<Discovered>,
     discovery_on: bool,
+    /// computers an authorized one told about, waiting for the user: by
+    /// fingerprint, who told and their name (0.41.0)
+    introductions: HashMap<String, (String, String)>,
+    /// those the user did not authorize, not asked about again in this run
+    declined_introductions: HashSet<String>,
     /// bytes and pings of the input channel, reported once a second
     netstats: NetStats,
     /// light or dark windows, as configured
@@ -354,6 +359,8 @@ impl Service {
             discovered_rx,
             discovered: Vec::new(),
             discovery_on,
+            introductions: HashMap::new(),
+            declined_introductions: HashSet::new(),
             netstats,
             theme,
             pairing,
@@ -530,6 +537,10 @@ impl Service {
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
             FrontendRequest::Discover(look) => self.discovery.look(look),
+            FrontendRequest::AnswerIntroduction {
+                fingerprint,
+                authorize,
+            } => self.answer_introduction(fingerprint, authorize),
             FrontendRequest::SetDiscovery(on) => {
                 self.discovery_on = on;
                 self.discovery.enable(on);
@@ -972,6 +983,18 @@ impl Service {
         self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
         self.notify_frontend(FrontendEvent::Discovery(self.discovery_on));
         self.report_discovered();
+        let introductions: Vec<FrontendEvent> = self
+            .introductions
+            .iter()
+            .map(|(fingerprint, (by, name))| FrontendEvent::Introduction {
+                by: by.clone(),
+                name: name.clone(),
+                fingerprint: fingerprint.clone(),
+            })
+            .collect();
+        for introduction in introductions {
+            self.notify_frontend(introduction);
+        }
         // what is still waiting for an answer
         self.asked.retain(|_, (reply, _)| !reply.is_closed());
         let questions: Vec<FrontendEvent> = self.asked.values().map(|(_, q)| q.clone()).collect();
@@ -1247,6 +1270,7 @@ impl Service {
             PairingEvent::Paired(Paired { fingerprint, name }) => {
                 self.add_authorized_key(name.clone(), fingerprint.clone());
                 self.save_config();
+                self.introduce_paired(&fingerprint, &name, None);
                 self.notify_frontend(FrontendEvent::Paired { fingerprint, name });
             }
             PairingEvent::NewCode { fingerprint, code } => {
@@ -1289,8 +1313,9 @@ impl Service {
         let result = match result {
             Ok(Paired { fingerprint, name }) => {
                 log::info!("paired with client {handle}: {name}");
-                self.add_authorized_key(name.clone(), fingerprint);
+                self.add_authorized_key(name.clone(), fingerprint.clone());
                 self.save_config();
+                self.introduce_paired(&fingerprint, &name, Some(handle));
                 Ok(name)
             }
             Err(e) => {
@@ -1299,6 +1324,115 @@ impl Service {
             }
         };
         self.notify_frontend(FrontendEvent::PairingResult { handle, result });
+    }
+
+    /// Tells the computers authorized here about the one this one was just
+    /// paired with, and that one about them when this one reaches it (it is
+    /// the client `paired`): each asks its user whether to authorize the
+    /// other too (0.41.0). Only clients that described themselves, so their
+    /// fingerprint is known and checked.
+    fn introduce_paired(&mut self, fingerprint: &str, name: &str, paired: Option<ClientHandle>) {
+        let keys = self.authorized_keys.read().expect("lock").clone();
+        let own = self.public_key_fingerprint.clone();
+        let mut told = HashSet::new();
+        for (handle, ..) in self.client_manager.get_client_states() {
+            if paired == Some(handle) {
+                continue;
+            }
+            // a client that did not describe itself yet (no window asked for
+            // the arrangement) is asked who it is first
+            let (known, peer_name) = self.peer(handle);
+            if let Some(known) = &known {
+                if !told.insert(known.clone()) {
+                    continue;
+                }
+            }
+            let (cert, addrs, keys) = (self.cert.clone(), self.client_addrs(handle), keys.clone());
+            let (name, fingerprint, own) = (name.to_owned(), fingerprint.to_owned(), own.clone());
+            tokio::task::spawn_local(async move {
+                let expected = match known {
+                    Some(known) => known,
+                    None => match arrangement::describe(cert.clone(), addrs.clone(), None).await {
+                        Ok((peer, _)) => peer,
+                        Err(_) => return,
+                    },
+                };
+                if expected == fingerprint || expected == own || !keys.contains_key(&expected) {
+                    return;
+                }
+                log::info!("telling {peer_name} about {name}, paired with this computer");
+                if let Err(e) =
+                    arrangement::introduce(cert, addrs, Some(expected), name, fingerprint).await
+                {
+                    log::info!("telling {peer_name} about a new computer: {e}");
+                }
+            });
+        }
+        let Some(handle) = paired else {
+            return;
+        };
+        let addrs = self.client_addrs(handle);
+        for (other, other_name) in keys {
+            if other == fingerprint || other == own {
+                continue;
+            }
+            let (cert, addrs, expected) =
+                (self.cert.clone(), addrs.clone(), fingerprint.to_owned());
+            let to = name.to_owned();
+            tokio::task::spawn_local(async move {
+                if let Err(e) =
+                    arrangement::introduce(cert, addrs, Some(expected), other_name, other).await
+                {
+                    log::info!("telling {to} about the other computers: {e}");
+                }
+            });
+        }
+    }
+
+    /// An authorized computer told about one it was paired with: the user
+    /// decides whether to authorize it here too, unless it is already, or
+    /// was not authorized when asked before.
+    fn introduced(&mut self, from: String, name: String, fingerprint: String) {
+        let known = fingerprint == self.public_key_fingerprint
+            || self
+                .authorized_keys
+                .read()
+                .expect("lock")
+                .contains_key(&fingerprint)
+            || self.declined_introductions.contains(&fingerprint)
+            || self.introductions.contains_key(&fingerprint);
+        if known || fingerprint.is_empty() {
+            return;
+        }
+        let by = self
+            .authorized_keys
+            .read()
+            .expect("lock")
+            .get(&from)
+            .cloned()
+            .unwrap_or_else(|| from.chars().take(11).collect());
+        log::info!("{by} tells about {name}, paired with it: asking");
+        self.introductions
+            .insert(fingerprint.clone(), (by.clone(), name.clone()));
+        self.notify_frontend(FrontendEvent::Introduction {
+            by,
+            name,
+            fingerprint,
+        });
+    }
+
+    fn answer_introduction(&mut self, fingerprint: String, authorize: bool) {
+        let Some((by, name)) = self.introductions.remove(&fingerprint) else {
+            return;
+        };
+        if authorize {
+            log::info!("{name}, introduced by {by}, authorized");
+            self.add_authorized_key(name, fingerprint);
+            self.save_config();
+        } else {
+            log::info!("{name}, introduced by {by}, not authorized");
+            self.declined_introductions.insert(fingerprint);
+        }
     }
 
     fn add_authorized_key(&mut self, desc: String, fp: String) {
@@ -1777,6 +1911,14 @@ impl Service {
                 from,
                 addr,
             } => (layout, you, from, addr),
+            ArrangementEvent::Introduce {
+                from,
+                name,
+                fingerprint,
+            } => {
+                self.introduced(from, name, fingerprint);
+                return;
+            }
             ArrangementEvent::Identify { addr } => {
                 log::info!("{addr} asks to show the numbers of the monitors");
                 crate::identify::show(self.name.clone());

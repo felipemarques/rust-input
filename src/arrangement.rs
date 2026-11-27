@@ -21,6 +21,10 @@
 //! - [`Message::Fetch`]: the other device sends what its clipboard holds,
 //!   if it still holds `hash`: text and images after the answer, files as a
 //!   file transfer.
+//! - [`Message::Introduce`] (0.41.0): the asking device was paired with
+//!   another one, or is telling one it was paired with about the others: the
+//!   user of this one decides whether to authorize it too. An older
+//!   RustInput closes the connection.
 //!
 //! All are answered only to authorized devices: an arrangement changes
 //! where the pointer goes, the monitors are no business of strangers, and
@@ -132,6 +136,12 @@ enum Message {
     FilesSent {
         count: u64,
     },
+    /// a device authorized on the asking one (0.41.0)
+    Introduce {
+        name: String,
+        fingerprint: String,
+    },
+    Introduced,
 }
 
 /// a device as it describes itself
@@ -174,6 +184,13 @@ pub(crate) enum ArrangementEvent {
         /// the history too, unless the asker knows this version of it
         history: Option<u64>,
         done: oneshot::Sender<(Option<ClipboardSeen>, Option<HistoryAnswer>)>,
+    },
+    /// the authorized device with the certificate `from` tells about the
+    /// device `fingerprint` called `name`, authorized on it (0.41.0)
+    Introduce {
+        from: String,
+        name: String,
+        fingerprint: String,
     },
     /// the authorized device with the certificate `from` asks for what the
     /// clipboard holds, if it still holds `hash`
@@ -273,6 +290,16 @@ impl Arrangement {
             Message::Identify => {
                 let _ = self.events.send(ArrangementEvent::Identify { addr });
                 Message::Identified
+            }
+            Message::Introduce { name, fingerprint } => {
+                let name = rustinput_ipc::plain_text(&name, MAX_NAME);
+                let fingerprint = rustinput_ipc::plain_text(&fingerprint, 128);
+                let _ = self.events.send(ArrangementEvent::Introduce {
+                    from: peer.to_owned(),
+                    name,
+                    fingerprint,
+                });
+                Message::Introduced
             }
             Message::Lock => {
                 let (done, result) = oneshot::channel();
@@ -380,7 +407,9 @@ pub(crate) async fn describe(
 ) -> Result<(String, Description), ArrangeError> {
     match ask(cert, addrs, expected, Message::Describe).await? {
         (peer, Message::Description(mut description)) => {
-            description.name.truncate(MAX_NAME);
+            // by characters: a long name in Japanese must not be cut in
+            // the middle of one
+            description.name = rustinput_ipc::plain_text(&description.name, MAX_NAME);
             Ok((peer, description))
         }
         (_, Message::Refused { reason }) => Err(ArrangeError::Refused(reason)),
@@ -411,6 +440,30 @@ pub(crate) async fn identify(
 ) -> Result<(), ArrangeError> {
     match ask(cert, addrs, expected, Message::Identify).await {
         Ok((_, Message::Identified)) => Ok(()),
+        Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// tells the device at one of `addrs` about the device `fingerprint` called
+/// `name`, authorized here (0.41.0)
+pub(crate) async fn introduce(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: Option<String>,
+    name: String,
+    fingerprint: String,
+) -> Result<(), ArrangeError> {
+    match ask(
+        cert,
+        addrs,
+        expected,
+        Message::Introduce { name, fingerprint },
+    )
+    .await
+    {
+        Ok((_, Message::Introduced)) => Ok(()),
         Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
         Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
         Err(e) => Err(older(e)),
@@ -810,6 +863,52 @@ mod tests {
             rx.recv().await.unwrap(),
             ArrangementEvent::Identify { .. }
         ));
+    }
+
+    #[test]
+    fn long_names_are_cut_between_characters() {
+        let name = "デスクトップ".repeat(20);
+        let cut = rustinput_ipc::plain_text(&name, MAX_NAME);
+        assert_eq!(cut.chars().count(), MAX_NAME);
+        assert_eq!(
+            rustinput_ipc::plain_text(" a\u{202e}b\u{2066}c ", 10),
+            "abc"
+        );
+    }
+
+    #[tokio::test]
+    async fn introductions_come_from_authorized_devices_only() {
+        let (tx, mut rx) = channel();
+        let arrangement = Arrangement::new("xeon".into(), 0, tx);
+        let introduce = || Message::Introduce {
+            name: format!("desk\u{202e}top{}", "x".repeat(100)),
+            fingerprint: "aa:bb".into(),
+        };
+        assert!(matches!(
+            exchange(&arrangement, introduce(), false).await,
+            Message::Refused { .. }
+        ));
+        assert!(
+            timeout(Duration::from_millis(50), rx.recv()).await.is_err(),
+            "nothing from a stranger"
+        );
+        assert!(matches!(
+            exchange(&arrangement, introduce(), true).await,
+            Message::Introduced
+        ));
+        match rx.recv().await.unwrap() {
+            ArrangementEvent::Introduce {
+                from,
+                name,
+                fingerprint,
+            } => {
+                assert_eq!((from.as_str(), fingerprint.as_str()), ("peer", "aa:bb"));
+                // no control characters, not too long
+                assert!(name.starts_with("desktop"));
+                assert_eq!(name.chars().count(), MAX_NAME);
+            }
+            _ => panic!("an introduction"),
+        }
     }
 
     /// one question over an in-memory stream, the answer with what follows

@@ -5,6 +5,7 @@ mod client_object;
 mod client_row;
 mod fingerprint_window;
 mod i18n;
+mod introduction;
 mod key_object;
 mod key_row;
 mod link_stats;
@@ -562,6 +563,11 @@ fn build_ui(app: &Application) {
                     }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::Discovered(found) => window.set_discovered(found),
+                    FrontendEvent::Introduction {
+                        by,
+                        name,
+                        fingerprint,
+                    } => introduction::ask(&window, &by, &name, &fingerprint),
                     FrontendEvent::Discovery(on) => window.set_discovery(on),
                     FrontendEvent::AskTransfer {
                         id,

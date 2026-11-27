@@ -490,6 +490,23 @@ new one shown. On success both devices add each other to
 `authorized_fingerprints`, named with the name the other one sent (its host
 name, without control characters, at most 64 characters).
 
+### The rest of the group (0.41.0)
+
+After a pairing succeeds, each side tells the clients it has authorized
+about the other one with `Message::Introduce { name, fingerprint }` on the
+arrangement channel (a client that did not describe itself yet is asked
+`Describe` first, so its fingerprint is known and checked), and the side
+that started the pairing also tells the new device about every other
+fingerprint it has authorized. The receiving side takes an introduction
+only from an authorized device, ignores what it already authorizes (or
+was told no about in this run), and asks the windows with
+`FrontendEvent::Introduction { by, name, fingerprint }`, answered with
+`FrontendRequest::AnswerIntroduction`. Open questions are sent again to a
+window that connects. Names from other devices go through `plain_text`
+(no control characters nor those that turn the text around, at most 64
+characters, cut between characters), as in pairing, discovery and the
+descriptions.
+
 ## Radial menu
 
 Holding Ctrl and the left Alt alone for 250 ms shows a wheel of actions (see
