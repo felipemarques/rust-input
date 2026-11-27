@@ -530,6 +530,18 @@ went down; the right Shift alone fires on its release when it was held 3 s
   from another one (it releases that one first). Nothing moves while
   paused.
 
+## The tray icon and where the pointer is (0.43.0)
+
+The window keeps the active clients (`Window::active_computers`) and where
+the pointer is (`FrontendEvent::PointerAt`) and hands them to the tray:
+the menu lists this computer and the active clients as check items, and
+picking one sends `FrontendRequest::GoTo(Option<ClientHandle>)`, which the
+service carries out like a keyboard shortcut (`Capture::switch`, or
+`Capture::release` for this computer). While the pointer is on a client
+the icon has a blue sign with an arrow at the bottom right (where the pause
+sign goes; paused, the pointer is always here) and the tooltip names the
+client.
+
 ## Radial menu
 
 Holding Ctrl and the left Alt alone for 250 ms shows a wheel of actions (see

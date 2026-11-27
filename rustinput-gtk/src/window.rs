@@ -464,6 +464,25 @@ impl Window {
             .expect("Could not get authorized")
     }
 
+    /// the active clients by handle with their names, for the menu of the
+    /// tray icon (macOS has its own menu bar item, without them)
+    #[cfg_attr(target_os = "macos", allow(dead_code))]
+    pub(crate) fn active_computers(&self) -> Vec<(ClientHandle, String)> {
+        (0..self.clients().n_items())
+            .filter_map(|i| self.client_by_idx(i))
+            .map(|c| c.get_data())
+            .filter(|d| d.active)
+            .map(|d| {
+                let name = d
+                    .hostname
+                    .clone()
+                    .or_else(|| d.ips.first().cloned())
+                    .unwrap_or_else(|| format!("{}", d.handle));
+                (d.handle, rustinput_ipc::plain_text(&name, 64))
+            })
+            .collect()
+    }
+
     fn client_by_idx(&self, idx: u32) -> Option<ClientObject> {
         self.clients().item(idx).map(|o| o.downcast().unwrap())
     }

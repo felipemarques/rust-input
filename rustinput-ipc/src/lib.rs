@@ -797,6 +797,9 @@ pub enum FrontendRequest {
     /// switches the keyboard shortcuts to move between the computers on or
     /// off
     SetHotkeys(bool),
+    /// moves the mouse and keyboard to this computer (`None`) or to a client
+    /// without crossing an edge (from the tray icon, 0.43.0)
+    GoTo(Option<ClientHandle>),
     /// the answer to [`FrontendEvent::Introduction`] of `fingerprint`
     AnswerIntroduction {
         fingerprint: String,

@@ -29,7 +29,7 @@ use adw::Application;
 use gtk::{glib, glib::clone, prelude::*};
 use rustinput_ipc::{FileOptions, FrontendRequest, TransferInfo, TransferState};
 
-pub(crate) use action::{Summary, TrayAction};
+pub(crate) use action::{Computer, Summary, TrayAction};
 
 use crate::{
     i18n::{tr, trf, trn},
@@ -52,6 +52,10 @@ pub(crate) struct Tray {
     update: RefCell<Option<String>>,
     /// whether RustInput is paused, once the service said
     paused: Cell<Option<bool>>,
+    /// the active clients, by handle with their names
+    computers: RefCell<Vec<(u64, String)>>,
+    /// the client the mouse and keyboard are on
+    pointer_at: Cell<Option<u64>>,
 }
 
 impl Tray {
@@ -79,6 +83,20 @@ impl Tray {
         self.refresh();
     }
 
+    /// the active clients, to move the mouse and keyboard to from the menu
+    pub(crate) fn show_computers(&self, computers: Vec<(u64, String)>) {
+        if *self.computers.borrow() != computers {
+            self.computers.replace(computers);
+            self.refresh();
+        }
+    }
+
+    /// the client the mouse and keyboard are on, `None` for this computer
+    pub(crate) fn show_pointer(&self, at: Option<u64>) {
+        self.pointer_at.set(at);
+        self.refresh();
+    }
+
     /// Shows `title` and `text` as a balloon of the icon, which Windows 10
     /// and 11 show as a notification; clicking it shows the window.
     #[cfg(windows)]
@@ -98,6 +116,26 @@ impl Tray {
                 summary.update_status = Some(crate::notification::title(version));
             }
             summary.paused = self.paused.get();
+            let at = self.pointer_at.get();
+            let computers = self.computers.borrow();
+            summary.away = computers
+                .iter()
+                .find(|(h, _)| Some(*h) == at)
+                .map(|(_, name)| name.clone());
+            if !computers.is_empty() {
+                summary.computers = std::iter::once(Computer {
+                    handle: None,
+                    name: tr("This computer").into(),
+                    here: summary.away.is_none(),
+                })
+                .chain(computers.iter().map(|(h, name)| Computer {
+                    handle: Some(*h),
+                    name: name.clone(),
+                    here: Some(*h) == at,
+                }))
+                .collect();
+            }
+            drop(computers);
             handle.show(summary);
         }
     }
@@ -125,6 +163,8 @@ pub(crate) fn setup(
         options: Default::default(),
         update: Default::default(),
         paused: Default::default(),
+        computers: Default::default(),
+        pointer_at: Default::default(),
     });
 
     // whether the icon is on screen right now
@@ -178,6 +218,7 @@ pub(crate) fn setup(
                     TrayAction::ShowClipboards => window.show_clipboards(),
                     TrayAction::Update => window.install_update(),
                     TrayAction::TogglePause => window.request_pause(!window.is_paused()),
+                    TrayAction::GoTo(handle) => window.request(FrontendRequest::GoTo(handle)),
                     TrayAction::ToggleSendCopied => {
                         if let Some(options) = window.file_options() {
                             window.request(FrontendRequest::SetFileOptions(FileOptions {
@@ -211,6 +252,11 @@ pub(crate) fn pause_label(paused: bool) -> &'static str {
 /// the tooltip line while paused
 pub(crate) fn paused_status() -> &'static str {
     tr("Paused: the mouse and keyboard stay on this computer")
+}
+
+/// the tooltip line while the mouse and keyboard are on the computer `name`
+pub(crate) fn away_status(name: &str) -> String {
+    trf("The mouse and keyboard are on {name}", &[("name", &name)])
 }
 
 fn percent(t: &TransferInfo) -> u64 {
@@ -355,6 +401,8 @@ pub(crate) fn summary(
         update: None,
         update_status: None,
         paused: None,
+        computers: Vec::new(),
+        away: None,
     }
 }
 

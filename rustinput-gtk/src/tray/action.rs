@@ -17,6 +17,8 @@ pub(crate) enum TrayAction {
     Update,
     /// pause RustInput, or let it go on
     TogglePause,
+    /// the mouse and keyboard to this computer (`None`) or to a client
+    GoTo(Option<u64>),
     /// The tray icon disappeared or came back, for example because the
     /// panel showing it restarted. While it is gone, closing the window
     /// quits RustInput as there would be no way to get the window back.
@@ -43,4 +45,20 @@ pub(crate) struct Summary {
     pub(crate) update_status: Option<String>,
     /// whether RustInput is paused, `None` until the service said
     pub(crate) paused: Option<bool>,
+    /// this computer and the active clients, to move the mouse and keyboard
+    /// to (0.43.0); empty without clients
+    pub(crate) computers: Vec<Computer>,
+    /// the name of the computer the mouse and keyboard are on, when not this
+    /// one: the icon has a blue sign with an arrow
+    pub(crate) away: Option<String>,
+}
+
+/// a computer of the menu of the icon
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct Computer {
+    /// the client, `None` for this computer
+    pub(crate) handle: Option<u64>,
+    pub(crate) name: String,
+    /// the mouse and keyboard are on it
+    pub(crate) here: bool,
 }

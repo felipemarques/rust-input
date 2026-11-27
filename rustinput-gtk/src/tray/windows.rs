@@ -32,7 +32,7 @@ use windows_sys::Win32::{
     },
 };
 
-use super::{Summary, TrayAction, icon, pause_label, paused_status};
+use super::{Summary, TrayAction, away_status, icon, pause_label, paused_status};
 use crate::i18n::tr;
 
 /// size of the icon handed to Windows, which scales it to the notification
@@ -67,6 +67,8 @@ const TRANSFERS: &str = "transfers";
 const CLIPBOARDS: &str = "clipboards";
 const UPDATE: &str = "update";
 const PAUSE: &str = "pause";
+/// the menu items of the computers: "goto-here", "goto-<handle>"
+const GOTO: &str = "goto-";
 
 /// state handed from GTK to the tray thread
 #[derive(Default)]
@@ -159,6 +161,23 @@ fn menu(label: &str, transfers: &Summary) -> Result<Menu, String> {
     let add = |item: &dyn tray_icon::menu::IsMenuItem| menu.append(item).map_err(|e| e.to_string());
     add(&MenuItem::new(label, false, None))?;
     add(&PredefinedMenuItem::separator())?;
+    if !transfers.computers.is_empty() {
+        add(&MenuItem::new(tr("Mouse and keyboard on:"), false, None))?;
+        for computer in &transfers.computers {
+            let id = match computer.handle {
+                Some(handle) => format!("{GOTO}{handle}"),
+                None => format!("{GOTO}here"),
+            };
+            add(&CheckMenuItem::with_id(
+                id,
+                &computer.name,
+                true,
+                computer.here,
+                None,
+            ))?;
+        }
+        add(&PredefinedMenuItem::separator())?;
+    }
     if let Some(paused) = transfers.paused {
         add(&MenuItem::with_id(PAUSE, pause_label(paused), true, None))?;
         add(&PredefinedMenuItem::separator())?;
@@ -214,6 +233,9 @@ fn tooltip(label: &str, transfers: &Summary) -> String {
     if transfers.paused == Some(true) {
         text = format!("{text}\n{}", paused_status());
     }
+    if let Some(name) = &transfers.away {
+        text = format!("{text}\n{}", away_status(name));
+    }
     if let Some(update) = &transfers.update_status {
         text = format!("{text}\n{update}");
     }
@@ -224,10 +246,11 @@ fn tooltip(label: &str, transfers: &Summary) -> String {
 }
 
 /// the icon for the notification area: grey with a pause sign while paused,
-/// a green sign with an arrow up when a new version is out
-fn tray_icon(paused: bool, new: bool) -> Result<Icon, String> {
+/// a blue sign with an arrow while the mouse and keyboard are on another
+/// computer, a green sign with an arrow up when a new version is out
+fn tray_icon(paused: bool, new: bool, away: bool) -> Result<Icon, String> {
     let icon = icon::icon(ICON_SIZE).ok_or("no tray icon could be decoded")?;
-    let icon = icon::look(&icon, paused, new);
+    let icon = icon::look(&icon, paused, new, away);
     Icon::from_rgba(icon.pixels, icon.width, icon.height).map_err(|e| e.to_string())
 }
 
@@ -279,7 +302,7 @@ unsafe extern "system" fn balloon_clicks(
 }
 
 fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> {
-    let icon = tray_icon(false, false)?;
+    let icon = tray_icon(false, false, false)?;
     let _ = BALLOON_CLICKS.set(actions.clone());
 
     // The handlers are global and run on this thread. Only the first call
@@ -295,7 +318,14 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
             CLIPBOARDS => TrayAction::ShowClipboards,
             UPDATE => TrayAction::Update,
             PAUSE => TrayAction::TogglePause,
-            _ => return,
+            id => match id.strip_prefix(GOTO) {
+                Some("here") => TrayAction::GoTo(None),
+                Some(handle) => match handle.parse() {
+                    Ok(handle) => TrayAction::GoTo(Some(handle)),
+                    Err(_) => return,
+                },
+                None => return,
+            },
         };
         let _ = menu_actions.try_send(action);
     }));
@@ -333,8 +363,9 @@ fn create(actions: Sender<TrayAction>, label: &str) -> Result<TrayIcon, String> 
 
 fn run_message_loop(tray: &TrayIcon, label: &str, shared: &Mutex<Shared>) {
     let mut msg: MSG = unsafe { std::mem::zeroed() };
-    // whether the icon shows RustInput paused, and a new version
-    let mut shown = (false, false);
+    // whether the icon shows RustInput paused, a new version, and the mouse
+    // and keyboard on another computer
+    let mut shown = (false, false, false);
     // GetMessageW returns 0 for WM_QUIT and -1 on errors
     while unsafe { GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) } > 0 {
         if msg.hwnd.is_null() && msg.message == WM_TRANSFERS {
@@ -347,9 +378,13 @@ fn run_message_loop(tray: &TrayIcon, label: &str, shared: &Mutex<Shared>) {
                 if let Err(e) = tray.set_tooltip(Some(tooltip(label, &transfers))) {
                     log::debug!("could not update the tray tooltip: {e}");
                 }
-                let look = (transfers.paused == Some(true), transfers.update.is_some());
+                let look = (
+                    transfers.paused == Some(true),
+                    transfers.update.is_some(),
+                    transfers.away.is_some(),
+                );
                 if look != shown {
-                    match tray_icon(look.0, look.1)
+                    match tray_icon(look.0, look.1, look.2)
                         .and_then(|icon| tray.set_icon(Some(icon)).map_err(|e| e.to_string()))
                     {
                         Ok(()) => shown = look,
