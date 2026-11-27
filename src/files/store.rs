@@ -357,17 +357,28 @@ impl Receiving {
         };
         if let Some(root) = found {
             let kept = resume_file(&root);
-            let touched = kept.clone();
-            let (mut receiving, position) = tokio::task::spawn_blocking(move || {
+            let (touched, again, entries) = (kept.clone(), root.clone(), checked.clone());
+            let reopened = tokio::task::spawn_blocking(move || {
                 // touched, so that it is not taken for forgotten
                 let _ = open_plain(&touched, true).and_then(|f| f.set_modified(SystemTime::now()));
-                Self::reopen(root, checked)
+                Self::reopen(again, entries)
             })
             .await
-            .map_err(io::Error::other)??;
-            receiving.kept = Some(kept);
-            receiving.waiting = Some(position);
-            return Ok((receiving, position));
+            .map_err(io::Error::other)?;
+            match reopened {
+                Ok((mut receiving, position)) => {
+                    receiving.kept = Some(kept);
+                    receiving.waiting = Some(position);
+                    return Ok((receiving, position));
+                }
+                // what was kept can not be gone on with: from the start
+                Err(e) => {
+                    log::warn!("{root:?}: can not go on with it ({e}), the files come again");
+                    tokio::task::spawn_blocking(move || remove_partial(&root))
+                        .await
+                        .map_err(io::Error::other)?;
+                }
+            }
         }
         let mut receiving = Self::create(dir, id, checked).await?;
         let kept = resume_file(&receiving.root);
@@ -399,6 +410,20 @@ impl Receiving {
     /// the first one that is shorter than it should be (or missing). What
     /// comes after it is removed, so it can be created again. Blocking.
     fn reopen(root: PathBuf, entries: Vec<(Entry, PathBuf)>) -> io::Result<(Self, Position)> {
+        // Every folder inside the transfer is an entry: one that is not a
+        // folder any more (a link, a junction) could lead the writes outside.
+        for (entry, relative) in &entries {
+            if entry.dir {
+                if let Ok(m) = fs::symlink_metadata(root.join(relative)) {
+                    if !m.is_dir() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::PermissionDenied,
+                            format!("{relative:?} is not a folder any more"),
+                        ));
+                    }
+                }
+            }
+        }
         let mut position = Position::default();
         let (mut files_done, mut bytes_done) = (0, 0);
         let mut next = entries.len();
@@ -495,10 +520,14 @@ impl Receiving {
         if self.next < self.entries.len() {
             let (entry, relative) = &self.entries[self.next];
             let path = self.root.join(relative);
-            if at.offset > 0 && offset == 0 {
-                // what is here is not what the sender has
+            if offset == 0 && !entry.dir {
+                // from its start: what is here (nothing of it yet, the file
+                // created when the one before was complete, or what the
+                // sender does not have) goes
                 self.bytes_done -= at.offset;
-                tokio::fs::remove_file(&path).await?;
+                if fs::symlink_metadata(&path).is_ok() {
+                    tokio::fs::remove_file(&path).await?;
+                }
             } else if offset > 0 {
                 let (size, modified) = (entry.size, entry.modified);
                 let opened = path.clone();
@@ -996,6 +1025,85 @@ mod tests {
                 "nothing written through it"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn lost_between_two_files_goes_on_with_the_next() {
+        let dir = tempfile::tempdir().unwrap();
+        let entries = vec![
+            entry("Pasta", true, 0),
+            entry("Pasta/a.txt", false, 4),
+            entry("Pasta/b.txt", false, 4),
+        ];
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        // a.txt is complete, b.txt is created and empty
+        receiving.write(b"aaaa").await.unwrap();
+        let root = receiving.partial();
+        drop(receiving);
+        assert_eq!(fs::metadata(root.join("Pasta/b.txt")).unwrap().len(), 0);
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 2, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (1, 0));
+        receiving.begin(1, 0).await.unwrap();
+        receiving.write(b"bbbb").await.unwrap();
+        assert!(receiving.is_complete());
+        let top = receiving.finish();
+        assert_eq!(fs::read(top[0].join("b.txt")).unwrap(), b"bbbb");
+        // lost right after the sender said where it begins
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 3, "fp", "k2", entries.clone())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        drop(receiving);
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 4, "fp", "k2", entries)
+            .await
+            .unwrap();
+        assert_eq!((at.file, at.offset), (0, 0));
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"aaaa").await.unwrap();
+        receiving.write(b"bbbb").await.unwrap();
+        assert!(receiving.is_complete());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_kept_folder_with_a_link_inside_starts_anew() {
+        let dir = tempfile::tempdir().unwrap();
+        let elsewhere = tempfile::tempdir().unwrap();
+        fs::write(elsewhere.path().join("b.txt"), b"bb").unwrap();
+        let entries = vec![
+            entry("Pasta", true, 0),
+            entry("Pasta/a.txt", false, 4),
+            entry("Pasta/b.txt", false, 4),
+        ];
+        let (mut receiving, _) = Receiving::resumable(dir.path(), 1, "fp", "k", entries.clone())
+            .await
+            .unwrap();
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"aaaa").await.unwrap();
+        let root = receiving.partial();
+        drop(receiving);
+        // the folder becomes a link to somewhere else
+        fs::remove_dir_all(root.join("Pasta")).unwrap();
+        std::os::unix::fs::symlink(elsewhere.path(), root.join("Pasta")).unwrap();
+        let (mut receiving, at) = Receiving::resumable(dir.path(), 2, "fp", "k", entries)
+            .await
+            .unwrap();
+        assert_eq!(at, Position::default(), "from the start, in a new folder");
+        assert!(!root.exists() && !resume_file(&root).exists());
+        receiving.begin(0, 0).await.unwrap();
+        receiving.write(b"aaaa").await.unwrap();
+        receiving.write(b"bbbb").await.unwrap();
+        assert!(receiving.is_complete());
+        assert_eq!(fs::read(elsewhere.path().join("b.txt")).unwrap(), b"bb");
+        assert!(
+            elsewhere.path().join("b.txt").exists(),
+            "nothing removed there"
+        );
     }
 
     #[cfg(unix)]

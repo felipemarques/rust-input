@@ -269,8 +269,11 @@ sequenceDiagram
   file before `file` (counting files only) is complete, and `offset` bytes
   of that one are there, found from the sizes on disk; `tail` is the
   SHA-256 of the last bytes before `offset` (up to 4 MiB). Files after it
-  that are there are removed, a longer file is had again. A new transfer
-  answers `AcceptAt(0, 0)`.
+  that are there are removed, a longer file is had again, and so is the
+  empty file created when the one before it was complete. A kept folder
+  with a link where one of its folders was is not gone on with: it is
+  removed and the files come again. A new transfer answers
+  `AcceptAt(0, 0)`.
 - The sender checks that file: unchanged (size and modification time of the
   offer) and with the same last bytes, it begins there; with different last
   bytes it begins at the start of that file; a changed file ends the
@@ -282,13 +285,21 @@ sequenceDiagram
   The input channel usually times out too, which removes the peer, so the
   side that opened the file channel keeps its address while a resumable
   transfer with that device waits (`standby`) and connects again every
-  5 seconds, without waiting for the pointer to cross. The receiver shows
-  the transfer as interrupted, and the same entry goes on when it is offered
-  again.
-- Cancelled on the receiver while interrupted, what arrived is removed and
-  an offer with `continued` of that key from that device is declined for
-  the rest of the run; one without (the user sent the files again) is
-  taken. Partial folders outlive restarts and are removed by the cleanup at
+  5 seconds for 2 minutes, then every minute, without waiting for the
+  pointer to cross. The receiver shows the transfer as interrupted, and the
+  same entry goes on when it is offered again. The same files go to the
+  same device one transfer at a time, and a device that came back without
+  `CAP_FILE_RESUME` gets a plain `Offer`.
+- A receiver still holding the transfer on another connection (a dead one
+  it has not noticed, as after a sleep) closes that one and takes the
+  offer. Offered again by itself after it had arrived (its `Complete` was
+  lost), it is declined with "already received", which the sender takes
+  for `Complete`; the receiver hands the files to the clipboard before it
+  answers `Complete`.
+- Cancelled on the receiver while interrupted (also with "Cancel all" and
+  "Remove unpasted files"), what arrived is removed and an offer with
+  `continued` of that key from that device is declined for the rest of the
+  run; one without (the user sent the files again) is taken. Partial folders outlive restarts and are removed by the cleanup at
   startup once their `.resume` was not touched for 7 days.
 - The daemon may write as SYSTEM in the folder of the user: files kept to go
   on with are opened without following links (`O_NOFOLLOW`,

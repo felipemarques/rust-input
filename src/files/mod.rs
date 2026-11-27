@@ -81,6 +81,17 @@ const MAX_HISTORY: usize = 100;
 const WRITE_QUEUE: usize = 8;
 /// why a transfer stopped when its connection went away
 const LOST: &str = "the connection was lost";
+/// A resumable transfer offered again by itself that had arrived already
+/// (its `Complete` was lost with the connection): the sender takes this
+/// `Decline` for the `Complete`.
+const ALREADY_RECEIVED: &str = "already received";
+/// how long the device of a waiting transfer is tried every
+/// [`RECONNECT_DELAY`], then every [`STANDBY_DELAY`]
+const STANDBY_EAGER: Duration = Duration::from_secs(2 * 60);
+const STANDBY_DELAY: Duration = Duration::from_secs(60);
+/// how long an offer waits for another connection that held the same
+/// transfer to be closed
+const PREEMPT_WAIT: Duration = Duration::from_secs(3);
 
 type Stream = TlsStream<TcpStream>;
 
@@ -228,6 +239,7 @@ pub(crate) fn spawn(
         standby: HashMap::new(),
         busy: Default::default(),
         refused: Default::default(),
+        received_tags: Default::default(),
         history: Vec::new(),
         explicit: Vec::new(),
         explicit_at: None,
@@ -418,6 +430,14 @@ enum Internal {
     Closed {
         conn: u64,
     },
+    /// The resumable transfer "<fingerprint>/<key>" is offered again on
+    /// `conn` while another connection still receives it: that one is dead
+    /// without knowing it (the sender only offers it on one connection at a
+    /// time), and is closed.
+    Preempt {
+        conn: u64,
+        tag: String,
+    },
 }
 
 struct Task {
@@ -446,12 +466,14 @@ struct Task {
     /// waits for its connection, by fingerprint: when the input channel is
     /// gone as well, the device is no longer among `peers`, and the
     /// transfer would only go on once the pointer crosses to it.
-    standby: HashMap<String, SocketAddr>,
+    standby: HashMap<String, (SocketAddr, Instant)>,
     /// resumable transfers being received, see [`Busy`]
     busy: Rc<RefCell<HashSet<String>>>,
     /// resumable transfers cancelled here, "<fingerprint>/<key>": offered
     /// again, they are refused
     refused: Rc<RefCell<HashSet<String>>>,
+    /// resumable transfers received in this run
+    received_tags: Rc<RefCell<HashSet<String>>>,
     history: Vec<Record>,
     /// chosen in a file manager, waiting for the rest of the selection
     explicit: Vec<PathBuf>,
@@ -657,7 +679,7 @@ impl Task {
             .values()
             .find(|p| p.fingerprint == fingerprint && p.connect_to.is_some())
             .and_then(|p| p.connect_to)
-            .or_else(|| self.standby.get(&fingerprint).copied())
+            .or_else(|| self.standby.get(&fingerprint).map(|(addr, _)| *addr))
         else {
             return;
         };
@@ -805,6 +827,25 @@ impl Task {
                 self.receive_failed(conn, id, peer, progress, reason);
             }
             Internal::Closed { conn } => self.closed(conn),
+            Internal::Preempt { conn, tag } => {
+                let stale: Vec<u64> = self
+                    .conns
+                    .iter()
+                    .filter(|(&c, _)| c != conn)
+                    .filter(|(_, c)| {
+                        c.receiving
+                            .borrow()
+                            .as_ref()
+                            .and_then(|r| r.kept.as_ref())
+                            .is_some_and(|(t, _)| *t == tag)
+                    })
+                    .map(|(&c, _)| c)
+                    .collect();
+                for c in stale {
+                    log::info!("file channel: the transfer goes on over a newer connection");
+                    self.closed(c);
+                }
+            }
         }
     }
 
@@ -857,6 +898,7 @@ impl Task {
         if initiated {
             self.connecting.remove(&fingerprint);
         }
+        self.standby.remove(&fingerprint);
         // a newer connection replaces the previous one
         if let Some(old) = self.conn_for(&fingerprint, initiated) {
             self.closed(old);
@@ -881,6 +923,7 @@ impl Task {
                 internal: self.internal_tx.clone(),
                 busy: self.busy.clone(),
                 refused: self.refused.clone(),
+                received: self.received_tags.clone(),
             },
             reader,
         ));
@@ -935,7 +978,10 @@ impl Task {
         if closed.initiated {
             if let Some(addr) = closed.addr {
                 if self.waiting_for(&closed.fingerprint) {
-                    self.standby.insert(closed.fingerprint.clone(), addr);
+                    self.standby
+                        .entry(closed.fingerprint.clone())
+                        .or_insert((addr, Instant::now()))
+                        .0 = addr;
                 }
             }
             self.retry_later(closed.fingerprint.clone());
@@ -966,12 +1012,16 @@ impl Task {
         if !self.waiting_for(&fingerprint) {
             self.standby.remove(&fingerprint);
         }
-        if !peer && !self.standby.contains_key(&fingerprint) {
-            return;
-        }
+        // only for a waiting transfer: more seldom after a while
+        let delay = match (peer, self.standby.get(&fingerprint)) {
+            (true, _) => RECONNECT_DELAY,
+            (false, Some((_, since))) if since.elapsed() < STANDBY_EAGER => RECONNECT_DELAY,
+            (false, Some(_)) => STANDBY_DELAY,
+            (false, None) => return,
+        };
         let internal = self.internal_tx.clone();
         spawn_local(async move {
-            tokio::time::sleep(RECONNECT_DELAY).await;
+            tokio::time::sleep(delay).await;
             let _ = internal.send(Internal::Retry { fingerprint });
         });
     }
@@ -1033,6 +1083,11 @@ impl Task {
                 });
                 outgoing.state = OutState::Streaming(conn, task);
             }
+            Frame::Decline { reason, .. }
+                if reason == ALREADY_RECEIVED && self.outgoing[index].key.is_some() =>
+            {
+                self.delivered(index);
+            }
             Frame::Decline { reason, .. } => {
                 let peer = self.name(&self.outgoing[index].fingerprint);
                 self.fail_outgoing(id, format!("{peer} refused the files: {reason}"));
@@ -1042,25 +1097,34 @@ impl Task {
                 let peer = self.name(&self.outgoing[index].fingerprint);
                 self.fail_outgoing(id, format!("cancelled on {peer}"));
             }
-            Frame::Complete { .. } => {
-                let outgoing = self.outgoing.remove(index);
-                let peer = self.name(&outgoing.fingerprint);
-                let progress = outgoing.progress.borrow().clone();
-                log::info!("{} file(s) delivered to {peer}", progress.files);
-                self.finished(Finished {
-                    uid: outgoing.uid,
-                    sending: true,
-                    peer,
-                    progress,
-                    state: TransferState::Done,
-                    started_ms: outgoing.started_ms,
-                    listing: outgoing.listing,
-                    paths: Vec::new(),
-                });
-                self.start_next();
-            }
+            Frame::Complete { .. } => self.delivered(index),
             frame => log::debug!("file channel: unexpected {frame:?}"),
         }
+    }
+
+    /// the receiver has everything of the outgoing transfer at `index`
+    fn delivered(&mut self, index: usize) {
+        let outgoing = self.outgoing.remove(index);
+        if let OutState::Streaming(_, task) = &outgoing.state {
+            task.abort();
+        }
+        let peer = self.name(&outgoing.fingerprint);
+        let mut progress = outgoing.progress.borrow().clone();
+        progress.files_done = progress.files;
+        progress.bytes_done = progress.bytes;
+        progress.current = None;
+        log::info!("{} file(s) delivered to {peer}", progress.files);
+        self.finished(Finished {
+            uid: outgoing.uid,
+            sending: true,
+            peer,
+            progress,
+            state: TransferState::Done,
+            started_ms: outgoing.started_ms,
+            listing: outgoing.listing,
+            paths: Vec::new(),
+        });
+        self.start_next();
     }
 
     /// writes a frame about the outgoing transfer `id` on its connection
@@ -1104,10 +1168,34 @@ impl Task {
     /// offers the next waiting transfer on every idle connection
     fn start_next(&mut self) {
         let busy: HashSet<u64> = self.outgoing.iter().filter_map(Outgoing::conn).collect();
+        // the same files to the same device go one after the other: the
+        // receiver would take a second offer of them for the first one
+        // going on over another connection
+        let mut moving: HashSet<(String, String)> = self
+            .outgoing
+            .iter()
+            .filter(|o| o.conn().is_some())
+            .filter_map(|o| Some((o.fingerprint.clone(), o.key.clone()?)))
+            .collect();
         let mut started = HashSet::new();
+        let peers = &self.peers;
         for outgoing in &mut self.outgoing {
             if !matches!(outgoing.state, OutState::Waiting) {
                 continue;
+            }
+            // the device came back without going on where transfers stopped
+            // (an older RustInput): a plain offer, from the start
+            let mut known = peers
+                .values()
+                .filter(|p| p.fingerprint == outgoing.fingerprint)
+                .peekable();
+            if outgoing.key.is_some() && known.peek().is_some() && !known.all(|p| p.resume) {
+                outgoing.key = None;
+            }
+            if let Some(key) = &outgoing.key {
+                if moving.contains(&(outgoing.fingerprint.clone(), key.clone())) {
+                    continue;
+                }
             }
             // a resumable transfer may go on over the connection in the
             // other direction, the same as before is preferred
@@ -1144,6 +1232,9 @@ impl Task {
             // the queue has room: nothing else is offered on this connection
             if c.writer.try_send(offer).is_ok() {
                 outgoing.state = OutState::Offered(conn);
+                if let Some(key) = &outgoing.key {
+                    moving.insert((outgoing.fingerprint.clone(), key.clone()));
+                }
             }
         }
     }
@@ -1281,6 +1372,15 @@ impl Task {
             if let Some(receive) = conn.receiving.borrow().as_ref() {
                 let _ = conn.writer.try_send(Frame::Abort { id: receive.id });
             }
+        }
+        let interrupted: Vec<u64> = self
+            .history
+            .iter()
+            .filter(|r| r.info.state == TransferState::Interrupted && r.kept.is_some())
+            .map(|r| r.info.id)
+            .collect();
+        for uid in interrupted {
+            self.cancel(uid);
         }
     }
 
@@ -1441,8 +1541,10 @@ impl Task {
             self.retire(index, TransferState::Removed);
         }
         for record in &mut self.history {
-            if let Some((_, root)) = record.kept.take() {
+            if let Some((tag, root)) = record.kept.take() {
                 store::remove_partial(&root);
+                // not taken when it comes back by itself
+                self.refused.borrow_mut().insert(tag);
                 record.info.state = TransferState::Removed;
                 record.info.finished_ms = Some(now_ms());
             }
@@ -1936,6 +2038,8 @@ struct Reader {
     internal: Sender<Internal>,
     busy: Rc<RefCell<HashSet<String>>>,
     refused: Rc<RefCell<HashSet<String>>>,
+    /// resumable transfers received in this run, see [`ALREADY_RECEIVED`]
+    received: Rc<RefCell<HashSet<String>>>,
 }
 
 impl Reader {
@@ -1976,6 +2080,19 @@ impl Reader {
                     return (decline("the transfer was cancelled here".into()), None);
                 }
                 self.refused.borrow_mut().remove(&tag);
+                if continued && self.received.borrow().contains(&tag) {
+                    return (decline(ALREADY_RECEIVED.into()), None);
+                }
+                if self.busy.borrow().contains(&tag) {
+                    let _ = self.internal.send(Internal::Preempt {
+                        conn: self.conn,
+                        tag: tag.clone(),
+                    });
+                    let until = tokio::time::Instant::now() + PREEMPT_WAIT;
+                    while self.busy.borrow().contains(&tag) && tokio::time::Instant::now() < until {
+                        tokio::time::sleep(Duration::from_millis(50)).await;
+                    }
+                }
                 if !self.busy.borrow_mut().insert(tag.clone()) {
                     return (
                         decline("these files are coming over another connection".into()),
@@ -2124,16 +2241,22 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
             let c = current.take().expect("current transfer");
             let progress = c.progress().progress;
             let id = c.id;
-            let paths = c.receiving.finish();
-            if r.writer.send(Frame::Complete { id }).await.is_err() {
-                break;
+            if let Some(busy) = &c.busy {
+                r.received.borrow_mut().insert(busy.tag.clone());
             }
+            let paths = c.receiving.finish();
+            // here before the answer: also when it does not get there, and
+            // before this task can be stopped while it waits to send it
+            *r.receiving.borrow_mut() = None;
             let _ = r.internal.send(Internal::Received {
                 conn: r.conn,
                 id,
                 paths,
                 progress,
             });
+            if r.writer.send(Frame::Complete { id }).await.is_err() {
+                break;
+            }
         }
         *r.receiving.borrow_mut() = current.as_ref().map(Incoming::progress);
     }
