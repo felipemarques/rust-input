@@ -37,6 +37,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🔍 Search the history of the clipboards of every computer | ✅ ²⁷ | ✅ ²⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | ⌨️ Keyboard shortcuts to go to a computer, the next one or back here | ✅ ²³ | ✅ ²³ | ✅ ²⁴ | ✅ ²⁴ |
+| 💻 `rustinput status`, `go` and `home` from a terminal, and a module for Waybar | ✅ ²⁸ | ✅ ²⁸ | ✅ ²⁸ | ✅ ²⁸ |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | 🧭 The tray icon shows where the mouse and keyboard are, and its menu moves them to any computer | ✅ ²⁵ | ✅ ²⁵ | ✅ ²⁵ | — |
@@ -97,6 +98,7 @@ menu.
 ²⁵ New in 0.43.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 ²⁶ New in 0.44.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 ²⁷ New in 0.45.0: tested in automated runs on Linux (X11), not yet by hand.
+²⁸ New in 0.46.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -999,6 +1001,32 @@ If the device still can not be entered, make sure you have UDP port `4242` (or t
 </details>
 
 <details>
+    <summary>Status, go and home from a terminal, and Waybar</summary>
+
+```sh
+rustinput status           # where the mouse and keyboard are, and the computers, numbered
+rustinput go laptop        # the mouse and keyboard to laptop (or: rustinput go 1)
+rustinput home             # back to this computer
+```
+
+The numbers are those of the [keyboard shortcuts](#keyboard-shortcuts) (the computers switched on, in the order of the
+list); a name may be cut short (`rustinput go lap`). `rustinput status --waybar` writes a line of JSON whenever the
+mouse and keyboard move, for a custom module of [Waybar](https://github.com/Alexays/Waybar) (its class is `local`,
+`remote`, `paused` or `off`, for the CSS of the bar):
+
+```jsonc
+"custom/rustinput": {
+  "exec": "rustinput status --waybar",
+  "return-type": "json",
+  "on-click": "rustinput home"
+}
+```
+
+A binding of a window manager such as `bind = SUPER ALT, 1, exec, rustinput go 1` only reaches RustInput while the
+keyboard is on this computer: from another one, use the keyboard shortcuts.
+</details>
+
+<details>
     <summary>Command Line Interface</summary>
 
 The cli interface can be accessed by passing `cli` as a commandline argument.
@@ -1199,6 +1227,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] The tray icon shows where the mouse and keyboard are, and moves them to any computer
 - [x] The clipboard only when you ask (AltGr + right Shift + C)
 - [x] Search the history of the clipboards
+- [x] `rustinput status`, `go` and `home`, and a module for Waybar
 
 
 ## Detailed OS Support

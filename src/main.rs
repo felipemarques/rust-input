@@ -96,6 +96,9 @@ fn run() -> Result<(), RustInputError> {
             Command::TestCapture(args) => run_async(capture_test::run(config, args))?,
             Command::Cli(cli_args) => run_async(rustinput_cli::run(cli_args))?,
             Command::SendFiles { paths } => run_async(rustinput_cli::send_files(paths))?,
+            Command::Status { waybar } => run_async(rustinput_cli::status(waybar))?,
+            Command::Go { computer } => run_async(rustinput_cli::go(Some(computer)))?,
+            Command::Home => run_async(rustinput_cli::go(None))?,
             #[cfg(windows)]
             Command::WindowsService => windows_supervisor::run().map_err(io::Error::other)?,
             Command::Daemon => {
