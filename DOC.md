@@ -869,6 +869,18 @@ in a line under the header bar (until "Later", for that version) and in the tray
 (the installer puts it there), which asks for administrator rights and installs; elsewhere
 **Download** opens the page of the release.
 
+### The MCP server (0.50.0)
+
+`rustinput mcp` (`rustinput-cli/src/mcp.rs`) answers JSON-RPC 2.0 on stdin
+and stdout, one message per line (also batches): `initialize` (protocol
+2025-06-18, or the older one the client asks for), `ping`, `tools/list` and
+`tools/call`; notifications get no answer. Each tool opens its own IPC
+connection, reads what the service sends a new client (as `rustinput
+status` does, `where_now_with`) and asks with the requests of the window
+(`GoTo`, `SendFiles`, `CheckUpdates`). Tool failures are results with
+`isError`, an unknown tool is -32602. There is deliberately no tool to pair,
+authorize, type or read a clipboard. Logs go to stderr, never stdout.
+
 ### What is new, and the version of each computer (0.48.0)
 
 `CHANGELOG.md` has a section per version (`## 0.48.0`), which a test of the

@@ -223,6 +223,9 @@ pub enum Command {
     Go { computer: String },
     /// the mouse and keyboard back to this computer
     Home,
+    /// a server of the Model Context Protocol on stdin and stdout, for an AI
+    /// agent on this computer: `claude mcp add rustinput -- rustinput mcp`
+    Mcp,
     /// run in daemon mode
     Daemon,
     /// run as the Windows service "RustInput", which Windows starts: it keeps
@@ -527,6 +530,7 @@ impl Config {
                     | Command::Status { .. }
                     | Command::Go { .. }
                     | Command::Home
+                    | Command::Mcp
             )
         );
         let (tx, watch_rx) = tokio::sync::mpsc::channel(16);
