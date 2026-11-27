@@ -153,6 +153,13 @@ pub static LANGUAGES: &[Language] = &[
         plural: Plural::UpToOneOther,
     },
     Language {
+        code: "pt-PT",
+        name: "Português (Portugal)",
+        file: "pt_PT",
+        rtl: false,
+        plural: Plural::OneOther,
+    },
+    Language {
         code: "ru",
         name: "Русский",
         file: "ru",
@@ -185,7 +192,8 @@ pub static LANGUAGES: &[Language] = &[
 impl Language {
     /// The language of a tag as the configuration, the system or the
     /// environment write it: "pt-BR", "pt_BR.UTF-8", "pt" or "PT-br" are
-    /// all Brazilian Portuguese, the only Portuguese here; any Chinese is
+    /// all Brazilian Portuguese; "pt-PT" and the Portuguese of the other
+    /// countries (Angola, Mozambique…) the one of Portugal; any Chinese is
     /// simplified Chinese. `None` for a language RustInput does not speak.
     pub fn from_code(tag: &str) -> Option<Language> {
         let tag = tag
@@ -201,6 +209,13 @@ impl Language {
             return Some(*exact);
         }
         let primary = tag.split('-').next().unwrap_or_default();
+        // only Brazil writes Brazilian Portuguese
+        if primary.eq_ignore_ascii_case("pt")
+            && tag.contains('-')
+            && !tag.split('-').any(|part| part.eq_ignore_ascii_case("BR"))
+        {
+            return LANGUAGES.iter().find(|l| l.code == "pt-PT").copied();
+        }
         LANGUAGES
             .iter()
             .find(|l| {
@@ -374,7 +389,11 @@ mod tests {
         assert_eq!(code("pt-BR"), Some("pt-BR"));
         assert_eq!(code("pt_BR.UTF-8"), Some("pt-BR"));
         assert_eq!(code("PT-br"), Some("pt-BR"));
-        assert_eq!(code("pt_PT"), Some("pt-BR"));
+        assert_eq!(code("pt_PT"), Some("pt-PT"));
+        assert_eq!(code("pt_PT.UTF-8"), Some("pt-PT"));
+        assert_eq!(code("pt-AO"), Some("pt-PT"));
+        assert_eq!(code("pt"), Some("pt-BR"));
+        assert_eq!(code("pt-Latn-BR"), Some("pt-BR"));
         assert_eq!(code("zh-Hans-CN"), Some("zh-CN"));
         assert_eq!(code("zh_TW"), Some("zh-CN"));
         assert_eq!(code("en-US"), Some("en"));

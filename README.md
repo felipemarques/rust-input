@@ -471,9 +471,11 @@ for the parts of the edges and for sending the arrangement; with an older one, t
   <em>The same window in Brazilian Portuguese, Japanese, Arabic (right to left) and Russian.</em>
 </p>
 
-RustInput speaks English, Español, Français, Italiano, Português (Brasil), Русский, العربية, 中文（简体） and 日本語:
-the windows, the tray menu, the radial menu and "Copy to RustInput" in the file managers. It takes the language of the
-system, or the one picked in **Preferences > Language** (`language` in `config.toml`), which applies after **Restart now**.
+RustInput speaks English, Español, Français, Italiano, Português (Brasil), Português (Portugal), Русский, العربية,
+中文（简体） and 日本語: the windows, the tray menu, the radial menu, "Copy to RustInput" in the file managers, what is
+new after an update and the installer for Windows. It takes the language of the system (the Portuguese of Portugal also
+for the other countries but Brazil), or the one picked in **Preferences > Language** (`language` in `config.toml`), which
+applies after **Restart now**.
 In Arabic the windows are laid out from right to left; the arrangement keeps the computers where they are.
 
 The translations are in [rustinput-i18n/po](rustinput-i18n/po), one gettext PO file per language, and are built into the
@@ -1145,8 +1147,8 @@ clipboard_history = 30
 # also chosen in the window, under "appearance"
 theme = "system"
 
-# the language of the windows and menus: "en", "es", "fr", "it", "pt-BR", "ru",
-# "ar", "zh-CN" or "ja"; that of the system when missing
+# the language of the windows and menus: "en", "es", "fr", "it", "pt-BR", "pt-PT",
+# "ru", "ar", "zh-CN" or "ja"; that of the system when missing
 language = "pt-BR"
 
 # ask GitHub for the latest version when starting and every 12 hours (the window
@@ -1228,6 +1230,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 - [x] Start with the session on Linux, from Preferences
 - [x] What is new after an update, once; the version of RustInput of each computer in the list
+- [x] European Portuguese (pt-PT)
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here
