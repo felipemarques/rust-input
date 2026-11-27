@@ -636,6 +636,9 @@ pub enum FrontendEvent {
     /// whether the keyboard shortcuts to move between the computers are on
     /// (`hotkeys`, 0.42.0)
     Hotkeys(bool),
+    /// whether the clipboard of this computer goes along with the pointer by
+    /// itself (`clipboard_along`, 0.44.0)
+    ClipboardAlong(bool),
     /// The authorized computer `by` was paired with the computer
     /// `fingerprint` called `name` (or tells about it, one of those it was
     /// paired with): authorize it here too? Answered with
@@ -797,6 +800,9 @@ pub enum FrontendRequest {
     /// switches the keyboard shortcuts to move between the computers on or
     /// off
     SetHotkeys(bool),
+    /// lets the clipboard of this computer go along with the pointer by
+    /// itself, or only when asked
+    SetClipboardAlong(bool),
     /// moves the mouse and keyboard to this computer (`None`) or to a client
     /// without crossing an edge (from the tray icon, 0.43.0)
     GoTo(Option<ClientHandle>),

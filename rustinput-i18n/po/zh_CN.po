@@ -512,7 +512,7 @@ msgstr "鼠标来自 {address}"
 msgid "{address} disconnected"
 msgstr "{address} 已断开连接"
 
-#: rustinput-gtk/src/lib.rs:613
+#: rustinput-gtk/src/lib.rs:614
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "已收到来自 {name} 的 {count} 个文件，可以粘贴"
 
@@ -799,148 +799,156 @@ msgstr "来自 {name} 的 {files}，已粘贴"
 msgid "{files} from {name}, not pasted"
 msgstr "来自 {name} 的 {files}，未粘贴"
 
-#: rustinput-gtk/src/window/clipboard.rs:261
+#: rustinput-gtk/src/window/clipboard.rs:101
+msgid "Bring the clipboard along with the pointer"
+msgstr "剪贴板随指针一起过去"
+
+#: rustinput-gtk/src/window/clipboard.rs:102
+msgid "Off: what is copied here goes to another computer only with AltGr + right Shift + C, the radial menu or the Clipboards tab"
+msgstr "关闭时：此处复制的内容只能通过 AltGr + 右 Shift + C、圆形菜单或“剪贴板”标签页发到另一台电脑"
+
+#: rustinput-gtk/src/window/clipboard.rs:300
 msgid "Copying…"
 msgstr "正在复制…"
 
-#: rustinput-gtk/src/window/clipboard.rs:281
+#: rustinput-gtk/src/window/clipboard.rs:320
 msgid "Copy here"
 msgstr "复制到这里"
 
-#: rustinput-gtk/src/window/clipboard.rs:285
+#: rustinput-gtk/src/window/clipboard.rs:324
 msgid "Back on the clipboard"
 msgstr "已放回剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:286
+#: rustinput-gtk/src/window/clipboard.rs:325
 msgid "Could not put it back on the clipboard: {error}"
 msgstr "无法放回剪贴板：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:290
+#: rustinput-gtk/src/window/clipboard.rs:329
 msgid "The files of {name} are on their way here"
 msgstr "{name} 的文件正在传来"
 
-#: rustinput-gtk/src/window/clipboard.rs:294
+#: rustinput-gtk/src/window/clipboard.rs:333
 msgid "Copied here from {name}"
 msgstr "已从 {name} 复制到这里"
 
-#: rustinput-gtk/src/window/clipboard.rs:295
+#: rustinput-gtk/src/window/clipboard.rs:334
 msgid "Could not copy from {name}: {error}"
 msgstr "无法从 {name} 复制：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:336
+#: rustinput-gtk/src/window/clipboard.rs:375
 msgid "Asking…"
 msgstr "正在询问…"
 
-#: rustinput-gtk/src/window/clipboard.rs:359
+#: rustinput-gtk/src/window/clipboard.rs:398
 msgid "Put it on the clipboard of this computer"
 msgstr "放入本机的剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:389
+#: rustinput-gtk/src/window/clipboard.rs:428
 msgid "Clear"
 msgstr "清除"
 
-#: rustinput-gtk/src/window/clipboard.rs:390
+#: rustinput-gtk/src/window/clipboard.rs:429
 msgid "Forget the history of this computer"
 msgstr "清除本机的历史"
 
-#: rustinput-gtk/src/window/clipboard.rs:445
+#: rustinput-gtk/src/window/clipboard.rs:484
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "本机未共享剪贴板（clipboard = false）"
 
-#: rustinput-gtk/src/window/clipboard.rs:448
+#: rustinput-gtk/src/window/clipboard.rs:487
 msgid "Does not show its clipboard"
 msgstr "未显示其剪贴板"
 
-#: rustinput-gtk/src/window/clipboard.rs:450
+#: rustinput-gtk/src/window/clipboard.rs:489
 msgid "Could not be asked: {error}"
 msgstr "无法询问：{error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:481
+#: rustinput-gtk/src/window/clipboard.rs:520
 msgid "No history is kept on this computer: switch it on in Preferences."
 msgstr "本机不保留历史：可在“首选项”中开启。"
 
-#: rustinput-gtk/src/window/clipboard.rs:484
+#: rustinput-gtk/src/window/clipboard.rs:523
 msgid "It keeps no history of its clipboard."
 msgstr "它不保留剪贴板历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:485
+#: rustinput-gtk/src/window/clipboard.rs:524
 msgid "New copies can not be noticed on its system yet (Wayland): no history."
 msgstr "其系统上暂时无法察觉新的复制（Wayland）：没有历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:488
+#: rustinput-gtk/src/window/clipboard.rs:527
 msgid "Its RustInput is older, without a history."
 msgstr "它的 RustInput 版本较旧，没有历史。"
 
-#: rustinput-gtk/src/window/clipboard.rs:508
+#: rustinput-gtk/src/window/clipboard.rs:547
 msgid "History"
 msgstr "历史"
 
-#: rustinput-gtk/src/window/clipboard.rs:510
+#: rustinput-gtk/src/window/clipboard.rs:549
 msgid "History · {count} copy before"
 msgid_plural "History · {count} copies before"
 msgstr[0] "历史 · 之前 {count} 条"
 
-#: rustinput-gtk/src/window/clipboard.rs:527
+#: rustinput-gtk/src/window/clipboard.rs:566
 msgid "Show fewer"
 msgstr "显示更少"
 
-#: rustinput-gtk/src/window/clipboard.rs:529
+#: rustinput-gtk/src/window/clipboard.rs:568
 msgid "Show all {count}"
 msgstr "显示全部 {count} 条"
 
-#: rustinput-gtk/src/window/clipboard.rs:552
+#: rustinput-gtk/src/window/clipboard.rs:591
 msgid "Formatted text"
 msgstr "带格式的文本"
 
-#: rustinput-gtk/src/window/clipboard.rs:554
+#: rustinput-gtk/src/window/clipboard.rs:593
 msgid "Text"
 msgstr "文本"
 
-#: rustinput-gtk/src/window/clipboard.rs:560
+#: rustinput-gtk/src/window/clipboard.rs:599
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} 个字符"
 
-#: rustinput-gtk/src/window/clipboard.rs:570
+#: rustinput-gtk/src/window/clipboard.rs:609
 msgid "Image, {width} × {height}"
 msgstr "图像，{width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:588
+#: rustinput-gtk/src/window/clipboard.rs:627
 msgid "Image"
 msgstr "图像"
 
-#: rustinput-gtk/src/window/clipboard.rs:599
+#: rustinput-gtk/src/window/clipboard.rs:638
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} 个文件或文件夹"
 
-#: rustinput-gtk/src/window/clipboard.rs:644
+#: rustinput-gtk/src/window/clipboard.rs:683
 msgid "Copy"
 msgstr "复制"
 
-#: rustinput-gtk/src/window/clipboard.rs:670
+#: rustinput-gtk/src/window/clipboard.rs:709
 msgid "Empty"
 msgstr "空"
 
-#: rustinput-gtk/src/window/clipboard.rs:696
+#: rustinput-gtk/src/window/clipboard.rs:735
 msgid "{count} line"
 msgid_plural "{count} lines"
 msgstr[0] "{count} 行"
 
-#: rustinput-gtk/src/window/clipboard.rs:736
+#: rustinput-gtk/src/window/clipboard.rs:775
 msgid "and {count} more"
 msgid_plural "and {count} more"
 msgstr[0] "还有 {count} 个"
 
-#: rustinput-gtk/src/window/clipboard.rs:763
+#: rustinput-gtk/src/window/clipboard.rs:802
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "密码管理器已将其标记为机密：不会显示，但可以复制。"
 
-#: rustinput-gtk/src/window/clipboard.rs:771
+#: rustinput-gtk/src/window/clipboard.rs:810
 msgid "Password, hidden"
 msgstr "密码，已隐藏"
 
-#: rustinput-gtk/src/window/imp.rs:259
+#: rustinput-gtk/src/window/imp.rs:261
 msgid "Failed to relaunch RustInput"
 msgstr "无法重新启动 RustInput"
 
@@ -1005,18 +1013,22 @@ msgid "Back to this computer"
 msgstr "回到本机"
 
 #: rustinput-gtk/src/window/shortcuts.rs:45
+msgid "The clipboard to the computer the pointer is on, or here from where it came"
+msgstr "把剪贴板发到指针所在的电脑，或从指针来的那台电脑取到这里"
+
+#: rustinput-gtk/src/window/shortcuts.rs:49
 msgid "To the other computer and back, or the next one"
 msgstr "切到另一台电脑再切回，或切到下一台"
 
-#: rustinput-gtk/src/window/shortcuts.rs:47
+#: rustinput-gtk/src/window/shortcuts.rs:51
 msgid "The next / the previous computer"
 msgstr "下一台 / 上一台电脑"
 
-#: rustinput-gtk/src/window/shortcuts.rs:50
+#: rustinput-gtk/src/window/shortcuts.rs:54
 msgid "The right Shift twice quickly: the next computer"
 msgstr "快速按两次右 Shift：下一台电脑"
 
-#: rustinput-gtk/src/window/shortcuts.rs:54
+#: rustinput-gtk/src/window/shortcuts.rs:58
 msgid "The right Shift held for 3 seconds: back to this computer, always"
 msgstr "按住右 Shift 3 秒：始终回到本机"
 

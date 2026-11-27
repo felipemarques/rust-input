@@ -181,6 +181,8 @@ pub(crate) enum Fetched {
 /// what the rest of the service uses to talk to the clipboard task
 #[derive(Clone)]
 pub(crate) struct ClipboardHandle {
+    /// the clipboard goes along with the pointer by itself
+    along: Rc<Cell<bool>>,
     tx: Sender<ClipboardMsg>,
     enabled: bool,
     /// files can be transferred
@@ -195,8 +197,10 @@ impl ClipboardHandle {
         let (tx, rx) = channel();
         let files = enabled && files;
         let send_copied = Rc::new(Cell::new(false));
+        let along = Rc::new(Cell::new(true));
         (
             Self {
+                along,
                 tx,
                 enabled,
                 files,
@@ -209,6 +213,16 @@ impl ClipboardHandle {
     /// whether files copied in a file manager go along with the pointer
     pub(crate) fn set_send_copied(&self, send: bool) {
         self.send_copied.set(send);
+    }
+
+    /// whether the clipboard of this computer goes along with the pointer
+    /// by itself (`clipboard_along`, 0.44.0); otherwise only when asked
+    pub(crate) fn set_along(&self, along: bool) {
+        self.along.set(along);
+    }
+
+    pub(crate) fn along(&self) -> bool {
+        self.along.get()
     }
 
     /// the capability flags to announce to peers

@@ -530,6 +530,18 @@ went down; the right Shift alone fires on its release when it was held 3 s
   from another one (it releases that one first). Nothing moves while
   paused.
 
+## The clipboard only when asked (0.44.0)
+
+`clipboard_along` (on by default) decides whether this computer sends its
+clipboard by itself at the three moments it does: when the pointer goes to a
+client (`ClientAcknowledged`), when the pointer leaves this device while it is
+controlled (`Leave`), and when it goes back to the device controlling this
+one (`CaptureBegin` of an incoming connection). Off, it only goes when asked:
+`Hotkey::Clipboard` (AltGr + right Shift + C) pushes it to the client the
+pointer is on, and with the pointer here brings the clipboard of the client
+it was on last (`came_from`): `Peek` for its hash, then `Fetch`, as the
+Clipboards tab does. Each device decides for what it sends.
+
 ## The tray icon and where the pointer is (0.43.0)
 
 The window keeps the active clients (`Window::active_computers`) and where

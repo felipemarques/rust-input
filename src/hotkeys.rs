@@ -6,7 +6,10 @@
 //!   with more, the next one;
 //! - AltGr + Right / AltGr + Left, or the right Shift twice quickly: the
 //!   next / the previous computer (this one counts as one of them);
-//! - the right Shift held for 3 seconds alone: back to this computer, always.
+//! - the right Shift held for 3 seconds alone: back to this computer, always;
+//! - AltGr + right Shift + C: the clipboard of this computer to the one the
+//!   pointer is on, or, with the pointer here, that of the computer it came
+//!   from to this one (0.44.0).
 //!
 //! A shortcut fires when its keys are let go, and only if nothing else was
 //! pressed meanwhile, so AltGr + Q or Shift + 1 still type. The keys are only
@@ -35,6 +38,8 @@ pub(crate) enum Key {
     Digit(u8),
     Left,
     Right,
+    /// the C key
+    C,
     Other,
 }
 
@@ -49,6 +54,7 @@ impl Key {
             11 => Key::Digit(0),
             105 => Key::Left,
             106 => Key::Right,
+            46 => Key::C,
             _ => Key::Other,
         }
     }
@@ -63,6 +69,7 @@ impl Key {
             0x30..=0x39 => Key::Digit((vk - 0x30) as u8),
             0x25 => Key::Left,  // VK_LEFT
             0x27 => Key::Right, // VK_RIGHT
+            0x43 => Key::C,
             _ => Key::Other,
         }
     }
@@ -79,6 +86,8 @@ pub(crate) enum Hotkey {
     Toggle,
     Next,
     Previous,
+    /// the clipboard to where the pointer is, or from where it came
+    Clipboard,
 }
 
 #[derive(Debug, Default)]
@@ -144,6 +153,10 @@ impl Hotkeys {
                 } else {
                     Hotkey::GoTo(n)
                 });
+            }
+            Key::C if self.alt_gr && self.shift && self.others.is_empty() => {
+                self.others.push(key);
+                self.pending = Some(Hotkey::Clipboard);
             }
             Key::Left | Key::Right if self.alt_gr && !self.shift && self.others.is_empty() => {
                 self.others.push(key);
@@ -235,6 +248,14 @@ mod tests {
         );
         assert_eq!(chord(&mut h, &[AltGr, Right], &mut t), [Hotkey::Next]);
         assert_eq!(chord(&mut h, &[AltGr, Left], &mut t), [Hotkey::Previous]);
+        assert_eq!(
+            chord(&mut h, &[AltGr, RightShift, C], &mut t),
+            [Hotkey::Clipboard]
+        );
+        assert!(
+            chord(&mut h, &[AltGr, C], &mut t).is_empty(),
+            "AltGr + C types ©"
+        );
         // Windows sends the left Ctrl with AltGr
         assert_eq!(
             chord(&mut h, &[LeftCtrl, AltGr, RightShift, Digit(1)], &mut t),
@@ -297,6 +318,8 @@ mod tests {
         assert_eq!(Key::from_linux(10), Key::Digit(9));
         assert_eq!(Key::from_linux(11), Key::Digit(0));
         assert_eq!(Key::from_linux(16), Key::Other);
+        assert_eq!(Key::from_linux(46), Key::C);
+        assert_eq!(Key::from_windows(0x43), Key::C);
         assert_eq!(Key::from_windows(0x31), Key::Digit(1));
         assert_eq!(Key::from_windows(0xA5), Key::AltGr);
         assert_eq!(Key::from_windows(0xA0), Key::Other, "the left Shift");

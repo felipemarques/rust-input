@@ -176,6 +176,45 @@ impl Service {
     /// Brings what the clipboard of the client holds, or held, here, if it
     /// still has `hash`; of this computer (`None`): from its history back
     /// on its clipboard.
+    /// Brings here what the clipboard of the client holds now, whatever it
+    /// is: it is asked first (AltGr + right Shift + C, 0.44.0).
+    pub(super) fn bring_latest(&mut self, handle: ClientHandle) {
+        let (expected, name) = self.clipboard_peer(handle);
+        if !self.clipboard.enabled() {
+            return;
+        }
+        let addrs = self.client_addrs(handle);
+        log::info!("bringing the clipboard of {name} here, as asked");
+        let (cert, results) = (self.cert.clone(), self.clipboard_results_tx.clone());
+        tokio::task::spawn_local(async move {
+            let asked = arrangement::peek(cert.clone(), addrs.clone(), expected.clone(), None, 0);
+            let result = match asked.await {
+                Ok((
+                    _,
+                    Some(ClipboardSeen::Holds {
+                        peek: rustinput_ipc::ClipboardPeek::Empty,
+                        ..
+                    }),
+                    _,
+                )) => Err(ArrangeError::Failed("its clipboard is empty".into())),
+                Ok((_, Some(ClipboardSeen::Holds { hash, .. }), _)) => {
+                    arrangement::fetch(cert, addrs, expected, hash).await
+                }
+                Ok((_, Some(ClipboardSeen::Hidden), _)) => Err(ArrangeError::Refused(
+                    "it does not show its clipboard".into(),
+                )),
+                Ok((_, Some(ClipboardSeen::Unavailable(e)), _)) => Err(ArrangeError::Failed(e)),
+                Ok((_, None, _)) => Err(ArrangeError::Failed("no answer".into())),
+                Err(e) => Err(e),
+            };
+            let _ = results.send(ClipboardResult::Brought {
+                handle,
+                name,
+                result,
+            });
+        });
+    }
+
     pub(super) fn bring_clipboard(&mut self, handle: Option<ClientHandle>, hash: u64) {
         let Some(handle) = handle else {
             let (reply, restored) = oneshot::channel();

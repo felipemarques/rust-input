@@ -133,6 +133,8 @@ pub struct Service {
     hotkeys_on: bool,
     /// the client the pointer is on, if any
     pointer_at: Option<ClientHandle>,
+    /// the client the pointer was on last
+    came_from: Option<ClientHandle>,
     discovered_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<Discovered>>,
     discovered: Vec<Discovered>,
     discovery_on: bool,
@@ -315,6 +317,7 @@ impl Service {
         // input capture + emulation
         let capture_backend = config.capture_backend().map(|b| b.into());
         let paused = config.paused();
+        clipboard.set_along(config.clipboard_along());
         let capture = Capture::new(capture_backend, conn, config.release_bind());
         capture.set_hotkeys(hotkeys);
         let emulation_backend = config.emulation_backend().map(|b| b.into());
@@ -390,6 +393,7 @@ impl Service {
             radial_spare: radial_tx,
             hotkeys_on: hotkeys,
             pointer_at: None,
+            came_from: None,
             texts: Texts::new(),
             notices,
             locked: false,
@@ -560,6 +564,12 @@ impl Service {
                 if !self.paused {
                     self.go_to(target);
                 }
+            }
+            FrontendRequest::SetClipboardAlong(along) => {
+                self.config.set_clipboard_along(along);
+                self.save_config();
+                self.clipboard.set_along(along);
+                self.notify_frontend(FrontendEvent::ClipboardAlong(along));
             }
             FrontendRequest::SetHotkeys(on) => {
                 self.config.set_hotkeys(on);
@@ -750,6 +760,16 @@ impl Service {
         clients.sort();
         let go = |service: &mut Self, target: Option<ClientHandle>| service.go_to(target);
         match hotkey {
+            // the clipboard here to where the pointer is, or that of where it
+            // came from here
+            Hotkey::Clipboard => match (self.pointer_at, self.came_from) {
+                (Some(at), _) => {
+                    log::info!("the clipboard goes to client {at}, as asked");
+                    self.clipboard.push(Peer::Outgoing(at));
+                }
+                (None, Some(from)) => self.bring_latest(from),
+                (None, None) => {}
+            },
             Hotkey::Home => go(self, None),
             Hotkey::GoTo(n) => {
                 if let Some(&target) = clients.get(n as usize - 1) {
@@ -857,6 +877,11 @@ impl Service {
         let hotkeys = self.config.hotkeys();
         if hotkeys != self.hotkeys_on {
             self.apply_hotkeys(hotkeys);
+        }
+        let along = self.config.clipboard_along();
+        if along != self.clipboard.along() {
+            self.clipboard.set_along(along);
+            self.notify_frontend(FrontendEvent::ClipboardAlong(along));
         }
         let authorized_keys = self.config.authorized_fingerprints();
         self.authorized_keys
@@ -990,8 +1015,11 @@ impl Service {
                 if let Some(incoming) = self.incoming_conn_info.get(&handle) {
                     self.emulation.send_leave_event(incoming.addr, fraction);
                     // control goes back to that device, and so does
-                    // what was copied here in the meantime
-                    self.clipboard.push(Peer::Incoming(incoming.addr));
+                    // what was copied here in the meantime (unless it only
+                    // goes when asked)
+                    if self.clipboard.along() {
+                        self.clipboard.push(Peer::Incoming(incoming.addr));
+                    }
                 }
             }
             ICaptureEvent::CaptureDisabled => {
@@ -1013,13 +1041,17 @@ impl Service {
             ICaptureEvent::ClientLeft(handle) => {
                 log::info!("leaving client {handle} ...");
                 self.pointer_at = None;
+                self.came_from = Some(handle);
                 self.notify_frontend(FrontendEvent::PointerAt(None));
                 self.radial.set_away(false);
                 self.spawn_hook_command(handle, HookKind::Leave);
             }
             ICaptureEvent::ClientAcknowledged(handle) => {
-                // the client is being controlled now: bring the clipboard along
-                self.clipboard.push(Peer::Outgoing(handle));
+                // the client is being controlled now: bring the clipboard
+                // along, unless it only goes when asked
+                if self.clipboard.along() {
+                    self.clipboard.push(Peer::Outgoing(handle));
+                }
             }
             ICaptureEvent::PlacePointer(edge, fraction) => self.emulation.warp(edge, fraction),
             ICaptureEvent::Hotkey(hotkey) => self.hotkey(hotkey),
@@ -1089,6 +1121,7 @@ impl Service {
         self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
         self.notify_frontend(FrontendEvent::Discovery(self.discovery_on));
         self.notify_frontend(FrontendEvent::Hotkeys(self.hotkeys_on));
+        self.notify_frontend(FrontendEvent::ClipboardAlong(self.clipboard.along()));
         self.report_discovered();
         let introductions: Vec<FrontendEvent> = self
             .introductions

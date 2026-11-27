@@ -356,7 +356,8 @@ async fn read_loop(
                     // every new copy (a password from a password manager).
                     ProtoEvent::Leave(_) => {
                         let controlled = std::mem::take(&mut entered);
-                        if controlled {
+                        // unless it only goes when asked (`clipboard_along`)
+                        if controlled && clipboard.along() {
                             clipboard.push(peer);
                         }
                     }

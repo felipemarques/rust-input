@@ -120,6 +120,8 @@ pub struct Window {
     pub ask_spin: RefCell<Option<gtk::SpinButton>>,
     /// the computers found on the network (0.40.0)
     pub(crate) network: RefCell<Option<crate::window::network::Network>>,
+    /// whether the clipboard goes along with the pointer (0.44.0)
+    pub along_switch: RefCell<Option<gtk::Switch>>,
     /// the keyboard shortcuts (0.42.0)
     pub(crate) shortcuts: RefCell<Option<crate::window::shortcuts::Shortcuts>>,
     /// the switches are being set to what the service has
