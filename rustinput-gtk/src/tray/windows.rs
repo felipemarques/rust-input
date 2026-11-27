@@ -437,7 +437,7 @@ mod tests {
             eprintln!("no taskbar, no notification area to show a balloon in");
             return;
         }
-        let icon = tray_icon(false, true).expect("the icon");
+        let icon = tray_icon(false, true, false).expect("the icon");
         let tray = TrayIconBuilder::new()
             .with_icon(icon)
             .with_tooltip("RustInput test")
