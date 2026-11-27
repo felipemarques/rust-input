@@ -7,6 +7,10 @@ Writing an entry: a `- ` line per change people will notice, in plain words, und
 between backticks. Each change is translated like the texts of the program: `cargo run -p rustinput-i18n --example
 update-po` puts it in `po/` (context `changelog`), and the window shows it in the language of the windows.
 
+## 0.51.0
+
+- Linux: "Update now" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after "Restart now". AI agents can do it too (apply_update).
+
 ## 0.50.0
 
 - An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard.
