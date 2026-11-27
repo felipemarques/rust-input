@@ -7,6 +7,10 @@ Writing an entry: a `- ` line per change people will notice, in plain words, und
 between backticks. Each change is translated like the texts of the program: `cargo run -p rustinput-i18n --example
 update-po` puts it in `po/` (context `changelog`), and the window shows it in the language of the windows.
 
+## 0.49.0
+
+- Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal.
+
 ## 0.48.0
 
 - After an update, the window shows what is new, once.
