@@ -1119,35 +1119,35 @@ msgstr "Garder les haut-parleurs de cet ordinateur actifs"
 msgid "Off: they are silent while its sound plays on the other computer"
 msgstr "Désactivé : ils sont muets pendant que son son est joué sur l’autre ordinateur"
 
-#: rustinput-gtk/src/window/sound.rs:129
+#: rustinput-gtk/src/window/sound.rs:131
 msgid "The sound does not work: {error}"
 msgstr "Le son ne fonctionne pas : {error}"
 
-#: rustinput-gtk/src/window/sound.rs:130
+#: rustinput-gtk/src/window/sound.rs:132
 msgid "The sound of this computer plays on {name}"
 msgstr "Le son de cet ordinateur est joué sur {name}"
 
-#: rustinput-gtk/src/window/sound.rs:135
+#: rustinput-gtk/src/window/sound.rs:137
 msgid "No computer of the list is switched on to send its sound"
 msgstr "Aucun ordinateur de la liste n’est activé pour envoyer son son"
 
-#: rustinput-gtk/src/window/sound.rs:191
+#: rustinput-gtk/src/window/sound.rs:193
 msgid "Mute"
 msgstr "Couper le son"
 
-#: rustinput-gtk/src/window/sound.rs:268
+#: rustinput-gtk/src/window/sound.rs:270
 msgid "Asking for its sound…"
 msgstr "Demande de son son…"
 
-#: rustinput-gtk/src/window/sound.rs:269
+#: rustinput-gtk/src/window/sound.rs:271
 msgid "Its sound plays here"
 msgstr "Son son est joué ici"
 
-#: rustinput-gtk/src/window/sound.rs:270
+#: rustinput-gtk/src/window/sound.rs:272
 msgid "It sends its sound; nothing plays there now"
 msgstr "Il envoie son son ; rien n’y est joué maintenant"
 
-#: rustinput-gtk/src/window/sound.rs:271
+#: rustinput-gtk/src/window/sound.rs:273
 msgid "It does not send its sound: {why}"
 msgstr "Il n’envoie pas son son : {why}"
 

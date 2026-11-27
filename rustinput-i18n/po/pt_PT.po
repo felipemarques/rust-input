@@ -1119,35 +1119,35 @@ msgstr "Manter as colunas deste computador a tocar"
 msgid "Off: they are silent while its sound plays on the other computer"
 msgstr "Desligado: ficam em silêncio enquanto o som toca no outro computador"
 
-#: rustinput-gtk/src/window/sound.rs:129
+#: rustinput-gtk/src/window/sound.rs:131
 msgid "The sound does not work: {error}"
 msgstr "O som não funciona: {error}"
 
-#: rustinput-gtk/src/window/sound.rs:130
+#: rustinput-gtk/src/window/sound.rs:132
 msgid "The sound of this computer plays on {name}"
 msgstr "O som deste computador toca em {name}"
 
-#: rustinput-gtk/src/window/sound.rs:135
+#: rustinput-gtk/src/window/sound.rs:137
 msgid "No computer of the list is switched on to send its sound"
 msgstr "Nenhum computador da lista está ligado para enviar o som"
 
-#: rustinput-gtk/src/window/sound.rs:191
+#: rustinput-gtk/src/window/sound.rs:193
 msgid "Mute"
 msgstr "Silenciar"
 
-#: rustinput-gtk/src/window/sound.rs:268
+#: rustinput-gtk/src/window/sound.rs:270
 msgid "Asking for its sound…"
 msgstr "A pedir o som…"
 
-#: rustinput-gtk/src/window/sound.rs:269
+#: rustinput-gtk/src/window/sound.rs:271
 msgid "Its sound plays here"
 msgstr "O som dele toca aqui"
 
-#: rustinput-gtk/src/window/sound.rs:270
+#: rustinput-gtk/src/window/sound.rs:272
 msgid "It sends its sound; nothing plays there now"
 msgstr "Envia o som; nada está a tocar lá agora"
 
-#: rustinput-gtk/src/window/sound.rs:271
+#: rustinput-gtk/src/window/sound.rs:273
 msgid "It does not send its sound: {why}"
 msgstr "Não envia o som: {why}"
 

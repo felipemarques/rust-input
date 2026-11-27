@@ -1159,35 +1159,35 @@ msgstr "إبقاء مكبرات صوت هذا الحاسوب تعمل"
 msgid "Off: they are silent while its sound plays on the other computer"
 msgstr "معطَّل: تصمت ما دام صوته يُشغَّل على الحاسوب الآخر"
 
-#: rustinput-gtk/src/window/sound.rs:129
+#: rustinput-gtk/src/window/sound.rs:131
 msgid "The sound does not work: {error}"
 msgstr "الصوت لا يعمل: {error}"
 
-#: rustinput-gtk/src/window/sound.rs:130
+#: rustinput-gtk/src/window/sound.rs:132
 msgid "The sound of this computer plays on {name}"
 msgstr "صوت هذا الحاسوب يُشغَّل على {name}"
 
-#: rustinput-gtk/src/window/sound.rs:135
+#: rustinput-gtk/src/window/sound.rs:137
 msgid "No computer of the list is switched on to send its sound"
 msgstr "لا يوجد حاسوب مفعَّل في القائمة لإرسال صوته"
 
-#: rustinput-gtk/src/window/sound.rs:191
+#: rustinput-gtk/src/window/sound.rs:193
 msgid "Mute"
 msgstr "كتم"
 
-#: rustinput-gtk/src/window/sound.rs:268
+#: rustinput-gtk/src/window/sound.rs:270
 msgid "Asking for its sound…"
 msgstr "جارٍ طلب صوته…"
 
-#: rustinput-gtk/src/window/sound.rs:269
+#: rustinput-gtk/src/window/sound.rs:271
 msgid "Its sound plays here"
 msgstr "صوته يُشغَّل هنا"
 
-#: rustinput-gtk/src/window/sound.rs:270
+#: rustinput-gtk/src/window/sound.rs:272
 msgid "It sends its sound; nothing plays there now"
 msgstr "يرسل صوته؛ لا شيء يُشغَّل هناك الآن"
 
-#: rustinput-gtk/src/window/sound.rs:271
+#: rustinput-gtk/src/window/sound.rs:273
 msgid "It does not send its sound: {why}"
 msgstr "لا يرسل صوته: {why}"
 

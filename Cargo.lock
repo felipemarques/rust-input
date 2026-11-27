@@ -3179,7 +3179,7 @@ dependencies = [
 
 [[package]]
 name = "rustinput"
-version = "0.51.0"
+version = "0.52.0"
 dependencies = [
  "ab_glyph",
  "ar-reshaper",
