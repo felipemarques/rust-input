@@ -2,6 +2,8 @@ use clap::{Args, Parser, Subcommand};
 use futures::StreamExt;
 
 use std::{net::IpAddr, time::Duration};
+
+pub mod mcp;
 use thiserror::Error;
 
 use rustinput_ipc::{
@@ -95,6 +97,27 @@ impl Where {
         }
     }
 
+    /// what `rustinput status` prints: where the mouse and keyboard are,
+    /// and the computers
+    fn text(&self) -> String {
+        let mut out = self.line();
+        out.push('\n');
+        for (number, handle, name) in self.numbered() {
+            let c = self.clients.iter().find(|c| c.0 == handle).expect("listed");
+            let here = if self.pointer_at == Some(handle) {
+                "  ←"
+            } else {
+                ""
+            };
+            let reachable = if c.3 { "" } else { " (not reached)" };
+            out.push_str(&format!("  {number}  {name}{reachable}{here}\n"));
+        }
+        for c in self.clients.iter().filter(|c| !c.2) {
+            out.push_str(&format!("  -  {} (switched off)\n", c.1));
+        }
+        out
+    }
+
     /// the JSON of a custom module of Waybar
     fn waybar(&self) -> String {
         let (text, class) = match (self.paused, self.pointer_at) {
@@ -110,6 +133,14 @@ impl Where {
 /// reads what the service sends until it said where everything is (it
 /// answers a new connection with all it knows)
 async fn where_now(rx: &mut rustinput_ipc::AsyncFrontendEventReader) -> Result<Where, CliError> {
+    where_now_with(rx, |_| {}).await
+}
+
+/// [`where_now`], showing `also` every event on the way
+async fn where_now_with(
+    rx: &mut rustinput_ipc::AsyncFrontendEventReader,
+    mut also: impl FnMut(&FrontendEvent),
+) -> Result<Where, CliError> {
     let mut now = Where::default();
     let mut listed = false;
     let _ = tokio::time::timeout(Duration::from_secs(2), async {
@@ -117,6 +148,7 @@ async fn where_now(rx: &mut rustinput_ipc::AsyncFrontendEventReader) -> Result<W
             let Ok(event) = event else { break };
             listed |= matches!(event, FrontendEvent::Enumerate(_));
             now.event(&event);
+            also(&event);
             // the last thing a connecting window gets
             if listed && matches!(event, FrontendEvent::PointerAt(_)) {
                 break;
@@ -134,20 +166,7 @@ pub async fn status(waybar: bool) -> Result<(), CliError> {
     if !waybar {
         let (mut rx, _tx) = connect_async(Some(Duration::from_millis(500))).await?;
         let now = where_now(&mut rx).await?;
-        println!("{}", now.line());
-        for (number, handle, name) in now.numbered() {
-            let c = now.clients.iter().find(|c| c.0 == handle).expect("listed");
-            let here = if now.pointer_at == Some(handle) {
-                "  ←"
-            } else {
-                ""
-            };
-            let reachable = if c.3 { "" } else { " (not reached)" };
-            println!("  {number}  {name}{reachable}{here}");
-        }
-        for c in now.clients.iter().filter(|c| !c.2) {
-            println!("  -  {} (switched off)", c.1);
-        }
+        print!("{}", now.text());
         return Ok(());
     }
     loop {
@@ -177,7 +196,14 @@ pub async fn status(waybar: bool) -> Result<(), CliError> {
 /// to a computer, by its number (as for the keyboard shortcuts) or name, or
 /// back here (`None`)
 pub async fn go(computer: Option<String>) -> Result<(), CliError> {
+    go_to(computer).await.map(|_| ())
+}
+
+/// [`go`]; the name of the computer the mouse and keyboard went to, `None`
+/// for this one
+async fn go_to(computer: Option<String>) -> Result<Option<String>, CliError> {
     let (mut rx, mut tx) = connect_async(Some(Duration::from_millis(500))).await?;
+    let mut name = None;
     let target = match computer {
         None => None,
         Some(computer) => {
@@ -196,7 +222,10 @@ pub async fn go(computer: Option<String>) -> Result<(), CliError> {
                     }),
             };
             match found {
-                Some(&(_, handle, _)) => Some(handle),
+                Some(&(_, handle, found)) => {
+                    name = Some(found.to_owned());
+                    Some(handle)
+                }
                 None => {
                     let names: Vec<String> = numbered
                         .iter()
@@ -220,7 +249,7 @@ pub async fn go(computer: Option<String>) -> Result<(), CliError> {
         while rx.next().await.is_some() {}
     })
     .await;
-    Ok(())
+    Ok(name)
 }
 
 #[derive(Parser, Clone, Debug, PartialEq, Eq)]

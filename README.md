@@ -1034,6 +1034,31 @@ keyboard is on this computer: from another one, use the keyboard shortcuts.
 </details>
 
 <details>
+    <summary>An AI agent: the MCP server</summary>
+
+`rustinput mcp` is a server of the [Model Context Protocol](https://modelcontextprotocol.io) on stdin and stdout, for an
+AI agent on this computer (Claude Code, Claude Desktop or any MCP client). With Claude Code:
+
+```sh
+claude mcp add rustinput -- rustinput mcp
+```
+
+Other clients take the command `rustinput` with the argument `mcp` (on Windows, the full path of `rustinput.exe`). Like
+`rustinput status`, it asks the RustInput that runs here; nothing listens on the network. Its tools:
+
+| Tool | Does |
+|---|---|
+| `status` | The version here and on each computer, where the mouse and keyboard are, the computers (numbered), file transfers, a new version, computers waiting to be authorized |
+| `switch_computer` | The mouse and keyboard to a computer, by name or number, or `home` |
+| `send_files` | Files and folders to the connected computers, as "Copy to RustInput" does |
+| `check_update` | Asks GitHub for the latest version, unless that is switched off |
+
+An agent never authorizes or pairs a computer (the code is there for a person to compare two screens), never types,
+presses keys or moves the pointer, and never reads a clipboard or its history: those stay with the person at the
+screen.
+</details>
+
+<details>
     <summary>Command Line Interface</summary>
 
 The cli interface can be accessed by passing `cli` as a commandline argument.
@@ -1231,6 +1256,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Start with the session on Linux, from Preferences
 - [x] What is new after an update, once; the version of RustInput of each computer in the list
 - [x] European Portuguese (pt-PT)
+- [x] An MCP server for AI agents (`rustinput mcp`)
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here

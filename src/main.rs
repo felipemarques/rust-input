@@ -99,6 +99,7 @@ fn run() -> Result<(), RustInputError> {
             Command::Status { waybar } => run_async(rustinput_cli::status(waybar))?,
             Command::Go { computer } => run_async(rustinput_cli::go(Some(computer)))?,
             Command::Home => run_async(rustinput_cli::go(None))?,
+            Command::Mcp => run_async(rustinput_cli::mcp::serve(env!("CARGO_PKG_VERSION")))?,
             #[cfg(windows)]
             Command::WindowsService => windows_supervisor::run().map_err(io::Error::other)?,
             Command::Daemon => {
