@@ -1129,35 +1129,35 @@ msgstr "Не выключать динамики этого компьютера
 msgid "Off: they are silent while its sound plays on the other computer"
 msgstr "Выключено: они молчат, пока его звук играет на другом компьютере"
 
-#: rustinput-gtk/src/window/sound.rs:129
+#: rustinput-gtk/src/window/sound.rs:131
 msgid "The sound does not work: {error}"
 msgstr "Звук не работает: {error}"
 
-#: rustinput-gtk/src/window/sound.rs:130
+#: rustinput-gtk/src/window/sound.rs:132
 msgid "The sound of this computer plays on {name}"
 msgstr "Звук этого компьютера играет на {name}"
 
-#: rustinput-gtk/src/window/sound.rs:135
+#: rustinput-gtk/src/window/sound.rs:137
 msgid "No computer of the list is switched on to send its sound"
 msgstr "Ни один компьютер из списка не включён, чтобы отправлять звук"
 
-#: rustinput-gtk/src/window/sound.rs:191
+#: rustinput-gtk/src/window/sound.rs:193
 msgid "Mute"
 msgstr "Без звука"
 
-#: rustinput-gtk/src/window/sound.rs:268
+#: rustinput-gtk/src/window/sound.rs:270
 msgid "Asking for its sound…"
 msgstr "Запрос звука…"
 
-#: rustinput-gtk/src/window/sound.rs:269
+#: rustinput-gtk/src/window/sound.rs:271
 msgid "Its sound plays here"
 msgstr "Его звук играет здесь"
 
-#: rustinput-gtk/src/window/sound.rs:270
+#: rustinput-gtk/src/window/sound.rs:272
 msgid "It sends its sound; nothing plays there now"
 msgstr "Он отправляет звук; сейчас там ничего не играет"
 
-#: rustinput-gtk/src/window/sound.rs:271
+#: rustinput-gtk/src/window/sound.rs:273
 msgid "It does not send its sound: {why}"
 msgstr "Он не отправляет звук: {why}"
 

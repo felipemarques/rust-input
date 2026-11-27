@@ -7,6 +7,10 @@ Writing an entry: a `- ` line per change people will notice, in plain words, und
 between backticks. Each change is translated like the texts of the program: `cargo run -p rustinput-i18n --example
 update-po` puts it in `po/` (context `changelog`), and the window shows it in the language of the windows.
 
+## 0.52.0
+
+- The sound of every computer in the headphones of one: switch on "Hear the other computers here" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there.
+
 ## 0.51.0
 
 - Linux: "Update now" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after "Restart now". AI agents can do it too (apply_update).
