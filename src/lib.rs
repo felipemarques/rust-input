@@ -20,6 +20,7 @@ mod pairing;
 mod radial;
 pub mod self_update;
 pub mod service;
+mod sound;
 mod update;
 #[cfg(windows)]
 pub mod windows_system;

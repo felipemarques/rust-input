@@ -557,6 +557,39 @@ pub struct UpdateState {
     pub install: Option<Install>,
 }
 
+/// The shared sound (0.52.0), see [`FrontendEvent::Sound`].
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SoundState {
+    /// this system can share its sound (Linux, Windows)
+    pub supported: bool,
+    /// the sound of the other computers plays here
+    pub listen: bool,
+    /// the sound of this computer goes to the one that listens
+    pub send: bool,
+    /// the speakers play while the sound goes to another computer
+    pub keep_speakers: bool,
+    /// while listening: the computers of the list asked for their sound
+    pub sources: Vec<SoundSource>,
+    /// the computer this one sends its sound to, now
+    pub sending_to: Option<String>,
+    /// why the sound does not work here
+    pub error: Option<String>,
+}
+
+/// One computer asked for its sound, see [`SoundState::sources`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SoundSource {
+    pub handle: ClientHandle,
+    pub name: String,
+    /// 0 to 100
+    pub volume: u8,
+    pub muted: bool,
+    /// `None` while asking; why it does not send, when it does not
+    pub answer: Option<Result<(), String>>,
+    /// its sound arrives
+    pub heard: bool,
+}
+
 /// Where installing a new version is, see [`UpdateState::install`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Install {
@@ -668,6 +701,8 @@ pub enum FrontendEvent {
     },
     /// the computers running RustInput found on the network (0.40.0)
     Discovered(Vec<Discovered>),
+    /// the shared sound (0.52.0)
+    Sound(SoundState),
     /// The version whose news the window showed last (0.48.0): it shows
     /// those of the versions after it once, then answers with
     /// [`FrontendRequest::WhatsNewSeen`].
@@ -875,6 +910,18 @@ pub enum FrontendRequest {
     SetCheckUpdates(bool),
     /// ask GitHub for the latest version now
     CheckUpdates,
+    /// the sound of the other computers plays here, or no longer (0.52.0)
+    SetSoundListen(bool),
+    /// the sound of this computer goes to the one that listens, or not
+    SetSoundSend(bool),
+    /// the speakers play while the sound goes to another computer, or not
+    SetSoundKeepSpeakers(bool),
+    /// the volume of the sound of a client, here
+    SetSoundVolume {
+        handle: ClientHandle,
+        volume: u8,
+        muted: bool,
+    },
     /// downloads the new version, checks it and installs it, when
     /// [`UpdateState::installable`] (0.51.0)
     InstallUpdate,

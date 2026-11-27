@@ -142,6 +142,18 @@ enum Message {
         fingerprint: String,
     },
     Introduced,
+    /// the asking device listens: send the sound of this one as `stream`
+    /// (hex), sealed with `key` (hex), to its UDP `port` (0.52.0)
+    Sound {
+        port: u16,
+        stream: String,
+        key: String,
+    },
+    /// the sound goes
+    SoundOn,
+    /// the asking device no longer listens
+    SoundStop,
+    SoundOff,
 }
 
 /// a device as it describes itself
@@ -188,6 +200,19 @@ pub(crate) enum ArrangementEvent {
         history: Option<u64>,
         done: oneshot::Sender<(Option<ClipboardSeen>, Option<HistoryAnswer>)>,
     },
+    /// the authorized device with the certificate `from`, at `addr`, listens:
+    /// the sound of this one goes as `stream` sealed with `key` to its UDP
+    /// `port`, if `done` says so (0.52.0)
+    Sound {
+        from: String,
+        addr: SocketAddr,
+        port: u16,
+        stream: String,
+        key: String,
+        done: oneshot::Sender<Result<(), String>>,
+    },
+    /// the authorized device with the certificate `from` no longer listens
+    SoundStop { from: String },
     /// the authorized device with the certificate `from` tells about the
     /// device `fingerprint` called `name`, authorized on it (0.41.0)
     Introduce {
@@ -304,6 +329,30 @@ impl Arrangement {
                     fingerprint,
                 });
                 Message::Introduced
+            }
+            Message::Sound { port, stream, key } => {
+                let (done, result) = oneshot::channel();
+                let _ = self.events.send(ArrangementEvent::Sound {
+                    from: peer.to_owned(),
+                    addr,
+                    port,
+                    stream,
+                    key,
+                    done,
+                });
+                match timeout(QUESTION_TIMEOUT, result).await {
+                    Ok(Ok(Ok(()))) => Message::SoundOn,
+                    Ok(Ok(Err(reason))) => Message::Refused { reason },
+                    _ => Message::Refused {
+                        reason: "RustInput did not answer".into(),
+                    },
+                }
+            }
+            Message::SoundStop => {
+                let _ = self.events.send(ArrangementEvent::SoundStop {
+                    from: peer.to_owned(),
+                });
+                Message::SoundOff
             }
             Message::Lock => {
                 let (done, result) = oneshot::channel();
@@ -468,6 +517,40 @@ pub(crate) async fn introduce(
     .await
     {
         Ok((_, Message::Introduced)) => Ok(()),
+        Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// Hands the device at one of `addrs`, which must have the certificate
+/// `expected`, the stream of its sound: it sends it to UDP `port` of this
+/// one (0.52.0). Its fingerprint, or why it does not send.
+pub(crate) async fn sound(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: String,
+    port: u16,
+    stream: String,
+    key: String,
+) -> Result<String, ArrangeError> {
+    let message = Message::Sound { port, stream, key };
+    match ask(cert, addrs, Some(expected), message).await {
+        Ok((peer, Message::SoundOn)) => Ok(peer),
+        Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
+        Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
+        Err(e) => Err(older(e)),
+    }
+}
+
+/// tells the device at one of `addrs` that this one no longer listens
+pub(crate) async fn sound_stop(
+    cert: Certificate,
+    addrs: Vec<SocketAddr>,
+    expected: String,
+) -> Result<(), ArrangeError> {
+    match ask(cert, addrs, Some(expected), Message::SoundStop).await {
+        Ok((_, Message::SoundOff)) => Ok(()),
         Ok((_, Message::Refused { reason })) => Err(ArrangeError::Refused(reason)),
         Ok(_) => Err(ArrangeError::Refused("unexpected answer".into())),
         Err(e) => Err(older(e)),

@@ -25,6 +25,8 @@ finish-args:
   - "--device=dri"
   - "--socket=session-bus"
   - "--share=network"
+  # the shared sound (0.52.0)
+  - "--socket=pulseaudio"
   - "--filesystem=xdg-config"
   - "--env=RUST_BACKTRACE=1"
   - "--env=RUST_LOG=rustinput=debug"
