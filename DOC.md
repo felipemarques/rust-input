@@ -869,6 +869,18 @@ in a line under the header bar (until "Later", for that version) and in the tray
 (the installer puts it there), which asks for administrator rights and installs; elsewhere
 **Download** opens the page of the release.
 
+### What is new, and the version of each computer (0.48.0)
+
+`CHANGELOG.md` has a section per version (`## 0.48.0`), which a test of the
+workspace requires for the version of `Cargo.toml`. The window has it built
+in; the service sends `whats_new_seen` of the configuration with `Sync`
+(`FrontendEvent::WhatsNewSeen`) and the window shows the sections after it
+up to its own version, then answers `FrontendRequest::WhatsNewSeen`. A new
+installation (no clients, nothing authorized) counts as having seen this
+version. `Description` carries the version of RustInput (empty from older
+ones); the view of the arrangement passes it on, and the row of each client
+compares it with this one.
+
 ### The sign on the tray icon and the notification (0.32.0)
 
 The tray icon shows a new version too: `tray::icon::new_version` draws a green disc with a

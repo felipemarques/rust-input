@@ -19,6 +19,7 @@ mod notification;
 mod transfers;
 #[cfg(not(target_os = "macos"))]
 mod tray;
+mod whats_new;
 mod window;
 
 use std::{env, process, str, sync::OnceLock};
@@ -579,6 +580,7 @@ fn build_ui(app: &Application) {
                     }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
                     FrontendEvent::Discovered(found) => window.set_discovered(found),
+                    FrontendEvent::WhatsNewSeen(seen) => whats_new::show(&window, seen),
                     FrontendEvent::Introduction {
                         by,
                         name,

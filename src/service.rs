@@ -571,6 +571,12 @@ impl Service {
                 self.clipboard.set_along(along);
                 self.notify_frontend(FrontendEvent::ClipboardAlong(along));
             }
+            FrontendRequest::WhatsNewSeen(version) => {
+                if self.config.whats_new_seen().as_ref() != Some(&version) {
+                    self.config.set_whats_new_seen(version);
+                    self.save_config();
+                }
+            }
             FrontendRequest::SetHotkeys(on) => {
                 self.config.set_hotkeys(on);
                 self.save_config();
@@ -1122,6 +1128,15 @@ impl Service {
         self.notify_frontend(FrontendEvent::Discovery(self.discovery_on));
         self.notify_frontend(FrontendEvent::Hotkeys(self.hotkeys_on));
         self.notify_frontend(FrontendEvent::ClipboardAlong(self.clipboard.along()));
+        // a new installation has nothing new to tell about
+        let mut seen = self.config.whats_new_seen();
+        if seen.is_none()
+            && self.client_manager.get_client_states().is_empty()
+            && self.authorized_keys.read().expect("lock").is_empty()
+        {
+            seen = Some(env!("CARGO_PKG_VERSION").to_owned());
+        }
+        self.notify_frontend(FrontendEvent::WhatsNewSeen(seen));
         self.report_discovered();
         let introductions: Vec<FrontendEvent> = self
             .introductions
@@ -1915,6 +1930,10 @@ impl Service {
                 active: state.active,
                 alive: state.alive,
                 paused: state.paused,
+                version: match self.descriptions.get(&handle) {
+                    Some(Ok((_, d))) => d.version.clone(),
+                    _ => String::new(),
+                },
             });
         }
         self.notify_frontend(FrontendEvent::Arrangement(ArrangementView {

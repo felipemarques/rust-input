@@ -56,6 +56,8 @@ pub struct ClientRow {
     pub client_object: RefCell<Option<ClientObject>>,
     /// the client says it is paused by its user
     pub paused: std::cell::Cell<bool>,
+    /// the version of its RustInput, when it described itself (0.48.0)
+    pub version: RefCell<Option<String>>,
 }
 
 #[glib::object_subclass]

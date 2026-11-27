@@ -222,6 +222,14 @@ impl ClientRow {
     /// `peer-commit`. The dns-status icon is left to its existing
     /// `set_dns_state` handler so the two indicators don't fight
     /// for the same CSS class.
+    /// the version of RustInput the client runs, from the arrangement
+    pub fn set_version(&self, version: Option<String>) {
+        if *self.imp().version.borrow() != version {
+            self.imp().version.replace(version);
+            self.refresh_version_status();
+        }
+    }
+
     pub fn refresh_version_status(&self) {
         let peer: Option<String> = self
             .imp()
@@ -239,6 +247,39 @@ impl ClientRow {
             self.set_subtitle(tr(
                 "Paused on that computer: it neither controls nor is controlled",
             ));
+            return;
+        }
+        // the version it runs, once it described itself (0.48.0)
+        let version = self.imp().version.borrow().clone();
+        if let Some(theirs) = version {
+            let ours = crate::APP_VERSION.get().copied().unwrap_or_default();
+            let values: [(&str, &dyn std::fmt::Display); 2] =
+                [("version", &theirs), ("local", &ours)];
+            let (text, class) = match crate::whats_new::compare(&theirs, ours) {
+                std::cmp::Ordering::Equal => (
+                    trf("RustInput {version}, the same as this one", &values),
+                    "peer-match",
+                ),
+                std::cmp::Ordering::Less => (
+                    trf(
+                        "RustInput {version}: older than this one ({local}), update it",
+                        &values,
+                    ),
+                    "peer-mismatch",
+                ),
+                std::cmp::Ordering::Greater => (
+                    trf(
+                        "RustInput {version}: newer than this one ({local})",
+                        &values,
+                    ),
+                    "peer-mismatch",
+                ),
+            };
+            for c in ["peer-mismatch", "peer-match", "peer-unknown"] {
+                self.remove_css_class(c);
+            }
+            self.add_css_class(class);
+            self.set_subtitle(&text);
             return;
         }
         let markup = match peer.as_deref() {
