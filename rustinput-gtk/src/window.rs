@@ -1,6 +1,7 @@
 mod clipboard;
 mod imp;
 pub(crate) mod network;
+pub(crate) mod shortcuts;
 
 use std::collections::HashMap;
 

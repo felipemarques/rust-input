@@ -34,6 +34,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
+| ⌨️ Keyboard shortcuts to go to a computer, the next one or back here | ✅ ²³ | ✅ ²³ | ✅ ²⁴ | ✅ ²⁴ |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
 | ⏸️ Pause from the tray icon, the window or the radial menu; the other computers see it paused | ✅ ¹² | ✅ ¹² | ✅ ² | ✅ ² |
@@ -87,6 +88,9 @@ away while they are sent are skipped instead of ending the transfer when both co
 ²¹ New in 0.40.0: tested in automated runs between two RustInput on one Linux (X11) computer, not yet by hand. Off until
 switched on, on both computers (see [Finding the computers on the network](#finding-the-computers-on-the-network)).
 ²² New in 0.41.0: tested in automated runs between three RustInput on one Linux (X11) computer, not yet by hand.
+²³ New in 0.42.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
+²⁴ While the pointer is on another computer; with the pointer on this one they need X11 or Windows, like the radial
+menu.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -260,6 +264,22 @@ their place on the clipboard, when RustInput starts, or with **Remove unpasted f
 </p>
 
 To turn file transfers off altogether, set `clipboard_files = false` in the [configuration](#configuration) file.
+
+## Keyboard shortcuts
+
+| Keys | What they do |
+|---|---|
+| **AltGr + right Shift + 1** … **9** | To that computer, in the order of the list of connections (the active ones) |
+| **AltGr + right Shift + 0** | Back to this computer |
+| **AltGr + right Shift** | With one other computer, there and back; with more, the next one |
+| **AltGr + →** / **AltGr + ←** | The next / the previous computer (this one counts as the first) |
+| **Right Shift** twice, quickly | The next computer |
+| **Right Shift** held for 3 seconds | Back to this computer, always |
+
+A shortcut fires when its keys are let go, and only if nothing else was pressed meanwhile, so AltGr + Q still types
+"/" and Shift + 1 still types "!". The keys are only watched, never taken from the applications. Without AltGr, the
+right Alt does it. Switch them off in **Preferences > Keyboard shortcuts** (`hotkeys = false`). The shortcuts of
+[Lan Mouse](#compatibility-with-lan-mouse) to let go of the pointer (`release_bind`) keep working.
 
 ## Radial menu
 
@@ -1045,6 +1065,10 @@ ask_before_receiving_mb = 1024
 # broadcasts on port 4241 (off by default, see the privacy policy)
 discovery = false
 
+# keyboard shortcuts to move between the computers: AltGr + right Shift + 1 … 9, and
+# more (on by default)
+hotkeys = true
+
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
@@ -1143,6 +1167,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
+- [x] Keyboard shortcuts to go to a computer, the next one or back here
 
 
 ## Detailed OS Support

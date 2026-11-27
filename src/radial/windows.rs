@@ -45,6 +45,8 @@ use windows_sys::Win32::{
     },
 };
 
+use crate::hotkeys::{self, Hotkeys};
+
 use super::{
     Action, Fonts, Menu, Texts, Wheel,
     chord::{Chord, Key, Step},
@@ -71,6 +73,7 @@ struct Open {
 struct State {
     hwnd: HWND,
     chord: Chord,
+    hotkeys: Hotkeys,
     open: Option<Open>,
     menu: Menu,
     chosen: UnboundedSender<Action>,
@@ -83,7 +86,7 @@ struct State {
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
     /// keys the hook saw, for the window procedure
-    static KEYS: RefCell<Vec<(Key, bool)>> = const { RefCell::new(Vec::new()) };
+    static KEYS: RefCell<Vec<(Key, hotkeys::Key, bool)>> = const { RefCell::new(Vec::new()) };
     static WINDOW: RefCell<HWND> = const { RefCell::new(ptr::null_mut()) };
 }
 
@@ -136,6 +139,7 @@ pub(super) fn run(menu: Menu, chosen: UnboundedSender<Action>) -> Result<(), Str
             *state = Some(State {
                 hwnd,
                 chord: Chord::default(),
+                hotkeys: Hotkeys::default(),
                 open: None,
                 menu,
                 chosen,
@@ -169,7 +173,8 @@ unsafe extern "system" fn keyboard(code: i32, wparam: WPARAM, lparam: LPARAM) ->
             VK_ESCAPE => Key::Escape,
             _ => Key::Other,
         };
-        KEYS.with_borrow_mut(|keys| keys.push((key, pressed)));
+        let shortcut = hotkeys::Key::from_windows(info.vkCode as u16);
+        KEYS.with_borrow_mut(|keys| keys.push((key, shortcut, pressed)));
         let hwnd = WINDOW.with_borrow(|w| *w);
         unsafe { PostMessageW(hwnd, WM_KEYS, 0, 0) };
     }
@@ -206,7 +211,9 @@ unsafe extern "system" fn window_proc(
 impl State {
     fn keys(&mut self) {
         let keys = KEYS.with_borrow_mut(std::mem::take);
-        for (key, pressed) in keys {
+        for (key, shortcut, pressed) in keys {
+            self.menu
+                .shortcut(&mut self.hotkeys, shortcut, pressed, &self.chosen);
             let step = self.chord.key(key, pressed, Instant::now());
             self.step(step);
         }
@@ -248,6 +255,8 @@ impl State {
     fn step(&mut self, step: Step) {
         match step {
             Step::Nothing => {}
+            // only the shortcuts are watched
+            Step::Open if !self.menu.wheel() => {}
             Step::Open => self.show(),
             Step::Pick => self.close(true),
             Step::Cancel => self.close(false),

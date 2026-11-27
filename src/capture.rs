@@ -18,7 +18,10 @@ use rustinput_proto::{CAP_CURSOR_POSITION, CAP_EDGE_SPAN, ProtoEvent};
 use tokio::task::{JoinHandle, spawn_local};
 use tokio_util::sync::CancellationToken;
 
-use crate::connect::{Received, RustInputConnection};
+use crate::{
+    connect::{Received, RustInputConnection},
+    hotkeys::{self, Hotkey, Hotkeys},
+};
 
 pub(crate) struct Capture {
     cancellation_token: CancellationToken,
@@ -58,6 +61,9 @@ pub(crate) enum ICaptureEvent {
     /// The client answered with a certificate (its fingerprint) that is not
     /// authorized here: no input goes to it.
     NotAuthorized(u64, String),
+    /// a keyboard shortcut to move between the computers, while the pointer
+    /// is on another one (0.42.0)
+    Hotkey(Hotkey),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -79,6 +85,10 @@ enum CaptureRequest {
     ReleaseAt(Edge, f64),
     /// go to the client without crossing the edge
     Enter(CaptureHandle),
+    /// go to the client without crossing the edge, also from another client
+    Switch(CaptureHandle),
+    /// watch the keyboard shortcuts while the pointer is on another device
+    Hotkeys(bool),
     /// keep the pointer on this device: crossing an edge does nothing
     Lock(bool),
     /// paused: the pointer comes back and stays here, also on request
@@ -118,6 +128,8 @@ impl Capture {
             locked: false,
             paused: false,
             entering: false,
+            hotkeys: Hotkeys::default(),
+            hotkeys_on: false,
         };
         let task = spawn_local(capture_task.run());
         Self {
@@ -180,6 +192,21 @@ impl Capture {
     pub(crate) fn enter(&self, handle: CaptureHandle) {
         self.request_tx
             .send(CaptureRequest::Enter(handle))
+            .expect("channel closed");
+    }
+
+    /// moves the pointer to the client, also from another client it is on
+    pub(crate) fn switch(&self, handle: CaptureHandle) {
+        self.request_tx
+            .send(CaptureRequest::Switch(handle))
+            .expect("channel closed");
+    }
+
+    /// whether the keyboard shortcuts are watched while the pointer is on
+    /// another device
+    pub(crate) fn set_hotkeys(&self, on: bool) {
+        self.request_tx
+            .send(CaptureRequest::Hotkeys(on))
             .expect("channel closed");
     }
 
@@ -251,6 +278,9 @@ struct CaptureTask {
     paused: bool,
     /// a client is entered on request, which goes through when locked
     entering: bool,
+    /// the keyboard shortcuts, while the pointer is on another device
+    hotkeys: Hotkeys,
+    hotkeys_on: bool,
 }
 
 impl CaptureTask {
@@ -321,7 +351,10 @@ impl CaptureTask {
                             // nothing is grabbed
                             self.place_pointer(edge, fraction);
                         }
-                        CaptureRequest::Enter(_) => { /* no capture to enter with */ }
+                        CaptureRequest::Enter(_) | CaptureRequest::Switch(_) => {
+                            /* no capture to enter with */
+                        }
+                        CaptureRequest::Hotkeys(on) => self.hotkeys_on = on,
                         CaptureRequest::Lock(locked) => self.locked = locked,
                         CaptureRequest::Pause(paused) => self.paused = paused,
                         CaptureRequest::SetReleaseBind(bind) => {
@@ -444,6 +477,23 @@ impl CaptureTask {
                             capture.enter_client(handle).await?;
                         }
                     }
+                    CaptureRequest::Switch(handle) => {
+                        let default = self
+                            .captures
+                            .iter()
+                            .any(|(h, _, t, _)| *h == handle && *t == CaptureType::Default);
+                        if default && self.active_client != Some(handle) && !self.paused {
+                            if self.active_client.is_some() {
+                                self.release_capture(capture).await?;
+                            }
+                            self.entering = true;
+                            capture.enter_client(handle).await?;
+                        }
+                    }
+                    CaptureRequest::Hotkeys(on) => {
+                        self.hotkeys_on = on;
+                        self.hotkeys.reset();
+                    }
                     CaptureRequest::Lock(locked) => {
                         log::info!("pointer {}", if locked { "kept on this device" } else { "free to move on" });
                         self.locked = locked;
@@ -516,6 +566,24 @@ impl CaptureTask {
             );
             self.entering = false;
             return capture.release().await;
+        }
+
+        // the keyboard shortcuts while the pointer is on another device:
+        // the keys still go there too
+        if self.active_client.is_some() && self.hotkeys_on {
+            if let CaptureEvent::Input(Event::Keyboard(KeyboardEvent::Key { key, state, .. })) =
+                &event
+            {
+                if *state <= 1 {
+                    let key = hotkeys::Key::from_linux(*key);
+                    if let Some(hotkey) = self.hotkeys.key(key, *state == 1, Instant::now()) {
+                        log::info!("keyboard shortcut: {hotkey:?}");
+                        self.event_tx
+                            .send(ICaptureEvent::Hotkey(hotkey))
+                            .expect("channel closed");
+                    }
+                }
+            }
         }
 
         if capture.keys_pressed(&self.release_bind.borrow()) {
@@ -684,6 +752,7 @@ impl CaptureTask {
         fraction: Option<f64>,
     ) -> Result<(), CaptureError> {
         self.entry_fraction = None;
+        self.hotkeys.reset();
         // If we have an active client, notify them we're leaving
         if let Some(handle) = self.active_client.take() {
             // Surface the leave to the service layer so it can fire

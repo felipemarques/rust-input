@@ -12,6 +12,7 @@ use crate::{
     dns::{DnsEvent, DnsResolver},
     emulation::{Emulation, EmulationEvent},
     files::{self, FilesHandle},
+    hotkeys::Hotkey,
     listen::{ListenerCreationError, RustInputListener},
     netstats::{NetStats, Sample},
     pairing::{self, PairError, Paired, Pairing, PairingEvent},
@@ -126,6 +127,12 @@ pub struct Service {
     transfers: Vec<TransferInfo>,
     /// the other computers running RustInput on the network
     discovery: DiscoveryHandle,
+    /// where the actions of the wheel go, while no thread watches the keys
+    radial_spare: Option<tokio::sync::mpsc::UnboundedSender<Action>>,
+    /// the keyboard shortcuts are on (0.42.0)
+    hotkeys_on: bool,
+    /// the client the pointer is on, if any
+    pointer_at: Option<ClientHandle>,
     discovered_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<Discovered>>,
     discovered: Vec<Discovered>,
     discovery_on: bool,
@@ -288,9 +295,17 @@ impl Service {
         );
         let radial = Menu::default();
         let (radial_tx, radial_actions) = tokio::sync::mpsc::unbounded_channel();
-        if config.radial_menu() {
+        // the same thread watches the keys of the wheel and of the shortcuts
+        let hotkeys = config.hotkeys();
+        radial.set_wheel(config.radial_menu());
+        radial.set_hotkeys(hotkeys);
+        let watching = config.radial_menu() || hotkeys;
+        let radial_tx = if watching {
             radial::spawn(radial.clone(), radial_tx);
-        }
+            None
+        } else {
+            Some(radial_tx)
+        };
         let file_options = config.file_options();
         let theme = config.theme();
         clipboard.set_send_copied(file_options.available && file_options.send_copied);
@@ -301,6 +316,7 @@ impl Service {
         let capture_backend = config.capture_backend().map(|b| b.into());
         let paused = config.paused();
         let capture = Capture::new(capture_backend, conn, config.release_bind());
+        capture.set_hotkeys(hotkeys);
         let emulation_backend = config.emulation_backend().map(|b| b.into());
         let emulation = Emulation::new(emulation_backend, listener);
 
@@ -371,6 +387,9 @@ impl Service {
             name,
             radial,
             radial_actions,
+            radial_spare: radial_tx,
+            hotkeys_on: hotkeys,
+            pointer_at: None,
             texts: Texts::new(),
             notices,
             locked: false,
@@ -537,6 +556,11 @@ impl Service {
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
             FrontendRequest::Discover(look) => self.discovery.look(look),
+            FrontendRequest::SetHotkeys(on) => {
+                self.config.set_hotkeys(on);
+                self.save_config();
+                self.apply_hotkeys(on);
+            }
             FrontendRequest::AnswerIntroduction {
                 fingerprint,
                 authorize,
@@ -680,6 +704,71 @@ impl Service {
         self.notify_frontend(FrontendEvent::FileOptions(options));
     }
 
+    /// Switches the keyboard shortcuts on or off; the thread that watches the
+    /// keys starts if the wheel did not have it running.
+    fn apply_hotkeys(&mut self, on: bool) {
+        self.hotkeys_on = on;
+        self.radial.set_hotkeys(on);
+        self.capture.set_hotkeys(on);
+        if on {
+            if let Some(chosen) = self.radial_spare.take() {
+                radial::spawn(self.radial.clone(), chosen);
+            }
+        }
+        self.notify_frontend(FrontendEvent::Hotkeys(on));
+    }
+
+    /// Moves the pointer as a keyboard shortcut says: to the n-th active
+    /// computer of the list, back here, or to the next or previous one
+    /// (this one counting as the first).
+    fn hotkey(&mut self, hotkey: Hotkey) {
+        if self.paused {
+            return;
+        }
+        let mut clients: Vec<ClientHandle> = self
+            .client_manager
+            .get_client_states()
+            .into_iter()
+            .filter(|(_, _, state)| state.active)
+            .map(|(handle, ..)| handle)
+            .collect();
+        clients.sort();
+        let go = |service: &mut Self, target: Option<ClientHandle>| match target {
+            None if service.pointer_at.is_some() => service.capture.release(),
+            None => {}
+            Some(t) if service.pointer_at == Some(t) => {}
+            Some(t) => service.capture.switch(t),
+        };
+        match hotkey {
+            Hotkey::Home => go(self, None),
+            Hotkey::GoTo(n) => {
+                if let Some(&target) = clients.get(n as usize - 1) {
+                    go(self, Some(target));
+                }
+            }
+            Hotkey::Toggle if clients.len() == 1 => {
+                let target = match self.pointer_at {
+                    Some(_) => None,
+                    None => Some(clients[0]),
+                };
+                go(self, target);
+            }
+            Hotkey::Toggle | Hotkey::Next | Hotkey::Previous => {
+                // this computer first, then the others
+                let ring: Vec<Option<ClientHandle>> = std::iter::once(None)
+                    .chain(clients.iter().copied().map(Some))
+                    .collect();
+                let here = ring.iter().position(|t| *t == self.pointer_at).unwrap_or(0);
+                let step = if hotkey == Hotkey::Previous {
+                    ring.len() - 1
+                } else {
+                    1
+                };
+                go(self, ring[(here + step) % ring.len()]);
+            }
+        }
+    }
+
     /// The computers found on the network to the windows, with whether each
     /// is authorized and already added here.
     fn report_discovered(&mut self) {
@@ -755,6 +844,10 @@ impl Service {
         }
         let release_bind = self.config.release_bind();
         self.capture.set_release_bind(release_bind);
+        let hotkeys = self.config.hotkeys();
+        if hotkeys != self.hotkeys_on {
+            self.apply_hotkeys(hotkeys);
+        }
         let authorized_keys = self.config.authorized_fingerprints();
         self.authorized_keys
             .write()
@@ -901,6 +994,7 @@ impl Service {
             }
             ICaptureEvent::ClientEntered(handle) => {
                 log::info!("entering client {handle} ...");
+                self.pointer_at = Some(handle);
                 self.notify_frontend(FrontendEvent::PointerAt(Some(handle)));
                 // the client shows its own radial menu
                 self.radial.set_away(true);
@@ -908,6 +1002,7 @@ impl Service {
             }
             ICaptureEvent::ClientLeft(handle) => {
                 log::info!("leaving client {handle} ...");
+                self.pointer_at = None;
                 self.notify_frontend(FrontendEvent::PointerAt(None));
                 self.radial.set_away(false);
                 self.spawn_hook_command(handle, HookKind::Leave);
@@ -917,6 +1012,7 @@ impl Service {
                 self.clipboard.push(Peer::Outgoing(handle));
             }
             ICaptureEvent::PlacePointer(edge, fraction) => self.emulation.warp(edge, fraction),
+            ICaptureEvent::Hotkey(hotkey) => self.hotkey(hotkey),
             ICaptureEvent::NotAuthorized(handle, fingerprint) => {
                 // once a minute at most: every crossing tries again
                 let now = std::time::Instant::now();
@@ -982,6 +1078,7 @@ impl Service {
         ));
         self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
         self.notify_frontend(FrontendEvent::Discovery(self.discovery_on));
+        self.notify_frontend(FrontendEvent::Hotkeys(self.hotkeys_on));
         self.report_discovered();
         let introductions: Vec<FrontendEvent> = self
             .introductions
@@ -1260,6 +1357,7 @@ impl Service {
             }
             Action::ShowTransfers => self.notify_frontend(FrontendEvent::ShowTransfers),
             Action::ShowClipboards => self.notify_frontend(FrontendEvent::ShowClipboardsTab),
+            Action::Hotkey(hotkey) => self.hotkey(hotkey),
             Action::ShowWindow => self.notify_frontend(FrontendEvent::ShowWindow),
         }
     }

@@ -11,6 +11,7 @@ mod dns;
 mod emulation;
 pub mod emulation_test;
 mod files;
+pub(crate) mod hotkeys;
 mod identify;
 mod listen;
 mod lock;

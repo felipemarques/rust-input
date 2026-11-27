@@ -507,6 +507,29 @@ window that connects. Names from other devices go through `plain_text`
 characters, cut between characters), as in pairing, discovery and the
 descriptions.
 
+## Keyboard shortcuts (0.42.0)
+
+`src/hotkeys.rs` is a state machine fed with key presses and releases
+(`hotkeys::Key`: AltGr, the right Shift, digits, the arrows, the rest; the
+left Ctrl never counts, as Windows sends it with AltGr). A shortcut fires
+when every key of it is up and nothing else was pressed since the first
+went down; the right Shift alone fires on its release when it was held 3 s
+(home) or tapped twice within 400 ms (next).
+
+- With the pointer on this device, the thread of the radial menu feeds it
+  (X11: XI2 raw events, the keycode minus 8 is the evdev code; Windows: the
+  low level hook, by virtual key) and sends `radial::Action::Hotkey`. It
+  runs when the wheel or the shortcuts are on (`radial_menu`, `hotkeys`);
+  with the wheel off only the shortcuts are watched.
+- With the pointer on another device, the capture feeds it with the keys it
+  forwards (every system), and sends `ICaptureEvent::Hotkey`. The keys still
+  go to the other device.
+- The service turns a shortcut into a target: the n-th active client by
+  handle, this device (`Capture::release`), or the next or previous one in
+  [this device, clients…]. `CaptureRequest::Switch` enters a client also
+  from another one (it releases that one first). Nothing moves while
+  paused.
+
 ## Radial menu
 
 Holding Ctrl and the left Alt alone for 250 ms shows a wheel of actions (see

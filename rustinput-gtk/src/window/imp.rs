@@ -120,6 +120,8 @@ pub struct Window {
     pub ask_spin: RefCell<Option<gtk::SpinButton>>,
     /// the computers found on the network (0.40.0)
     pub(crate) network: RefCell<Option<crate::window::network::Network>>,
+    /// the keyboard shortcuts (0.42.0)
+    pub(crate) shortcuts: RefCell<Option<crate::window::shortcuts::Shortcuts>>,
     /// the switches are being set to what the service has
     pub updating_files: Cell<bool>,
     pub clients: RefCell<Option<gio::ListStore>>,
@@ -366,6 +368,7 @@ impl ObjectImpl for Window {
         obj.setup_updates();
         obj.setup_clipboards();
         obj.setup_network();
+        obj.setup_shortcuts();
     }
 }
 

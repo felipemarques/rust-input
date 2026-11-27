@@ -569,6 +569,7 @@ fn build_ui(app: &Application) {
                         fingerprint,
                     } => introduction::ask(&window, &by, &name, &fingerprint),
                     FrontendEvent::Discovery(on) => window.set_discovery(on),
+                    FrontendEvent::Hotkeys(on) => window.set_hotkeys(on),
                     FrontendEvent::AskTransfer {
                         id,
                         peer,
