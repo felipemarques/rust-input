@@ -373,6 +373,8 @@ impl ObjectImpl for Window {
         obj.setup_clipboards();
         obj.setup_network();
         obj.setup_shortcuts();
+        #[cfg(all(unix, not(target_os = "macos")))]
+        obj.setup_autostart();
     }
 }
 

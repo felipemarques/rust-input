@@ -489,35 +489,35 @@ msgstr "ليس الآن"
 msgid "Authorize a computer?"
 msgstr "منح الإذن لكمبيوتر؟"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:268
 msgid "Quit"
 msgstr "إنهاء"
 
-#: rustinput-gtk/src/lib.rs:267
+#: rustinput-gtk/src/lib.rs:269
 msgid "_File"
 msgstr "_ملف"
 
-#: rustinput-gtk/src/lib.rs:495
+#: rustinput-gtk/src/lib.rs:497
 msgid "{name} and this computer authorized each other"
 msgstr "تم التخويل المتبادل بين {name} وهذا الكمبيوتر"
 
-#: rustinput-gtk/src/lib.rs:500
+#: rustinput-gtk/src/lib.rs:502
 msgid "Not authorized: {error}"
 msgstr "لم يتم التخويل: {error}"
 
-#: rustinput-gtk/src/lib.rs:507
+#: rustinput-gtk/src/lib.rs:509
 msgid "{address} connected"
 msgstr "اتصل {address}"
 
-#: rustinput-gtk/src/lib.rs:514
+#: rustinput-gtk/src/lib.rs:516
 msgid "The mouse came from {address}"
 msgstr "جاء الماوس من {address}"
 
-#: rustinput-gtk/src/lib.rs:520
+#: rustinput-gtk/src/lib.rs:522
 msgid "{address} disconnected"
 msgstr "انقطع اتصال {address}"
 
-#: rustinput-gtk/src/lib.rs:614
+#: rustinput-gtk/src/lib.rs:616
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "الملفات المستلمة من {name}: {count}، جاهزة للصق"
 
@@ -1094,6 +1094,18 @@ msgstr "مفتاح Shift الأيمن مرتين بسرعة: الكمبيوتر 
 #: rustinput-gtk/src/window/shortcuts.rs:58
 msgid "The right Shift held for 3 seconds: back to this computer, always"
 msgstr "الضغط على Shift الأيمن 3 ثوانٍ: العودة إلى هذا الكمبيوتر دائمًا"
+
+#: rustinput-gtk/src/window/shortcuts.rs:99
+msgid "Starting"
+msgstr "بدء التشغيل"
+
+#: rustinput-gtk/src/window/shortcuts.rs:102
+msgid "Start RustInput with the session"
+msgstr "تشغيل RustInput مع الجلسة"
+
+#: rustinput-gtk/src/window/shortcuts.rs:103
+msgid "Without its window, in the tray. Off: start it from the menu of applications"
+msgstr "دون نافذته، في شريط النظام. معطّل: شغّله من قائمة التطبيقات"
 
 #: rustinput-gtk/src/window.rs:109
 msgid "Undo changes"

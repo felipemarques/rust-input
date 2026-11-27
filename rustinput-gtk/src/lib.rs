@@ -1,6 +1,8 @@
 mod arrangement;
 mod ask_transfer;
 mod authorization_window;
+#[cfg(all(unix, not(target_os = "macos")))]
+mod autostart;
 mod client_object;
 mod client_row;
 mod fingerprint_window;
