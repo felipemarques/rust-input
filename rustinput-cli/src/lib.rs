@@ -16,6 +16,211 @@ pub enum CliError {
     ServiceNotRunning(#[from] ConnectionError),
     #[error("error communicating with service: {0}")]
     Ipc(#[from] IpcError),
+    /// `rustinput go` with a computer that is not there
+    #[error("{0}")]
+    NotFound(String),
+}
+
+/// what the service tells about the computers, as `status`, `go` and the
+/// Waybar module need it (0.46.0)
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Where {
+    /// the clients, by handle: name, switched on, reachable
+    clients: Vec<(ClientHandle, String, bool, bool)>,
+    /// the client the mouse and keyboard are on
+    pointer_at: Option<ClientHandle>,
+    paused: bool,
+}
+
+impl Where {
+    /// takes in an event of the service; whether it changed something
+    fn event(&mut self, event: &FrontendEvent) -> bool {
+        let before = self.clone();
+        match event {
+            FrontendEvent::Enumerate(clients) => {
+                self.clients = clients
+                    .iter()
+                    .map(|(handle, config, state)| {
+                        let name = config
+                            .hostname
+                            .clone()
+                            .or_else(|| config.fix_ips.first().map(|ip| ip.to_string()))
+                            .unwrap_or_else(|| handle.to_string());
+                        (*handle, name, state.active, state.alive)
+                    })
+                    .collect();
+                self.clients.sort_by_key(|c| c.0);
+            }
+            FrontendEvent::State(handle, config, state) => {
+                if let Some(c) = self.clients.iter_mut().find(|c| c.0 == *handle) {
+                    if let Some(name) = &config.hostname {
+                        c.1 = name.clone();
+                    }
+                    c.2 = state.active;
+                    c.3 = state.alive;
+                }
+            }
+            FrontendEvent::Deleted(handle) => self.clients.retain(|c| c.0 != *handle),
+            FrontendEvent::PointerAt(at) => self.pointer_at = *at,
+            FrontendEvent::Paused(paused) => self.paused = *paused,
+            _ => {}
+        }
+        *self != before
+    }
+
+    /// the switched on clients, numbered from 1 as the keyboard shortcuts
+    /// number them
+    fn numbered(&self) -> Vec<(usize, ClientHandle, &str)> {
+        self.clients
+            .iter()
+            .filter(|c| c.2)
+            .enumerate()
+            .map(|(i, c)| (i + 1, c.0, c.1.as_str()))
+            .collect()
+    }
+
+    fn name(&self, handle: ClientHandle) -> &str {
+        self.clients
+            .iter()
+            .find(|c| c.0 == handle)
+            .map_or("?", |c| c.1.as_str())
+    }
+
+    /// one line: where the mouse and keyboard are
+    fn line(&self) -> String {
+        match (self.paused, self.pointer_at) {
+            (true, _) => "RustInput is paused: the mouse and keyboard stay here".into(),
+            (false, Some(at)) => format!("The mouse and keyboard are on {}", self.name(at)),
+            (false, None) => "The mouse and keyboard are here".into(),
+        }
+    }
+
+    /// the JSON of a custom module of Waybar
+    fn waybar(&self) -> String {
+        let (text, class) = match (self.paused, self.pointer_at) {
+            (true, _) => ("⏸".to_owned(), "paused"),
+            (false, Some(at)) => (format!("⌨ {}", self.name(at)), "remote"),
+            (false, None) => ("⌨".to_owned(), "local"),
+        };
+        serde_json::json!({ "text": text, "tooltip": self.line(), "class": class, "alt": class })
+            .to_string()
+    }
+}
+
+/// reads what the service sends until it said where everything is (it
+/// answers a new connection with all it knows)
+async fn where_now(rx: &mut rustinput_ipc::AsyncFrontendEventReader) -> Result<Where, CliError> {
+    let mut now = Where::default();
+    let mut listed = false;
+    let _ = tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(event) = rx.next().await {
+            let Ok(event) = event else { break };
+            listed |= matches!(event, FrontendEvent::Enumerate(_));
+            now.event(&event);
+            // the last thing a connecting window gets
+            if listed && matches!(event, FrontendEvent::PointerAt(_)) {
+                break;
+            }
+        }
+    })
+    .await;
+    Ok(now)
+}
+
+/// `rustinput status`: where the mouse and keyboard are and which computers
+/// there are; with `waybar`, a line of JSON for Waybar at every change,
+/// waiting for RustInput when it does not run
+pub async fn status(waybar: bool) -> Result<(), CliError> {
+    if !waybar {
+        let (mut rx, _tx) = connect_async(Some(Duration::from_millis(500))).await?;
+        let now = where_now(&mut rx).await?;
+        println!("{}", now.line());
+        for (number, handle, name) in now.numbered() {
+            let c = now.clients.iter().find(|c| c.0 == handle).expect("listed");
+            let here = if now.pointer_at == Some(handle) {
+                "  ←"
+            } else {
+                ""
+            };
+            let reachable = if c.3 { "" } else { " (not reached)" };
+            println!("  {number}  {name}{reachable}{here}");
+        }
+        for c in now.clients.iter().filter(|c| !c.2) {
+            println!("  -  {} (switched off)", c.1);
+        }
+        return Ok(());
+    }
+    loop {
+        match connect_async(Some(Duration::from_millis(500))).await {
+            Ok((mut rx, _tx)) => {
+                let mut now = where_now(&mut rx).await?;
+                println!("{}", now.waybar());
+                while let Some(Ok(event)) = rx.next().await {
+                    if now.event(&event) {
+                        println!("{}", now.waybar());
+                    }
+                }
+            }
+            Err(_) => {
+                println!(
+                    "{}",
+                    serde_json::json!({ "text": "", "tooltip": "RustInput is not running",
+                        "class": "off", "alt": "off" })
+                );
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
+/// `rustinput go <computer>` and `rustinput home`: the mouse and keyboard
+/// to a computer, by its number (as for the keyboard shortcuts) or name, or
+/// back here (`None`)
+pub async fn go(computer: Option<String>) -> Result<(), CliError> {
+    let (mut rx, mut tx) = connect_async(Some(Duration::from_millis(500))).await?;
+    let target = match computer {
+        None => None,
+        Some(computer) => {
+            let now = where_now(&mut rx).await?;
+            let numbered = now.numbered();
+            let wanted = computer.to_lowercase();
+            let found = match computer.parse::<usize>() {
+                Ok(n) => numbered.iter().find(|c| c.0 == n),
+                Err(_) => numbered
+                    .iter()
+                    .find(|c| c.2.to_lowercase() == wanted)
+                    .or_else(|| {
+                        numbered
+                            .iter()
+                            .find(|c| c.2.to_lowercase().starts_with(&wanted))
+                    }),
+            };
+            match found {
+                Some(&(_, handle, _)) => Some(handle),
+                None => {
+                    let names: Vec<String> = numbered
+                        .iter()
+                        .map(|c| format!("{} {}", c.0, c.2))
+                        .collect();
+                    return Err(CliError::NotFound(format!(
+                        "no switched on computer {computer:?}; there are: {}",
+                        if names.is_empty() {
+                            "none".into()
+                        } else {
+                            names.join(", ")
+                        }
+                    )));
+                }
+            }
+        }
+    };
+    tx.request(FrontendRequest::GoTo(target)).await?;
+    // as for send_files: the service reads it before the connection closes
+    let _ = tokio::time::timeout(Duration::from_millis(300), async {
+        while rx.next().await.is_some() {}
+    })
+    .await;
+    Ok(())
 }
 
 #[derive(Parser, Clone, Debug, PartialEq, Eq)]
@@ -195,4 +400,47 @@ async fn execute(cmd: CliSubcommand) -> Result<(), CliError> {
         CliSubcommand::SaveConfig => tx.request(FrontendRequest::SaveConfiguration).await?,
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn here() -> Where {
+        Where {
+            clients: vec![
+                (0, "laptop".into(), true, true),
+                (1, "velho".into(), false, false),
+                (2, "desk".into(), true, false),
+            ],
+            pointer_at: None,
+            paused: false,
+        }
+    }
+
+    #[test]
+    fn computers_are_numbered_as_for_the_shortcuts() {
+        let w = here();
+        let numbered: Vec<_> = w.numbered().into_iter().map(|(n, h, _)| (n, h)).collect();
+        assert_eq!(
+            numbered,
+            [(1, 0), (2, 2)],
+            "the switched off one has no number"
+        );
+    }
+
+    #[test]
+    fn where_the_mouse_and_keyboard_are() {
+        let mut w = here();
+        assert_eq!(w.line(), "The mouse and keyboard are here");
+        assert!(w.waybar().contains(r#""class":"local""#));
+        assert!(w.event(&FrontendEvent::PointerAt(Some(2))));
+        assert_eq!(w.line(), "The mouse and keyboard are on desk");
+        assert!(w.waybar().contains(r#""class":"remote""#));
+        assert!(!w.event(&FrontendEvent::PointerAt(Some(2))), "no change");
+        assert!(w.event(&FrontendEvent::Paused(true)));
+        assert!(w.waybar().contains(r#""class":"paused""#));
+        assert!(w.event(&FrontendEvent::Deleted(2)));
+        assert_eq!(w.numbered().len(), 1);
+    }
 }

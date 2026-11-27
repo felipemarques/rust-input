@@ -530,6 +530,18 @@ went down; the right Shift alone fires on its release when it was held 3 s
   from another one (it releases that one first). Nothing moves while
   paused.
 
+## status, go and home (0.46.0)
+
+`rustinput status`, `go` and `home` (`rustinput-cli`) connect to the service
+like a window: a new connection gets everything with `Sync`, which ends
+with `FrontendEvent::PointerAt`, so they read up to it. `go` numbers the
+active clients by handle, as the keyboard shortcuts do, or takes the first
+whose name is the one given (else starts with it), and sends
+`FrontendRequest::GoTo`. `status --waybar` stays connected and writes a line
+of JSON at every change (`text`, `tooltip`, `class`, `alt`), and while the
+service does not run one with the class `off` every 5 seconds until it does.
+These commands, `send-files` and `cli` do not watch the configuration file.
+
 ## Searching the copies (0.45.0)
 
 The search above the cards of the Clipboards tab only filters what the

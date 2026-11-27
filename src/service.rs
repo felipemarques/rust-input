@@ -1141,6 +1141,8 @@ impl Service {
         for question in questions {
             self.notify_frontend(question);
         }
+        // last: the command line reads up to it
+        self.notify_frontend(FrontendEvent::PointerAt(self.pointer_at));
     }
 
     /// Pauses RustInput on this computer, or lets it go on: paused, the

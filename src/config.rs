@@ -210,6 +210,17 @@ pub enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// where the mouse and keyboard are, and the computers
+    Status {
+        /// a line of JSON for a custom module of Waybar at every change
+        #[arg(long)]
+        waybar: bool,
+    },
+    /// the mouse and keyboard to a computer: its number (as for the keyboard
+    /// shortcuts, AltGr + right Shift + number) or its name
+    Go { computer: String },
+    /// the mouse and keyboard back to this computer
+    Home,
     /// run in daemon mode
     Daemon,
     /// run as the Windows service "RustInput", which Windows starts: it keeps
@@ -504,20 +515,36 @@ impl Config {
                 .and_then(|c| c.cert_path.clone()))
             .unwrap_or(default_path()?.join(CERT_FILE_NAME));
 
-        let (tx, watch_rx) = tokio::sync::mpsc::channel(16);
-        let watcher = RecommendedWatcher::new(
-            move |res| {
-                let _ = tx.blocking_send(res);
-            },
-            notify::Config::default(),
-        )
-        .inspect_err(|e| {
-            log::warn!(
-                "changes made to {config_path:?} by hand are noticed only when RustInput \
-                 starts again: no watcher for it ({e})"
+        // a command that asks the running RustInput something and ends does
+        // not watch the configuration
+        let watches = !matches!(
+            args.command,
+            Some(
+                Command::Cli(_)
+                    | Command::SendFiles { .. }
+                    | Command::Status { .. }
+                    | Command::Go { .. }
+                    | Command::Home
             )
-        })
-        .ok();
+        );
+        let (tx, watch_rx) = tokio::sync::mpsc::channel(16);
+        let watcher = watches
+            .then(|| {
+                RecommendedWatcher::new(
+                    move |res| {
+                        let _ = tx.blocking_send(res);
+                    },
+                    notify::Config::default(),
+                )
+                .inspect_err(|e| {
+                    log::warn!(
+                        "changes made to {config_path:?} by hand are noticed only when \
+                         RustInput starts again: no watcher for it ({e})"
+                    )
+                })
+                .ok()
+            })
+            .flatten();
         let mut config = Config {
             args,
             cert_path,
