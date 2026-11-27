@@ -241,6 +241,28 @@ Files go out in two ways:
   sends neither the files nor their paths as text, so the clipboard of the
   other device keeps what it has.
 
+### Large copies and free space (0.38.0)
+
+- Before taking an offer, the receiver checks the free space of the file
+  system of the received folder (`statvfs`, `GetDiskFreeSpaceExW`): the
+  bytes still to come plus a margin (2 % of the file system, between
+  256 MiB and 2 GiB) must be free, or the offer is declined with "not
+  enough free space there: … needed, … free". A resumable transfer only
+  needs what is not kept yet, and what was kept stays.
+- `OfferResumable` carries `automatic`: the files went along with the
+  pointer because `send_copied_files` is on, not because the user chose to
+  send them. Such an offer, the first time (not `continued`), larger than
+  `ask_before_receiving_mb` (`FileOptions::ask_above_mb`, MiB, 1024 by
+  default, 0 never), waits for the user: the reader asks the service
+  (`files::Ask`), which sends `FrontendEvent::AskTransfer` to the windows
+  and answers with `FrontendRequest::AnswerTransfer`. Without a window
+  connected the answer is no right away; without an answer within
+  `ASK_TRANSFER_SECONDS` (120) it is declined as well. A window that
+  connects meanwhile gets the open questions with `Sync`.
+- Frames are read by a task of their own and handed to the reader, so that
+  an offer waiting for the user does not hold up the rest of the
+  connection (a `Cancel` of it, the frames of the other direction).
+
 ### Going on where it stopped (0.37.0)
 
 With a peer that announced `CAP_FILE_RESUME` (which implies `CAP_FILES`), a

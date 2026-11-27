@@ -125,6 +125,42 @@ fn no_links(dir: &Path) -> bool {
     plain(dir) && dir.parent().is_none_or(plain)
 }
 
+/// The space free for this user and the size of the file system that
+/// holds `dir`, in bytes.
+pub(crate) fn space(dir: &Path) -> Option<(u64, u64)> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let path = std::ffi::CString::new(dir.as_os_str().as_bytes()).ok()?;
+        // SAFETY: `path` is a valid C string and `stat` a buffer statvfs fills
+        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+        if unsafe { libc::statvfs(path.as_ptr(), &mut stat) } != 0 {
+            return None;
+        }
+        let block = stat.f_frsize as u64;
+        #[allow(clippy::unnecessary_cast)]
+        Some((stat.f_bavail as u64 * block, stat.f_blocks as u64 * block))
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+        let path: Vec<u16> = dir.as_os_str().encode_wide().chain([0]).collect();
+        let (mut free, mut total) = (0u64, 0u64);
+        // SAFETY: `path` ends with a 0, the outputs are valid u64s
+        let ok = unsafe {
+            GetDiskFreeSpaceExW(path.as_ptr(), &mut free, &mut total, std::ptr::null_mut())
+        };
+        (ok != 0).then_some((free, total))
+    }
+}
+
+/// what is kept free on the file system that receives files: 2 % of it,
+/// between 256 MB and 2 GB
+pub(crate) fn margin(total: u64) -> u64 {
+    (total / 50).clamp(256 << 20, 2 << 30)
+}
+
 /// how long ago `path` was last changed
 fn age(path: &Path) -> Duration {
     fs::metadata(path)

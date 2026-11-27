@@ -1139,6 +1139,30 @@ impl Window {
             tr("Show the transfers window"),
             tr("With the progress, when files are sent or received"),
         );
+        let ask_row = adw::ActionRow::builder()
+            .title(tr("Ask before receiving more than"))
+            .subtitle(tr(
+                "Files copied on another computer that come along with the pointer. 0: never ask",
+            ))
+            .build();
+        let ask = gtk::SpinButton::builder()
+            .adjustment(&gtk::Adjustment::new(
+                0.0,
+                0.0,
+                1_048_576.0,
+                256.0,
+                1024.0,
+                0.0,
+            ))
+            .digits(0)
+            .numeric(true)
+            .valign(gtk::Align::Center)
+            .build();
+        let mb = gtk::Label::new(Some("MB"));
+        mb.add_css_class("dim-label");
+        ask_row.add_suffix(&ask);
+        ask_row.add_suffix(&mb);
+        ask_row.set_activatable_widget(Some(&ask));
         let open_row = adw::ActionRow::builder()
             .title(tr("File transfers"))
             .subtitle(tr("Progress, history and log"))
@@ -1151,9 +1175,15 @@ impl Window {
         open_row.add_suffix(&open);
         open_row.set_activatable_widget(Some(&open));
         let group = &self.imp().files_group;
-        for row in [&send_row, &menu_row, &show_row, &open_row] {
+        for row in [&send_row, &ask_row, &menu_row, &show_row, &open_row] {
             group.add(row);
         }
+        ask.connect_value_changed(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |_| window.file_switch_changed()
+        ));
+        self.imp().ask_spin.replace(Some(ask));
         for switch in [&send, &menu, &show] {
             switch.connect_active_notify(clone!(
                 #[weak(rename_to = window)]
@@ -1174,6 +1204,9 @@ impl Window {
             send.set_active(options.send_copied);
             menu.set_active(options.file_manager_menu);
             show.set_active(options.show_window);
+            if let Some(ask) = imp.ask_spin.borrow().as_ref() {
+                ask.set_value(options.ask_above_mb as f64);
+            }
             imp.updating_files.set(false);
         }
     }
@@ -1196,10 +1229,16 @@ impl Window {
         let Some([send, menu, show]) = imp.file_switches.borrow().clone() else {
             return;
         };
+        let ask_above_mb = imp
+            .ask_spin
+            .borrow()
+            .as_ref()
+            .map_or(options.ask_above_mb, |a| a.value() as u64);
         self.request(FrontendRequest::SetFileOptions(FileOptions {
             send_copied: send.is_active(),
             file_manager_menu: menu.is_active(),
             show_window: show.is_active(),
+            ask_above_mb,
             ..options
         }));
     }

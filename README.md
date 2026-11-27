@@ -29,6 +29,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📝 Clipboard: formatted text (HTML) from browsers, Word, LibreOffice | ✅ ⁶ | ✅ | ✅ ² | ✅ ² |
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔁 A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped | ✅ ¹⁸ | ✅ ¹⁸ | ✅ ² | ✅ ² |
+| 💾 Large copies that come along with the pointer ask first; a transfer that does not fit is refused before it starts | ✅ ¹⁹ | ✅ ¹⁹ | ✅ ² | ✅ ² |
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
@@ -75,6 +76,9 @@ can not tell there when something is copied.
 ¹⁸ New in 0.37.0: tested in automated runs between two Linux (X11) computers, with the network cut off and each of them
 killed in the middle of a transfer, not yet by hand. Both computers need 0.37.0 or newer (see
 [Going on where it stopped](#going-on-where-it-stopped)).
+¹⁹ New in 0.38.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Both computers need
+0.38.0 or newer for the question; the free space is checked by any receiving 0.38.0 (see
+[Large copies and free space](#large-copies-and-free-space)).
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -187,6 +191,19 @@ other, and once everything arrived the clipboard there holds them: paste them in
 - Files travel over a connection of their own, encrypted with TLS, so mouse and keyboard stay responsive during large
   transfers. It uses TCP on the same port number as the rest of RustInput (4242 by default): firewalls have to let
   TCP through as well.
+
+### Large copies and free space
+
+- **Nothing fills the disk:** before a transfer starts, the receiving computer checks that it fits with room to spare
+  (2 % of the disk, between 256 MB and 2 GB). If it does not, it is refused right away and the sending computer says
+  why, for example "not enough free space there: 3.2 GB needed, 1.1 GB free".
+- **Large copies ask first:** files that go along with the pointer by themselves (**Send copied files
+  automatically**) and are larger than 1 GB are only received if you say so: a small window on the computer the
+  pointer came to asks "Receive 3.2 GB from laptop?", with **Receive** and **Refuse**. Without an answer in 2 minutes,
+  or without a RustInput window there, they are not received. Files sent on purpose, with **Copy to RustInput**, the
+  radial menu or **Copy here** in the Clipboards tab, never ask.
+- The size is **Ask before receiving more than** in Preferences (`ask_before_receiving_mb` in the
+  [configuration](#configuration)); 0 never asks.
 
 ### Going on where it stopped
 
@@ -981,6 +998,11 @@ show_transfers_window = true
 # "Copy to RustInput" in the menu of Explorer, Nemo and Nautilus (on by default)
 file_manager_menu = true
 
+# files that come along with the pointer by themselves (send_copied_files on the
+# other computer) larger than this many MB are only received if you say so (1024
+# by default, 0: never ask)
+ask_before_receiving_mb = 1024
+
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
@@ -1069,6 +1091,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Pointer keeps its relative position across computers (Windows, X11)
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [x] File transfers go on from the byte where they stopped after the connection was lost
+- [x] Large copies that come along with the pointer ask first; the free space is checked before a transfer starts
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] See what every computer copied, in one tab, and bring it here with one click

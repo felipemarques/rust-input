@@ -299,7 +299,18 @@ pub struct FileOptions {
     /// "Copy to RustInput" in the menu of the file managers
     /// (`file_manager_menu`)
     pub file_manager_menu: bool,
+    /// Files sent by themselves because they were copied when the pointer
+    /// came here (`send_copied_files` on the other computer) larger than
+    /// this many MB (of 1024 × 1024 bytes) are only received if the user
+    /// says so, see [`FrontendEvent::AskTransfer`]; 0: never asked
+    /// (`ask_before_receiving_mb`, 0.38.0)
+    #[serde(default)]
+    pub ask_above_mb: u64,
 }
+
+/// how long [`FrontendEvent::AskTransfer`] waits for an answer: then the
+/// files are not received
+pub const ASK_TRANSFER_SECONDS: u64 = 120;
 
 /// What the clipboard of a computer holds, as the Clipboard tab shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -509,6 +520,17 @@ pub enum FrontendEvent {
     ShowWindow,
     /// show the window of the file transfers (picked in the radial menu)
     ShowTransfers,
+    /// The computer `peer` sends `files` files of `bytes` bytes that were
+    /// copied there when the pointer came here, more than
+    /// [`FileOptions::ask_above_mb`]: received only if the user says so
+    /// with [`FrontendRequest::AnswerTransfer`] within
+    /// [`ASK_TRANSFER_SECONDS`] (0.38.0).
+    AskTransfer {
+        id: u64,
+        peer: String,
+        files: u32,
+        bytes: u64,
+    },
     /// show the main window on its Clipboards tab (picked in the radial menu;
     /// [`FrontendEvent::ShowClipboard`] is whether the others see this one)
     ShowClipboardsTab,
@@ -649,6 +671,9 @@ pub enum FrontendRequest {
     CancelTransfers,
     /// cancel one transfer, by its [`TransferInfo::id`]
     CancelTransfer(u64),
+    /// the answer to [`FrontendEvent::AskTransfer`] `id`: receive the
+    /// files or not
+    AnswerTransfer { id: u64, receive: bool },
     /// send files and folders to the connected devices right away (the
     /// "Copy to RustInput" menu item of file managers)
     SendFiles(Vec<std::path::PathBuf>),

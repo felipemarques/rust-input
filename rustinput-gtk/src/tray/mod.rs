@@ -474,6 +474,7 @@ mod tests {
             send_copied: true,
             show_window: true,
             file_manager_menu: true,
+            ask_above_mb: 1024,
         };
         assert_eq!(summary(&[], Some(options), 0).send_copied, Some(true));
         let off = FileOptions {
