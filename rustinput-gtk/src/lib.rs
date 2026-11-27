@@ -544,7 +544,7 @@ fn build_ui(app: &Application) {
                                 }
                                 #[cfg(not(windows))]
                                 if let Some(app) = window.application() {
-                                    notification::send(&app, &version);
+                                    notification::send(&app, &version, state.installable);
                                 }
                             }
                             window.request(FrontendRequest::UpdateNotified(version.clone()));

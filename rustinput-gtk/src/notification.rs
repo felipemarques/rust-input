@@ -44,7 +44,11 @@ pub(crate) fn text() -> String {
 
 /// shows the notification about `version`
 #[cfg(not(windows))]
-pub(crate) fn send(app: &impl gtk::prelude::IsA<gtk::gio::Application>, version: &str) {
+pub(crate) fn send(
+    app: &impl gtk::prelude::IsA<gtk::gio::Application>,
+    version: &str,
+    installable: bool,
+) {
     use gtk::{gio, prelude::*};
     let title = title(version);
     let notification = gio::Notification::new(&title);
@@ -52,7 +56,7 @@ pub(crate) fn send(app: &impl gtk::prelude::IsA<gtk::gio::Application>, version:
     notification.set_icon(&gio::ThemedIcon::new("software-update-available"));
     notification.set_default_action(&format!("app.{SHOW_WINDOW}"));
     notification.add_button(
-        crate::window::install_label(),
+        crate::window::install_label(installable),
         &format!("app.{INSTALL_UPDATE}"),
     );
     // a newer notification about a newer version takes its place

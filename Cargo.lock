@@ -2915,6 +2915,7 @@ dependencies = [
  "notify",
  "png",
  "rcgen",
+ "ring",
  "rustinput-cli",
  "rustinput-gtk",
  "rustinput-i18n",

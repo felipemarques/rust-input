@@ -251,6 +251,44 @@ jobs:
           echo "prerelease=${prerelease}"
           echo "make_latest=${make_latest}"
         } >> "$GITHUB_OUTPUT"
+    # The checksums of the files for Linux and macOS, signed with the release
+    # key (the repository secret RELEASE_SIGNING_KEY, Ed25519): RustInput
+    # checks them against the public half built into it
+    # (build-aux/release-key.pub) before it installs a new version
+    # (src/self_update.rs). The Windows files are left out: SignPath may
+    # replace them with signed ones after this job, and Windows checks their
+    # Authenticode signature.
+    - name: Sign the checksums
+      env:
+        RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+      run: |
+        mkdir -p checksums
+        for f in rustinput-linux-x86_64/rustinput-linux-x86_64 \
+                 rustinput-linux-x86_64/target/release/bundle/deb/rustinput_*.deb \
+                 rustinput-linux-x86_64/target/release/bundle/appimage/rustinput_*.AppImage \
+                 rustinput-linux-arm64/rustinput-linux-arm64 \
+                 rustinput-linux-arm64/target/release/bundle/deb/rustinput_*.deb \
+                 rustinput-linux-arm64/target/release/bundle/appimage/rustinput_*.AppImage \
+                 rustinput-macos-intel/rustinput-macos-intel.zip \
+                 rustinput-macos-arm64/rustinput-macos-arm64.zip; do
+          (cd "$(dirname "$f")" && sha256sum "$(basename "$f")")
+        done > checksums/SHA256SUMS
+        cat checksums/SHA256SUMS
+        if [ -z "$RELEASE_SIGNING_KEY" ]; then
+          echo "::warning::no RELEASE_SIGNING_KEY: the checksums are not signed, and RustInput will not install this release by itself"
+          exit 0
+        fi
+        umask 077
+        key="$RUNNER_TEMP/release-signing-key.pem"
+        printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key"
+        openssl pkeyutl -sign -rawin -inkey "$key" -in checksums/SHA256SUMS -out checksums/SHA256SUMS.sig
+        # the public half of the secret must be the one built into RustInput
+        actual="$(openssl pkey -in "$key" -pubout -outform DER | tail -c 32 | xxd -p -c 64)"
+        rm -f "$key"
+        if [ "$actual" != "$(tr -d '[:space:]' < build-aux/release-key.pub)" ]; then
+          echo "RELEASE_SIGNING_KEY is not the key of build-aux/release-key.pub" >&2
+          exit 1
+        fi
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
@@ -276,6 +314,8 @@ jobs:
           rustinput-windows-x86_64/rustinput-windows-x86_64.zip
           rustinput-windows-x86_64/rustinput-windows-x86_64-setup.exe
           scripts/update-rustinput.ps1
+          checksums/SHA256SUMS
+          checksums/SHA256SUMS.sig
 
   # Signs rustinput.exe and the installer with SignPath (DOC.md, "Signing the
   # Windows files") and puts the signed files in place of the published ones.

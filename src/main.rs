@@ -167,10 +167,12 @@ fn run() -> Result<(), RustInputError> {
 }
 
 /// Starts RustInput again, with the same arguments: the window was asked
-/// to, to show itself in the language just picked.
+/// to, to show itself in the language just picked or to run the version just
+/// installed (the AppImage it runs from, or its executable, which the update
+/// replaced).
 #[cfg(feature = "gtk")]
 fn restart() -> Result<(), RustInputError> {
-    let exe = std::env::current_exe()?;
+    let exe = rustinput::self_update::program()?;
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     log::info!("starting again");
     #[cfg(unix)]
