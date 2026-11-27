@@ -45,6 +45,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 🔒 Encrypted traffic, only authorized computers | ✅ | ✅ | ✅ | ✅ |
 | 🔑 Authorize both computers at once, from the controlling one, with a code | ✅ ⁵ | ✅ | ✅ ² | ✅ ² |
 | 📡 Find the computers running RustInput on the network and add them with one click, if you switch it on | ✅ ²¹ | ✅ ²¹ | ✅ ² | ✅ ² |
+| 👥 A computer paired with one of yours is offered to the others, which ask once whether to authorize it | ✅ ²² | ✅ ²² | ✅ ² | ✅ ² |
 | 🤝 Works with Lan Mouse computers (without the extras) | ✅ | ✅ | ✅ | ✅ |
 
 Used every day between **Windows 11** and **Linux Mint 22 (Cinnamon, X11)**: the ✅ in those two columns are tested by hand.
@@ -85,6 +86,7 @@ killed in the middle of a transfer, not yet by hand. Both computers need 0.37.0 
 away while they are sent are skipped instead of ending the transfer when both computers have 0.39.0 or newer.
 ²¹ New in 0.40.0: tested in automated runs between two RustInput on one Linux (X11) computer, not yet by hand. Off until
 switched on, on both computers (see [Finding the computers on the network](#finding-the-computers-on-the-network)).
+²² New in 0.41.0: tested in automated runs between three RustInput on one Linux (X11) computer, not yet by hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -508,6 +510,12 @@ The implementation uses the [spake2](https://crates.io/crates/spake2) crate, whi
   <br>
   <em>The computer being controlled asks whether to authorize the one trying to connect, and shows the code.</em>
 </p>
+
+**The rest of the group** (0.41.0, both need it): once two computers are paired with the code, each tells the
+computers it has authorized about the new one, and the new one about them. Their windows ask "Authorize desktop here
+too?", with the fingerprint to compare and who told, and **Authorize** authorizes it there; **Not now** does not ask
+again until RustInput restarts. Nothing is authorized on the word of another computer alone, and only an authorized
+computer is listened to.
 
 **On each computer**: the window of the computer being controlled asks whether to authorize the one trying to
 connect, and the window of the controlling computer asks whether to authorize the certificate the other one answered
@@ -1134,6 +1142,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Radial menu (hold Ctrl+Alt), like the weapon wheel of GTA V
 - [x] Arrangement of the computers like monitors, with the monitors numbered and identified on their screens
 - [x] Find the computers running RustInput on the network, if switched on
+- [x] A computer paired with one of yours is offered to the others of the group, which ask once
 
 
 ## Detailed OS Support

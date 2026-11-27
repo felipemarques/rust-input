@@ -469,35 +469,51 @@ msgstr "Versione remota: {peer} · la stessa"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "Versione remota: {peer} · locale: {local}"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/introduction.rs:43
+msgid "Authorize {name} here too?"
+msgstr "Autorizzare {name} anche qui?"
+
+#: rustinput-gtk/src/introduction.rs:49
+msgid "{by} was paired with {name}. Authorized here too, the two can control each other and share the clipboard and files. Compare the fingerprint with the one {name} shows."
+msgstr "{by} è stato associato a {name}. Autorizzandolo anche qui, i due possono controllarsi a vicenda e condividere appunti e file. Confronta l’impronta con quella mostrata da {name}."
+
+#: rustinput-gtk/src/introduction.rs:65
+msgid "Not now"
+msgstr "Non ora"
+
+#: rustinput-gtk/src/introduction.rs:106
+msgid "Authorize a computer?"
+msgstr "Autorizzare un computer?"
+
+#: rustinput-gtk/src/lib.rs:266
 msgid "Quit"
 msgstr "Esci"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:267
 msgid "_File"
 msgstr "_File"
 
-#: rustinput-gtk/src/lib.rs:480
+#: rustinput-gtk/src/lib.rs:481
 msgid "{name} and this computer authorized each other"
 msgstr "{name} e questo computer si sono autorizzati a vicenda"
 
-#: rustinput-gtk/src/lib.rs:485
+#: rustinput-gtk/src/lib.rs:486
 msgid "Not authorized: {error}"
 msgstr "Non autorizzato: {error}"
 
-#: rustinput-gtk/src/lib.rs:492
+#: rustinput-gtk/src/lib.rs:493
 msgid "{address} connected"
 msgstr "{address} connesso"
 
-#: rustinput-gtk/src/lib.rs:499
+#: rustinput-gtk/src/lib.rs:500
 msgid "The mouse came from {address}"
 msgstr "Il mouse è arrivato da {address}"
 
-#: rustinput-gtk/src/lib.rs:505
+#: rustinput-gtk/src/lib.rs:506
 msgid "{address} disconnected"
 msgstr "{address} disconnesso"
 
-#: rustinput-gtk/src/lib.rs:592
+#: rustinput-gtk/src/lib.rs:598
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "File ricevuti da {name}: {count}, pronti da incollare"
 

@@ -25,14 +25,31 @@ pub mod layout;
 
 /// "512 bytes", "1.5 KB", "120.3 MB", "2.1 GB" (powers of 1024, like file
 /// managers)
+/// whether `c` changes the direction of the text around it
+fn bidi(c: char) -> bool {
+    matches!(c, '\u{200e}' | '\u{200f}' | '\u{061c}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+}
+
+/// A name another computer gave (its host name, a name it was authorized
+/// with), safe to show and store: at most `max` characters, without control
+/// characters nor those that change the direction of the text (which could
+/// make one name look like another), trimmed.
+pub fn plain_text(text: &str, max: usize) -> String {
+    let text: String = text
+        .chars()
+        .filter(|&c| !c.is_control() && !bidi(c))
+        .take(max)
+        .collect();
+    text.trim().to_owned()
+}
+
 /// A file name as it can be shown safely: the characters that change the
 /// direction of the text (which make "photo\u{202e}gpj.exe" look like
 /// "photoexe.jpg") and other control characters as ⟨U+202E⟩.
 pub fn visible_name(name: &str) -> String {
     name.chars()
         .map(|c| {
-            let bidi = matches!(c, '\u{200e}' | '\u{200f}' | '\u{061c}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}');
-            if bidi || c.is_control() {
+            if bidi(c) || c.is_control() {
                 format!("⟨U+{:04X}⟩", c as u32)
             } else {
                 c.to_string()
@@ -616,6 +633,15 @@ pub enum FrontendEvent {
     },
     /// the computers running RustInput found on the network (0.40.0)
     Discovered(Vec<Discovered>),
+    /// The authorized computer `by` was paired with the computer
+    /// `fingerprint` called `name` (or tells about it, one of those it was
+    /// paired with): authorize it here too? Answered with
+    /// [`FrontendRequest::AnswerIntroduction`] (0.41.0).
+    Introduction {
+        by: String,
+        name: String,
+        fingerprint: String,
+    },
     /// whether this computer tells the others about itself and looks for
     /// them (`discovery`)
     Discovery(bool),
@@ -765,6 +791,11 @@ pub enum FrontendRequest {
     /// a window shows the computers found on the network (or no longer):
     /// look for them now and then
     Discover(bool),
+    /// the answer to [`FrontendEvent::Introduction`] of `fingerprint`
+    AnswerIntroduction {
+        fingerprint: String,
+        authorize: bool,
+    },
     /// tell the others about this computer and look for them, or not
     SetDiscovery(bool),
     /// adds a computer found on the network: its name, address and port

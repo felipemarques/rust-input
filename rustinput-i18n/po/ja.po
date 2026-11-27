@@ -468,35 +468,51 @@ msgstr "相手のバージョン：{peer} · 同じ"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "相手のバージョン：{peer} · このコンピューター：{local}"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/introduction.rs:43
+msgid "Authorize {name} here too?"
+msgstr "ここでも {name} を許可しますか?"
+
+#: rustinput-gtk/src/introduction.rs:49
+msgid "{by} was paired with {name}. Authorized here too, the two can control each other and share the clipboard and files. Compare the fingerprint with the one {name} shows."
+msgstr "{by} が {name} とペアリングされました。ここでも許可すると、互いに操作でき、クリップボードとファイルを共有できます。指紋を {name} に表示されるものと比べてください。"
+
+#: rustinput-gtk/src/introduction.rs:65
+msgid "Not now"
+msgstr "今はしない"
+
+#: rustinput-gtk/src/introduction.rs:106
+msgid "Authorize a computer?"
+msgstr "コンピューターを許可しますか?"
+
+#: rustinput-gtk/src/lib.rs:266
 msgid "Quit"
 msgstr "終了"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:267
 msgid "_File"
 msgstr "ファイル(_F)"
 
-#: rustinput-gtk/src/lib.rs:480
+#: rustinput-gtk/src/lib.rs:481
 msgid "{name} and this computer authorized each other"
 msgstr "{name} とこのコンピューターが互いに承認されました"
 
-#: rustinput-gtk/src/lib.rs:485
+#: rustinput-gtk/src/lib.rs:486
 msgid "Not authorized: {error}"
 msgstr "承認されませんでした：{error}"
 
-#: rustinput-gtk/src/lib.rs:492
+#: rustinput-gtk/src/lib.rs:493
 msgid "{address} connected"
 msgstr "{address} と接続しました"
 
-#: rustinput-gtk/src/lib.rs:499
+#: rustinput-gtk/src/lib.rs:500
 msgid "The mouse came from {address}"
 msgstr "マウスが {address} から移ってきました"
 
-#: rustinput-gtk/src/lib.rs:505
+#: rustinput-gtk/src/lib.rs:506
 msgid "{address} disconnected"
 msgstr "{address} との接続が切れました"
 
-#: rustinput-gtk/src/lib.rs:592
+#: rustinput-gtk/src/lib.rs:598
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "{name} からファイルを {count} 個受信しました。貼り付けできます"
 

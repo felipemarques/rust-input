@@ -90,9 +90,10 @@ impl Me {
     }
 }
 
-/// at most `max` characters, without control characters
+/// at most `max` characters, without control characters nor those that
+/// turn the text around
 fn clean(text: &str, max: usize) -> String {
-    text.chars().filter(|c| !c.is_control()).take(max).collect()
+    rustinput_ipc::plain_text(text, max)
 }
 
 /// a datagram of another RustInput, if it is one
@@ -406,7 +407,7 @@ mod tests {
         // names without control characters, not too long
         let long = me(&format!("a\u{202e}b\nc{}", "x".repeat(100)), "aa").message(Kind::Answer);
         let message = parse(&serde_json::to_vec(&long).unwrap()).unwrap();
-        assert!(message.name.starts_with("a\u{202e}bc"));
+        assert!(message.name.starts_with("abc"));
         assert_eq!(message.name.chars().count(), 64);
     }
 

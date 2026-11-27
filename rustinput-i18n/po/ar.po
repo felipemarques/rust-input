@@ -473,35 +473,51 @@ msgstr "إصداره: {peer} · الإصدار نفسه"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "إصداره: {peer} · هذا الكمبيوتر: {local}"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/introduction.rs:43
+msgid "Authorize {name} here too?"
+msgstr "منح الإذن لـ {name} هنا أيضًا؟"
+
+#: rustinput-gtk/src/introduction.rs:49
+msgid "{by} was paired with {name}. Authorized here too, the two can control each other and share the clipboard and files. Compare the fingerprint with the one {name} shows."
+msgstr "اقترن {by} بـ {name}. إن مُنح الإذن هنا أيضًا، يمكن للاثنين التحكم أحدهما بالآخر ومشاركة الحافظة والملفات. قارن البصمة بالتي يعرضها {name}."
+
+#: rustinput-gtk/src/introduction.rs:65
+msgid "Not now"
+msgstr "ليس الآن"
+
+#: rustinput-gtk/src/introduction.rs:106
+msgid "Authorize a computer?"
+msgstr "منح الإذن لكمبيوتر؟"
+
+#: rustinput-gtk/src/lib.rs:266
 msgid "Quit"
 msgstr "إنهاء"
 
-#: rustinput-gtk/src/lib.rs:266
+#: rustinput-gtk/src/lib.rs:267
 msgid "_File"
 msgstr "_ملف"
 
-#: rustinput-gtk/src/lib.rs:480
+#: rustinput-gtk/src/lib.rs:481
 msgid "{name} and this computer authorized each other"
 msgstr "تم التخويل المتبادل بين {name} وهذا الكمبيوتر"
 
-#: rustinput-gtk/src/lib.rs:485
+#: rustinput-gtk/src/lib.rs:486
 msgid "Not authorized: {error}"
 msgstr "لم يتم التخويل: {error}"
 
-#: rustinput-gtk/src/lib.rs:492
+#: rustinput-gtk/src/lib.rs:493
 msgid "{address} connected"
 msgstr "اتصل {address}"
 
-#: rustinput-gtk/src/lib.rs:499
+#: rustinput-gtk/src/lib.rs:500
 msgid "The mouse came from {address}"
 msgstr "جاء الماوس من {address}"
 
-#: rustinput-gtk/src/lib.rs:505
+#: rustinput-gtk/src/lib.rs:506
 msgid "{address} disconnected"
 msgstr "انقطع اتصال {address}"
 
-#: rustinput-gtk/src/lib.rs:592
+#: rustinput-gtk/src/lib.rs:598
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "الملفات المستلمة من {name}: {count}، جاهزة للصق"
 
