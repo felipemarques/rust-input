@@ -30,6 +30,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 📁 Copy files and folders on one computer, paste them on the other, with progress | ✅ ⁴ | ✅ ⁴ | ✅ ² | ✅ ² |
 | 🔁 A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped | ✅ ¹⁸ | ✅ ¹⁸ | ✅ ² | ✅ ² |
 | 💾 Large copies that come along with the pointer ask first; a transfer that does not fit is refused before it starts | ✅ ¹⁹ | ✅ ¹⁹ | ✅ ² | ✅ ² |
+| 🧾 What did not go or come, and why: links to folders, files that changed or went away while they were sent, names not allowed there | ✅ ²⁰ | ✅ ²⁰ | ✅ ² | ✅ ² |
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
@@ -79,6 +80,8 @@ killed in the middle of a transfer, not yet by hand. Both computers need 0.37.0 
 ¹⁹ New in 0.38.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Both computers need
 0.38.0 or newer for the question; the free space is checked by any receiving 0.38.0 (see
 [Large copies and free space](#large-copies-and-free-space)).
+²⁰ New in 0.39.0: tested in automated runs between two Linux (X11) computers, not yet by hand. Files that change or go
+away while they are sent are skipped instead of ending the transfer when both computers have 0.39.0 or newer.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -188,6 +191,11 @@ other, and once everything arrived the clipboard there holds them: paste them in
   can be reopened from the tray icon or the main window, where it can also cancel transfers.
 - Everything sent and received is written to a log, with every file and its size: **Open log** in that window.
 - A transfer that is cut off goes on from the byte where it stopped, see below.
+- **What did not go or come, and why**, shows under the transfer on both computers and in the log: links to folders
+  (left out, they could lead into themselves), what is neither a file nor a folder, what could not be read, files that
+  changed or were removed while the transfer ran (skipped, the rest goes on), and names the receiving system does not
+  allow (renamed, for example `a:b.txt` becomes `a_b.txt` on Windows). Characters that turn the direction of the text
+  around in a name, which can make `photo\u{202e}gpj.exe` look like `photoexe.jpg`, show as ⟨U+202E⟩.
 - Files travel over a connection of their own, encrypted with TLS, so mouse and keyboard stay responsive during large
   transfers. It uses TCP on the same port number as the rest of RustInput (4242 by default): firewalls have to let
   TCP through as well.
@@ -1092,6 +1100,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Copy and paste files and folders, with a transfers window and "Copy to RustInput" in the file manager
 - [x] File transfers go on from the byte where they stopped after the connection was lost
 - [x] Large copies that come along with the pointer ask first; the free space is checked before a transfer starts
+- [x] What did not go or come, and why, on both computers
 - [x] Authorize both computers on each other from the controlling one, with a code
 - [x] Formatted text (HTML) on the clipboard
 - [x] See what every computer copied, in one tab, and bring it here with one click

@@ -42,7 +42,10 @@ use std::{
 };
 
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_ipc::{TransferInfo, TransferState, human_size};
+use rustinput_ipc::{
+    LEFT_OUT_CHANGED, LEFT_OUT_GONE, LEFT_OUT_UNREADABLE, LeftOut, TransferInfo, TransferState,
+    human_size,
+};
 use tokio::{
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
@@ -288,6 +291,8 @@ struct Progress {
     current: Option<String>,
     /// went on where it stopped: the bytes there already, and when
     resumed: Option<(u64, u64)>,
+    /// what did not go or come as it was, and why
+    left_out: Vec<LeftOut>,
 }
 
 /// the transfer the reader of a connection is receiving
@@ -756,6 +761,7 @@ impl Task {
                         *o.progress.borrow_mut() = Progress {
                             files: manifest.files() as u32,
                             bytes: manifest.bytes(),
+                            left_out: manifest.left_out.clone(),
                             ..Default::default()
                         };
                         o.listing = listing(&manifest.entries);
@@ -1137,7 +1143,7 @@ impl Task {
                                 .await
                                 .map_err(|_| LOST.to_owned())?;
                         }
-                        stream(id, &manifest, from, writer, progress).await
+                        stream(id, &manifest, from, at.is_some(), writer, progress).await
                     };
                     let result = result.await;
                     let _ = internal.send(Internal::Streamed { id, result });
@@ -1285,6 +1291,7 @@ impl Task {
                     entries: manifest.entries.clone(),
                     continued: outgoing.interrupted,
                     automatic: outgoing.automatic,
+                    left_out: manifest.left_out.clone(),
                 },
                 None => Frame::Offer {
                     id: outgoing.id,
@@ -1543,6 +1550,16 @@ impl Task {
             _ => String::new(),
         };
         self.journal.write_with_files(&text, &f.listing);
+        for item in &p.left_out {
+            let text = match (item.came(), item.detail.is_empty()) {
+                (true, _) => format!("   {} came as {}", item.path, item.detail),
+                (false, true) => format!("   {} left out: {}", item.path, item.why),
+                (false, false) => {
+                    format!("   {} left out: {}: {}", item.path, item.why, item.detail)
+                }
+            };
+            self.journal.write(&text);
+        }
         let mut info = info(f.uid, f.sending, f.peer, p, f.state, f.started_ms);
         info.finished_ms = Some(now);
         info.location = dir.as_ref().map(|d| d.display().to_string());
@@ -1736,6 +1753,7 @@ fn info(
         finished_ms: None,
         location: None,
         resumed_bytes: progress.resumed.map(|(bytes, _)| bytes),
+        left_out: progress.left_out.clone(),
     }
 }
 
@@ -1957,17 +1975,42 @@ async fn resume_at(manifest: &Manifest, at: Position) -> Result<Position, String
             log::info!("{name}: what the receiver has is not this file, it is sent again");
             Ok(start)
         }
-        Ok(None) => Err(format!("{name} changed since it was copied")),
+        // from its start: sending it finds that it changed, and skips it
+        Ok(None) => {
+            log::info!("{name} changed since it was copied");
+            Ok(start)
+        }
         Err(e) => Err(format!("{name}: {e}")),
     }
 }
 
+/// why a file is not sent after all: a word of [`LeftOut`] and the error
+fn why_not(e: &io::Error) -> (&'static str, String) {
+    match e.kind() {
+        io::ErrorKind::NotFound => (LEFT_OUT_GONE, String::new()),
+        io::ErrorKind::UnexpectedEof => (LEFT_OUT_CHANGED, String::new()),
+        _ => (LEFT_OUT_UNREADABLE, e.to_string()),
+    }
+}
+
+/// whether `file` is still what `entry` says: its size and modification time
+async fn unchanged(file: &tokio::fs::File, entry: &Entry) -> bool {
+    file.metadata().await.is_ok_and(|m| {
+        m.len() == entry.size
+            && (entry.modified.is_none() || manifest::modified(&m) == entry.modified)
+    })
+}
+
 /// Sends the contents of the files of a transfer, one file after the
 /// other, from `from` on (the start, unless a resumable transfer goes on).
+/// In a `resumable` one a file that can not be sent as it was copied (it
+/// changed, went away, can not be read) is skipped with [`Frame::Skip`];
+/// otherwise that ends the transfer.
 async fn stream(
     id: u32,
     manifest: &Manifest,
     from: Position,
+    resumable: bool,
     writer: mpsc::Sender<Frame>,
     progress: Rc<RefCell<Progress>>,
 ) -> Result<(), String> {
@@ -1995,28 +2038,77 @@ async fn stream(
         };
         let name = file_name(entry);
         progress.borrow_mut().current = Some(name.clone());
+        let mut remaining = entry.size - skip;
+        // skips the rest of this file, if the receiver can
+        let skipped = |why: &str, detail: String, remaining: u64| {
+            let writer = writer.clone();
+            let progress = progress.clone();
+            let (why, path) = (why.to_owned(), entry.path.clone());
+            async move {
+                log::info!(
+                    "{path}: not sent ({why}{})",
+                    if detail.is_empty() {
+                        String::new()
+                    } else {
+                        format!(": {detail}")
+                    }
+                );
+                let frame = Frame::Skip {
+                    id,
+                    file: index as u32,
+                    why: why.clone(),
+                    detail: detail.clone(),
+                };
+                writer.send(frame).await.map_err(|_| LOST.to_owned())?;
+                let mut progress = progress.borrow_mut();
+                progress.bytes_done += remaining;
+                progress.files_done += 1;
+                progress.left_out.push(LeftOut::new(path, &why, detail));
+                Ok::<_, String>(())
+            }
+        };
         let path = source.clone();
-        let mut file = tokio::task::spawn_blocking(move || as_user(|| std::fs::File::open(&path)))
+        let opened = tokio::task::spawn_blocking(move || as_user(|| std::fs::File::open(&path)))
             .await
-            .map_err(|e| e.to_string())
-            .and_then(|opened| opened.map_err(|e| format!("{name}: {e}")))
-            .map(tokio::fs::File::from_std)?;
+            .map_err(|e| e.to_string())?;
+        let mut file = match opened {
+            Ok(file) => tokio::fs::File::from_std(file),
+            Err(e) if resumable => {
+                let (why, detail) = why_not(&e);
+                skipped(why, detail, remaining).await?;
+                continue;
+            }
+            Err(e) => return Err(format!("{name}: {e}")),
+        };
         if skip > 0 {
             file.seek(io::SeekFrom::Start(skip))
                 .await
                 .map_err(|e| format!("{name}: {e}"))?;
         }
-        let mut remaining = entry.size - skip;
+        let mut gave_up = false;
         while remaining > 0 {
             let mut chunk = vec![0; remaining.min(CHUNK_SIZE as u64) as usize];
-            file.read_exact(&mut chunk).await.map_err(|e| {
-                if e.kind() == io::ErrorKind::UnexpectedEof {
+            if let Err(e) = file.read_exact(&mut chunk).await {
+                if resumable {
+                    let (why, detail) = why_not(&e);
+                    skipped(why, detail, remaining).await?;
+                    gave_up = true;
+                    break;
+                }
+                return Err(if e.kind() == io::ErrorKind::UnexpectedEof {
                     format!("{name} got smaller while it was sent")
                 } else {
                     format!("{name}: {e}")
-                }
-            })?;
+                });
+            }
             let length = chunk.len() as u64;
+            // before its last bytes: a file that changed meanwhile is not
+            // sent as if it had not
+            if resumable && length == remaining && !unchanged(&file, entry).await {
+                skipped(LEFT_OUT_CHANGED, String::new(), remaining).await?;
+                gave_up = true;
+                break;
+            }
             writer
                 .send(Frame::Data { id, bytes: chunk })
                 .await
@@ -2024,7 +2116,9 @@ async fn stream(
             remaining -= length;
             progress.borrow_mut().bytes_done += length;
         }
-        progress.borrow_mut().files_done += 1;
+        if !gave_up {
+            progress.borrow_mut().files_done += 1;
+        }
     }
     progress.borrow_mut().current = None;
     Ok(())
@@ -2060,6 +2154,8 @@ struct Incoming {
     busy: Option<Busy>,
     /// went on where it stopped: the bytes there already, and when
     resumed: Option<(u64, u64)>,
+    /// what the sender left out, what was renamed here, what was skipped
+    left_out: Vec<LeftOut>,
 }
 
 impl Incoming {
@@ -2075,6 +2171,7 @@ impl Incoming {
                 bytes_done: r.bytes_done,
                 current: r.current_name(),
                 resumed: self.resumed,
+                left_out: self.left_out.clone(),
             },
             kept: self
                 .busy
@@ -2155,6 +2252,7 @@ impl Reader {
         id: u32,
         resumable: Option<(String, bool)>,
         entries: Vec<Entry>,
+        left_out: Vec<LeftOut>,
     ) -> (Frame, Option<Incoming>) {
         let decline = |reason: String| Frame::Decline { id, reason };
         let Some(dir) = &self.received_dir else {
@@ -2172,12 +2270,15 @@ impl Reader {
         let (incoming, reply, resumed, tag) = match resumable {
             None => match store::Receiving::start(dir, id, entries).await {
                 Ok(receiving) => {
+                    let mut left_out = left_out;
+                    left_out.extend(receiving.renamed.iter().cloned());
                     let incoming = Incoming {
                         id,
                         started_ms,
                         receiving,
                         busy: None,
                         resumed: None,
+                        left_out,
                     };
                     (incoming, Frame::Accept { id }, None, None)
                 }
@@ -2229,12 +2330,15 @@ impl Reader {
                     }
                     Ok((receiving, at)) => {
                         let resumed = (receiving.bytes_done > 0).then_some(receiving.bytes_done);
+                        let mut left_out = left_out;
+                        left_out.extend(receiving.renamed.iter().cloned());
                         let incoming = Incoming {
                             id,
                             started_ms,
                             receiving,
                             busy: Some(busy),
                             resumed: None,
+                            left_out,
                         };
                         (incoming, Frame::AcceptAt { id, at }, resumed, Some(tag))
                     }
@@ -2281,6 +2385,7 @@ struct Pending {
     id: u32,
     key: String,
     entries: Vec<Entry>,
+    left_out: Vec<LeftOut>,
     asking: Asking,
 }
 
@@ -2347,8 +2452,9 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
             Read::Answer(p, answer) => {
                 let reply = match answer {
                     Some(true) => {
-                        let (reply, incoming) =
-                            r.offer(p.id, Some((p.key, false)), p.entries).await;
+                        let (reply, incoming) = r
+                            .offer(p.id, Some((p.key, false)), p.entries, p.left_out)
+                            .await;
                         current = incoming;
                         reply
                     }
@@ -2380,7 +2486,7 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                         previous.discard().await;
                     }
                 }
-                let (reply, incoming) = r.offer(id, None, entries).await;
+                let (reply, incoming) = r.offer(id, None, entries, Vec::new()).await;
                 current = incoming;
                 if r.writer.send(reply).await.is_err() {
                     break;
@@ -2392,6 +2498,7 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                 entries,
                 continued,
                 automatic,
+                left_out,
             } => {
                 pending = None;
                 if let Some(previous) = current.take() {
@@ -2404,10 +2511,12 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                         id,
                         key,
                         entries,
+                        left_out,
                         asking,
                     });
                 } else {
-                    let (reply, incoming) = r.offer(id, Some((key, continued)), entries).await;
+                    let (reply, incoming) =
+                        r.offer(id, Some((key, continued)), entries, left_out).await;
                     current = incoming;
                     if r.writer.send(reply).await.is_err() {
                         break;
@@ -2426,6 +2535,26 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                         // what was there already, to tell the speed of the rest
                         let there = c.receiving.bytes_done;
                         c.resumed = (there > 0).then_some((there, now_ms()));
+                    }
+                    Err(e) => {
+                        let c = current.take().expect("current transfer");
+                        r.failed(c, e.to_string()).await;
+                    }
+                }
+            }
+            Frame::Skip {
+                id,
+                file,
+                why,
+                detail,
+            } => {
+                let Some(c) = current.as_mut().filter(|c| c.id == id) else {
+                    continue;
+                };
+                match c.receiving.skip(file).await {
+                    Ok(path) => {
+                        log::info!("file channel: {path} does not come ({why})");
+                        c.left_out.push(LeftOut::new(path, &why, detail));
                     }
                     Err(e) => {
                         let c = current.take().expect("current transfer");
@@ -2553,10 +2682,97 @@ mod tests {
         let from = resume_at(&manifest, at(2, 0, b"")).await.unwrap();
         assert_eq!((from.file, from.offset), (2, 0));
         assert!(resume_at(&manifest, at(3, 0, b"")).await.is_err());
-        // a file that changed since it was copied ends the transfer
+        // a file that changed since it was copied is had from its start,
+        // which skips it
         fs::write(folder.join("b.bin"), b"abcdefgh").unwrap();
-        let changed = resume_at(&manifest, at(1, 3, b"abc")).await.unwrap_err();
-        assert!(changed.contains("b.bin changed"), "{changed}");
+        let from = resume_at(&manifest, at(1, 3, b"abc")).await.unwrap();
+        assert_eq!((from.file, from.offset), (1, 0));
+    }
+
+    /// the frames `stream` sends for `manifest`, and its progress
+    async fn streamed(
+        manifest: &Manifest,
+        resumable: bool,
+    ) -> (Vec<Frame>, Progress, Result<(), String>) {
+        let (writer, mut frames) = mpsc::channel(64);
+        let progress = Rc::new(RefCell::new(Progress {
+            files: manifest.files() as u32,
+            bytes: manifest.bytes(),
+            ..Default::default()
+        }));
+        let result = tokio::task::LocalSet::new()
+            .run_until(stream(
+                1,
+                manifest,
+                Position::default(),
+                resumable,
+                writer,
+                progress.clone(),
+            ))
+            .await;
+        let mut sent = Vec::new();
+        while let Ok(frame) = frames.try_recv() {
+            sent.push(frame);
+        }
+        let progress = progress.borrow().clone();
+        (sent, progress, result)
+    }
+
+    #[tokio::test]
+    async fn files_that_can_not_be_sent_as_they_were_are_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        let files = ["a.bin", "b.bin", "c.bin"].map(|n| dir.path().join(n));
+        for f in &files {
+            fs::write(f, b"0123").unwrap();
+        }
+        let manifest = manifest::scan(&files).unwrap();
+        // after it was copied: one goes away, one gets longer
+        fs::remove_file(&files[0]).unwrap();
+        fs::write(&files[1], b"0123456").unwrap();
+        let (sent, progress, result) = streamed(&manifest, true).await;
+        assert!(result.is_ok());
+        let skips: Vec<(u32, String)> = sent
+            .iter()
+            .filter_map(|f| match f {
+                Frame::Skip { file, why, .. } => Some((*file, why.clone())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(skips, [(0, "gone".into()), (1, "changed".into())]);
+        let data: Vec<u8> = sent
+            .iter()
+            .filter_map(|f| match f {
+                Frame::Data { bytes, .. } => Some(bytes.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        assert_eq!(data, b"0123", "only c.bin");
+        assert_eq!((progress.files_done, progress.bytes_done), (3, 12));
+        let left: Vec<&str> = progress.left_out.iter().map(|l| l.path.as_str()).collect();
+        assert_eq!(left, ["a.bin", "b.bin"]);
+        // a peer that can not skip: the transfer ends, as before
+        let (_, _, result) = streamed(&manifest, false).await;
+        assert!(result.is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn what_is_left_out_of_a_copy_says_why() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("Pasta");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("ok.txt"), b"ok").unwrap();
+        std::os::unix::fs::symlink(dir.path(), folder.join("volta")).unwrap();
+        std::os::unix::net::UnixListener::bind(folder.join("tomada")).unwrap();
+        let manifest = manifest::scan(std::slice::from_ref(&folder)).unwrap();
+        let left: Vec<(&str, &str)> = manifest
+            .left_out
+            .iter()
+            .map(|l| (l.path.as_str(), l.why.as_str()))
+            .collect();
+        assert_eq!(left, [("Pasta/tomada", "special"), ("Pasta/volta", "link")]);
+        assert_eq!(manifest.files(), 1);
     }
 
     #[tokio::test]
@@ -2578,7 +2794,7 @@ mod tests {
             ..Default::default()
         };
         tokio::task::LocalSet::new()
-            .run_until(stream(7, &manifest, from, writer, progress.clone()))
+            .run_until(stream(7, &manifest, from, true, writer, progress.clone()))
             .await
             .unwrap();
         let mut data = Vec::new();

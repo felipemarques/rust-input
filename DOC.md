@@ -241,6 +241,29 @@ Files go out in two ways:
   sends neither the files nor their paths as text, so the clipboard of the
   other device keeps what it has.
 
+### What did not go or come (0.39.0)
+
+- The scan of the copied files records what it leaves out, with a word
+  for why (`rustinput_ipc::LeftOut`, `LEFT_OUT_*`): `link` (a link to a
+  folder), `special` (neither a file nor a folder), `unreadable` (with the
+  error). `OfferResumable` carries the list, so the receiver shows it too.
+- In a resumable transfer a file that can not be sent as it was is skipped
+  with `Skip(id, file, why, detail)` instead of ending the transfer: it can
+  not be opened (`gone`, `unreadable`), it got shorter (`changed`), or its
+  size or modification time is not that of the offer any more before its
+  last chunk goes (`changed`, also when it grew). The receiver removes what
+  it has of that file (the current one, or one already complete) and goes
+  on with the next. Both count the bytes that will not come as done, so the
+  progress still ends at the end. With an older peer a file that changed
+  ends the transfer as before. Going on after a lost connection, a file that
+  changed since it was copied is had from its start, which skips it.
+- The receiver adds the entries whose own name it changed (`renamed`, with
+  the new name in `detail`, see `safe_name`).
+- `TransferInfo::left_out` carries the list to the windows; they show it
+  under the transfer, and names through `visible_name`, which writes the
+  characters that change the direction of the text and other control
+  characters as `⟨U+202E⟩`. So does the log of the transfers.
+
 ### Large copies and free space (0.38.0)
 
 - Before taking an offer, the receiver checks the free space of the file

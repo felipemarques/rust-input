@@ -543,131 +543,167 @@ msgstr "O RustInput {version} foi lançado"
 msgid "This computer has {current}"
 msgstr "Este computador tem a {current}"
 
-#: rustinput-gtk/src/transfers.rs:35
+#: rustinput-gtk/src/transfers.rs:38
 msgid "{count} file"
 msgid_plural "{count} files"
 msgstr[0] "{count} arquivo"
 msgstr[1] "{count} arquivos"
 
-#: rustinput-gtk/src/transfers.rs:41
+#: rustinput-gtk/src/transfers.rs:44
 msgid "{s} s"
 msgstr "{s} s"
 
-#: rustinput-gtk/src/transfers.rs:42
+#: rustinput-gtk/src/transfers.rs:45
 msgid "{m} min {s} s"
 msgstr "{m} min {s} s"
 
-#: rustinput-gtk/src/transfers.rs:43
+#: rustinput-gtk/src/transfers.rs:46
 msgid "{h} h {m} min"
 msgstr "{h} h {m} min"
 
-#: rustinput-gtk/src/transfers.rs:56
+#: rustinput-gtk/src/transfers.rs:59
 msgid "Preparing files for {name}"
 msgstr "Preparando arquivos para {name}"
 
-#: rustinput-gtk/src/transfers.rs:59
+#: rustinput-gtk/src/transfers.rs:62
 msgid "Sending {files} to {name}"
 msgstr "Enviando {files} para {name}"
 
-#: rustinput-gtk/src/transfers.rs:62
+#: rustinput-gtk/src/transfers.rs:65
 msgid "Receiving {files} from {name}"
 msgstr "Recebendo {files} de {name}"
 
-#: rustinput-gtk/src/transfers.rs:64
+#: rustinput-gtk/src/transfers.rs:67
 msgid "{files} sent to {name}"
 msgstr "Envio de {files} para {name} concluído"
 
-#: rustinput-gtk/src/transfers.rs:65
+#: rustinput-gtk/src/transfers.rs:68
 msgid "{files} from {name}: ready to paste"
 msgstr "{files} de {name}: aguardando colagem"
 
-#: rustinput-gtk/src/transfers.rs:66
+#: rustinput-gtk/src/transfers.rs:69
 msgid "{files} from {name}: pasted"
 msgstr "{files} de {name}: colagem concluída"
 
-#: rustinput-gtk/src/transfers.rs:67
+#: rustinput-gtk/src/transfers.rs:70
 msgid "{files} from {name}: not pasted"
 msgstr "{files} de {name}: sem colagem"
 
-#: rustinput-gtk/src/transfers.rs:68
+#: rustinput-gtk/src/transfers.rs:71
 msgid "Sending {files} to {name} failed"
 msgstr "Falha ao enviar {files} para {name}"
 
-#: rustinput-gtk/src/transfers.rs:69
+#: rustinput-gtk/src/transfers.rs:72
 msgid "Receiving {files} from {name} failed"
 msgstr "Falha ao receber {files} de {name}"
 
-#: rustinput-gtk/src/transfers.rs:71
+#: rustinput-gtk/src/transfers.rs:74
 msgid "Sending {files} to {name}: interrupted"
 msgstr "Enviando {files} para {name}: interrompido"
 
-#: rustinput-gtk/src/transfers.rs:74
+#: rustinput-gtk/src/transfers.rs:77
 msgid "Receiving {files} from {name}: interrupted"
 msgstr "Recebendo {files} de {name}: interrompido"
 
-#: rustinput-gtk/src/transfers.rs:93
+#: rustinput-gtk/src/transfers.rs:96
 msgid "{size}, the last {rest} in {time} ({speed}/s): it went on where it had stopped"
 msgstr "{size}, os últimos {rest} em {time} ({speed}/s): continuou de onde tinha parado"
 
-#: rustinput-gtk/src/transfers.rs:102
+#: rustinput-gtk/src/transfers.rs:105
 msgid "{size} in {time} ({speed}/s)"
 msgstr "{size} em {time} ({speed}/s)"
 
-#: rustinput-gtk/src/transfers.rs:106
+#: rustinput-gtk/src/transfers.rs:109
 msgid "Listing the files…"
 msgstr "Listando os arquivos…"
 
-#: rustinput-gtk/src/transfers.rs:107
+#: rustinput-gtk/src/transfers.rs:110
 msgid "{size}, waiting for the transfer before it"
 msgstr "{size}, aguardando a transferência anterior"
 
-#: rustinput-gtk/src/transfers.rs:112
+#: rustinput-gtk/src/transfers.rs:115
 msgid "{done} of {size}"
 msgstr "{done} de {size}"
 
-#: rustinput-gtk/src/transfers.rs:129
+#: rustinput-gtk/src/transfers.rs:132
 msgid "{time} left"
 msgstr "faltando {time}"
 
-#: rustinput-gtk/src/transfers.rs:137
+#: rustinput-gtk/src/transfers.rs:140
 msgid "{took}. On the clipboard: paste them in a folder to move them there"
 msgstr "{took}. Na área de transferência: cole-os em uma pasta para movê-los para lá"
 
-#: rustinput-gtk/src/transfers.rs:141
+#: rustinput-gtk/src/transfers.rs:144
 msgid "{size}, moved to where they were pasted. Nothing is left in the temporary folder"
 msgstr "{size}, movidos para onde foram colados. Nada ficou na pasta temporária"
 
-#: rustinput-gtk/src/transfers.rs:146
+#: rustinput-gtk/src/transfers.rs:149
 msgid "Removed from the temporary folder without being pasted"
 msgstr "Removidos da pasta temporária sem serem colados"
 
-#: rustinput-gtk/src/transfers.rs:148
+#: rustinput-gtk/src/transfers.rs:151
 msgid "{reason}, after {done} of {count} file"
 msgid_plural "{reason}, after {done} of {count} files"
 msgstr[0] "{reason}, após {done} de {count} arquivo"
 msgstr[1] "{reason}, após {done} de {count} arquivos"
 
-#: rustinput-gtk/src/transfers.rs:154
+#: rustinput-gtk/src/transfers.rs:157
 msgid "{done} of {size}. The connection was lost: it goes on from here when {name} is back"
 msgstr "{done} de {size}. A conexão caiu: continua daqui quando {name} voltar"
 
-#: rustinput-gtk/src/transfers.rs:255
+#: rustinput-gtk/src/transfers.rs:198
+msgid "a link to a folder"
+msgstr "um link para uma pasta"
+
+#: rustinput-gtk/src/transfers.rs:199
+msgid "could not be read: {error}"
+msgstr "não pôde ser lido: {error}"
+
+#: rustinput-gtk/src/transfers.rs:200
+msgid "not a file or a folder"
+msgstr "não é arquivo nem pasta"
+
+#: rustinput-gtk/src/transfers.rs:201
+msgid "changed while it was sent"
+msgstr "mudou enquanto era enviado"
+
+#: rustinput-gtk/src/transfers.rs:202
+msgid "removed before it was sent"
+msgstr "apagado antes de ser enviado"
+
+#: rustinput-gtk/src/transfers.rs:225
+msgid "{count} more"
+msgstr "mais {count}"
+
+#: rustinput-gtk/src/transfers.rs:234
+msgid "Not sent: {list}"
+msgstr "Não enviado: {list}"
+
+#: rustinput-gtk/src/transfers.rs:235
+msgid "Did not come: {list}"
+msgstr "Não chegou: {list}"
+
+#: rustinput-gtk/src/transfers.rs:241
+msgid "Renamed, the name is not allowed here: {list}"
+msgstr "Renomeado, o nome não é permitido aqui: {list}"
+
+#: rustinput-gtk/src/transfers.rs:315
 msgid "Open log"
 msgstr "Abrir registro"
 
-#: rustinput-gtk/src/transfers.rs:256
+#: rustinput-gtk/src/transfers.rs:316
 msgid "Everything sent and received, with every file"
 msgstr "Tudo o que foi enviado e recebido, com cada arquivo"
 
-#: rustinput-gtk/src/transfers.rs:263
+#: rustinput-gtk/src/transfers.rs:323
 msgid "Remove unpasted files"
 msgstr "Remover arquivos não colados"
 
-#: rustinput-gtk/src/transfers.rs:264
+#: rustinput-gtk/src/transfers.rs:324
 msgid "Removes the received files that were not pasted from the temporary folder"
 msgstr "Remove da pasta temporária os arquivos recebidos que não foram colados"
 
-#: rustinput-gtk/src/transfers.rs:425
+#: rustinput-gtk/src/transfers.rs:496
 msgid "Open the temporary folder with the received files"
 msgstr "Abrir a pasta temporária com os arquivos recebidos"
 
