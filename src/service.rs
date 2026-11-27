@@ -556,6 +556,11 @@ impl Service {
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
             FrontendRequest::Discover(look) => self.discovery.look(look),
+            FrontendRequest::GoTo(target) => {
+                if !self.paused {
+                    self.go_to(target);
+                }
+            }
             FrontendRequest::SetHotkeys(on) => {
                 self.config.set_hotkeys(on);
                 self.save_config();
@@ -718,6 +723,16 @@ impl Service {
         self.notify_frontend(FrontendEvent::Hotkeys(on));
     }
 
+    /// moves the mouse and keyboard to this computer (`None`) or to a client
+    fn go_to(&mut self, target: Option<ClientHandle>) {
+        match target {
+            None if self.pointer_at.is_some() => self.capture.release(),
+            None => {}
+            Some(t) if self.pointer_at == Some(t) => {}
+            Some(t) => self.capture.switch(t),
+        }
+    }
+
     /// Moves the pointer as a keyboard shortcut says: to the n-th active
     /// computer of the list, back here, or to the next or previous one
     /// (this one counting as the first).
@@ -733,12 +748,7 @@ impl Service {
             .map(|(handle, ..)| handle)
             .collect();
         clients.sort();
-        let go = |service: &mut Self, target: Option<ClientHandle>| match target {
-            None if service.pointer_at.is_some() => service.capture.release(),
-            None => {}
-            Some(t) if service.pointer_at == Some(t) => {}
-            Some(t) => service.capture.switch(t),
-        };
+        let go = |service: &mut Self, target: Option<ClientHandle>| service.go_to(target);
         match hotkey {
             Hotkey::Home => go(self, None),
             Hotkey::GoTo(n) => {

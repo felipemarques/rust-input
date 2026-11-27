@@ -51,6 +51,8 @@ pub(crate) fn icon(size: u32) -> Option<Rgba> {
 const ACCENT: [f32; 3] = [232.0, 105.0, 46.0];
 /// the green of the sign of a new version
 const NEW_VERSION: [f32; 3] = [46.0, 160.0, 67.0];
+/// the blue of the sign of the mouse and keyboard on another computer
+const AWAY: [f32; 3] = [53.0, 132.0, 228.0];
 
 /// a corner of the icon, for a sign
 #[derive(Clone, Copy)]
@@ -88,11 +90,24 @@ pub(crate) fn new_version(icon: &Rgba) -> Rgba {
     })
 }
 
-/// the icon in its four looks: paused or not, with a new version or not
-pub(crate) fn look(icon: &Rgba, paused: bool, new: bool) -> Rgba {
-    let icon = match paused {
-        true => self::paused(icon),
-        false => icon.clone(),
+/// The icon while the mouse and keyboard are on another computer: a white
+/// arrow to the right on a blue disc at the bottom right (where the pause
+/// sign goes, which can not show at the same time).
+pub(crate) fn away(icon: &Rgba) -> Rgba {
+    sign(icon, Corner::BottomRight, 0.27, AWAY, 0.0, |x, y| {
+        let head = (0.02..=0.64).contains(&x) && y.abs() <= 0.58 * (0.64 - x) / 0.62;
+        let stem = (-0.62..=0.1).contains(&x) && y.abs() <= 0.19;
+        head || stem
+    })
+}
+
+/// the icon in its looks: paused (or with the mouse and keyboard on another
+/// computer, `away`) or not, with a new version or not
+pub(crate) fn look(icon: &Rgba, paused: bool, new: bool, away: bool) -> Rgba {
+    let icon = match (paused, away) {
+        (true, _) => self::paused(icon),
+        (false, true) => self::away(icon),
+        (false, false) => icon.clone(),
     };
     match new {
         true => new_version(&icon),
@@ -265,9 +280,33 @@ mod tests {
     #[test]
     fn paused_with_a_new_version_shows_both_signs() {
         for icon in icons() {
-            let both = look(&icon, true, true);
+            let both = look(&icon, true, true, false);
             assert_eq!(both.pixels, new_version(&paused(&icon)).pixels);
-            assert_eq!(look(&icon, false, false).pixels, icon.pixels);
+            assert_eq!(look(&icon, false, false, false).pixels, icon.pixels);
+            // paused wins over away: the pointer can not be on another one
+            assert_eq!(look(&icon, true, false, true).pixels, paused(&icon).pixels);
+        }
+    }
+
+    #[test]
+    fn away_has_a_blue_sign_at_the_bottom_right() {
+        for icon in icons() {
+            let with_new = look(&icon, false, true, true);
+            assert_eq!(with_new.pixels, new_version(&self::away(&icon)).pixels);
+            let away = look(&icon, false, false, true);
+            let (w, h) = (icon.width as usize, icon.height as usize);
+            let size = w.min(h) as f32;
+            let r = size * 0.27;
+            let (cx, cy) = (w as f32 - r - size * 0.01, h as f32 - r - size * 0.01);
+            // the edge of the disc is blue, its middle white (the arrow)
+            let at = |x: f32, y: f32| {
+                let i = (y as usize * w + x as usize) * 4;
+                [away.pixels[i], away.pixels[i + 1], away.pixels[i + 2]]
+            };
+            let edge = at(cx, cy + r * 0.85);
+            assert!(edge[2] > 200 && edge[0] < 100, "{edge:?}");
+            let middle = at(cx, cy);
+            assert!(middle.iter().all(|&c| c > 200), "{middle:?}");
         }
     }
 

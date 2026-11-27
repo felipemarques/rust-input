@@ -433,6 +433,14 @@ fn build_ui(app: &Application) {
             window.request(FrontendRequest::Arrangement);
             loop {
                 let notify = receiver.recv().await.unwrap_or_else(|_| process::exit(1));
+                // the active clients go to the menu of the tray icon
+                let clients_changed = matches!(
+                    notify,
+                    FrontendEvent::Created(..)
+                        | FrontendEvent::Deleted(_)
+                        | FrontendEvent::State(..)
+                        | FrontendEvent::Enumerate(_)
+                );
                 match notify {
                     FrontendEvent::Created(handle, client, state) => {
                         window.new_client(handle, client, state);
@@ -453,7 +461,13 @@ fn build_ui(app: &Application) {
                     FrontendEvent::MonitorsNotIdentified { name, error } => {
                         window.monitors_not_identified(&name, &error)
                     }
-                    FrontendEvent::PointerAt(handle) => window.set_pointer_at(handle),
+                    FrontendEvent::PointerAt(handle) => {
+                        window.set_pointer_at(handle);
+                        #[cfg(not(target_os = "macos"))]
+                        if let Some(tray) = &tray {
+                            tray.show_pointer(handle);
+                        }
+                    }
                     FrontendEvent::State(handle, config, state) => {
                         window.update_client_config(handle, config);
                         window.update_client_state(handle, state);
@@ -604,6 +618,12 @@ fn build_ui(app: &Application) {
                         }
                     }
                 }
+                #[cfg(not(target_os = "macos"))]
+                if let (true, Some(tray)) = (clients_changed, &tray) {
+                    tray.show_computers(window.active_computers());
+                }
+                #[cfg(target_os = "macos")]
+                let _ = clients_changed;
             }
         }
     ));

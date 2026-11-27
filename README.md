@@ -37,6 +37,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | ⌨️ Keyboard shortcuts to go to a computer, the next one or back here | ✅ ²³ | ✅ ²³ | ✅ ²⁴ | ✅ ²⁴ |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
 | 🔔 System tray icon, closing the window keeps sharing | ✅ | ✅ ³ | ✅ ³ | ✅ menu bar |
+| 🧭 The tray icon shows where the mouse and keyboard are, and its menu moves them to any computer | ✅ ²⁵ | ✅ ²⁵ | ✅ ²⁵ | — |
 | ⏸️ Pause from the tray icon, the window or the radial menu; the other computers see it paused | ✅ ¹² | ✅ ¹² | ✅ ² | ✅ ² |
 | 🔐 Lock the screen of another computer, or of all of them at once, from the radial menu | ✅ ¹³ | ✅ ¹³ | ✅ ¹⁴ | ✅ ¹⁴ |
 | 🔓 Type the password on the lock screen and the screen to log on, answer the prompts of User Account Control | ✅ ¹⁵ | — | — | — |
@@ -91,6 +92,7 @@ switched on, on both computers (see [Finding the computers on the network](#find
 ²³ New in 0.42.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 ²⁴ While the pointer is on another computer; with the pointer on this one they need X11 or Windows, like the radial
 menu.
+²⁵ New in 0.43.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -951,8 +953,11 @@ Click the icon (or choose "Show RustInput" in its menu) to bring the window back
 icon menu or in the window menu to stop RustInput. Starting RustInput again while it runs in the tray also shows the window.
 The menu also lists the running and recent file transfers with their progress, can cancel them, turns
 "Send copied files automatically" on and off, and opens the transfers window ("File transfers…").
-The icon turns grey with an orange pause sign while RustInput is [paused](#pausing), and gets a green sign with an
-arrow up when a [new version](#updates) is out.
+The icon turns grey with an orange pause sign while RustInput is [paused](#pausing), gets a green sign with an
+arrow up when a [new version](#updates) is out, and a blue sign with an arrow while the mouse and keyboard are on another
+computer, which its tooltip names. With computers switched on, the menu starts with **Mouse and keyboard on:**, this
+computer and each of them, a check where they are: pick one to move them there without crossing an edge, as the
+[keyboard shortcuts](#keyboard-shortcuts) do.
 On macOS the same is done by the menu bar item.
 
 Without a system tray, closing the window quits RustInput as before.
@@ -1168,6 +1173,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here
+- [x] The tray icon shows where the mouse and keyboard are, and moves them to any computer
 
 
 ## Detailed OS Support

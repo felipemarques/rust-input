@@ -8,15 +8,16 @@ use ksni::{
     menu::{CheckmarkItem, StandardItem},
 };
 
-use super::{Summary, TrayAction, icon, pause_label, paused_status};
+use super::{Summary, TrayAction, away_status, icon, pause_label, paused_status};
 use crate::i18n::tr;
 
 struct RustInputTray {
     actions: Sender<TrayAction>,
-    /// the icon in every size, in its four looks: `[paused][new version]`
-    /// (grey with a pause sign while paused, a green sign with an arrow up
-    /// when a new version is out)
-    icons: [[Vec<ksni::Icon>; 2]; 2],
+    /// the icon in every size, in its looks: `[plain, paused, away][new
+    /// version]` (grey with a pause sign while paused, a blue sign with an
+    /// arrow while the mouse and keyboard are on another computer, a green
+    /// sign with an arrow up when a new version is out)
+    icons: [[Vec<ksni::Icon>; 2]; 3],
     /// name and version, shown in the tooltip and at the top of the menu
     label: String,
     /// the file transfers
@@ -40,9 +41,13 @@ impl ksni::Tray for RustInputTray {
     }
 
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        let paused = self.transfers.paused == Some(true);
+        let state = match (self.transfers.paused == Some(true), &self.transfers.away) {
+            (true, _) => 1,
+            (false, Some(_)) => 2,
+            (false, None) => 0,
+        };
         let new = self.transfers.update.is_some();
-        self.icons[paused as usize][new as usize].clone()
+        self.icons[state][new as usize].clone()
     }
 
     fn tool_tip(&self) -> ToolTip {
@@ -53,6 +58,9 @@ impl ksni::Tray for RustInputTray {
             .unwrap_or_else(|| tr("Mouse and keyboard sharing").into());
         if self.transfers.paused == Some(true) {
             description = format!("{}\n{description}", paused_status());
+        }
+        if let Some(name) = &self.transfers.away {
+            description = format!("{}\n{description}", away_status(name));
         }
         if let Some(update) = &self.transfers.update_status {
             description = format!("{description}\n{update}");
@@ -78,6 +86,31 @@ impl ksni::Tray for RustInputTray {
             .into(),
             MenuItem::Separator,
         ];
+        if !self.transfers.computers.is_empty() {
+            menu.push(
+                StandardItem {
+                    label: tr("Mouse and keyboard on:").into(),
+                    enabled: false,
+                    ..Default::default()
+                }
+                .into(),
+            );
+            for computer in &self.transfers.computers {
+                let handle = computer.handle;
+                menu.push(
+                    CheckmarkItem {
+                        label: computer.name.clone(),
+                        checked: computer.here,
+                        activate: Box::new(move |tray: &mut Self| {
+                            tray.send(TrayAction::GoTo(handle))
+                        }),
+                        ..Default::default()
+                    }
+                    .into(),
+                );
+            }
+            menu.push(MenuItem::Separator);
+        }
         if let Some(paused) = self.transfers.paused {
             menu.extend([
                 StandardItem {
@@ -210,15 +243,16 @@ impl Drop for Handle {
 /// shows the tray icon, `None` if the desktop has no system tray
 pub(super) fn spawn(actions: Sender<TrayAction>, label: String) -> Option<Handle> {
     let originals = icon::icons();
-    let looks = |paused, new| {
+    let looks = |paused, new, away| {
         originals
             .iter()
-            .map(|original| argb(icon::look(original, paused, new)))
+            .map(|original| argb(icon::look(original, paused, new, away)))
             .collect()
     };
     let icons = [
-        [looks(false, false), looks(false, true)],
-        [looks(true, false), looks(true, true)],
+        [looks(false, false, false), looks(false, true, false)],
+        [looks(true, false, false), looks(true, true, false)],
+        [looks(false, false, true), looks(false, true, true)],
     ];
     let tray = RustInputTray {
         actions,
