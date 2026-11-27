@@ -341,8 +341,8 @@ impl Player {
             {
                 let mut samples = self.ring.samples.lock().expect("lock");
                 if samples.len() < 4 * SAMPLES {
-                    for pair in pcm.chunks_exact(2) {
-                        samples.push_back(i16::from_le_bytes([pair[0], pair[1]]));
+                    for pair in pcm.as_chunks::<2>().0 {
+                        samples.push_back(i16::from_le_bytes(*pair));
                     }
                     return Ok(());
                 }
