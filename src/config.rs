@@ -137,11 +137,42 @@ struct ConfigToml {
     /// the prompts of User Account Control (on when not set). The service
     /// reads it (`windows_supervisor`); kept here so it stays in the file.
     login_screen: Option<bool>,
+    /// the sound of the other computers plays here (0.52.0, off by default)
+    sound_listen: Option<bool>,
+    /// the sound of this computer goes to the one that listens (on by
+    /// default)
+    sound_send: Option<bool>,
+    /// the speakers play while the sound goes to another computer (off by
+    /// default: they are silent)
+    sound_keep_speakers: Option<bool>,
+    /// the UDP port the sound arrives on while listening (4243)
+    sound_port: Option<u16>,
     clients: Option<Vec<TomlClient>>,
     authorized_fingerprints: Option<HashMap<String, String>>,
     /// the arrangement of the computers, the same on all of them (see
     /// `rustinput_ipc::layout`)
     layout: Option<Layout>,
+    /// the volume of the sound of each computer here, by the fingerprint of
+    /// its certificate (0.52.0)
+    sound_volumes: Option<HashMap<String, SoundVolume>>,
+}
+
+/// the volume of the sound of one computer, where it is heard
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct SoundVolume {
+    /// 0 to 100
+    pub volume: u8,
+    #[serde(default)]
+    pub muted: bool,
+}
+
+impl Default for SoundVolume {
+    fn default() -> Self {
+        Self {
+            volume: 100,
+            muted: false,
+        }
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq)]
@@ -727,6 +758,71 @@ impl Config {
     pub fn set_clipboard_along(&mut self, along: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.clipboard_along = Some(along);
+    }
+
+    /// whether the sound of the other computers plays here (`sound_listen`)
+    pub fn sound_listen(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.sound_listen)
+            .unwrap_or(false)
+    }
+
+    /// whether the sound of this computer goes to the one that listens
+    /// (`sound_send`, on by default)
+    pub fn sound_send(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.sound_send)
+            .unwrap_or(true)
+    }
+
+    /// whether the speakers play while the sound goes to another computer
+    /// (`sound_keep_speakers`)
+    pub fn sound_keep_speakers(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.sound_keep_speakers)
+            .unwrap_or(false)
+    }
+
+    /// the UDP port of the sound (`sound_port`, 4243)
+    pub fn sound_port(&self) -> u16 {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.sound_port)
+            .unwrap_or(crate::sound::DEFAULT_PORT)
+    }
+
+    /// the volume of the computer with the certificate `fingerprint`
+    pub fn sound_volume(&self, fingerprint: &str) -> SoundVolume {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.sound_volumes.as_ref())
+            .and_then(|v| v.get(fingerprint).copied())
+            .unwrap_or_default()
+    }
+
+    pub fn set_sound_listen(&mut self, on: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.sound_listen = Some(on);
+    }
+
+    pub fn set_sound_send(&mut self, on: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.sound_send = Some(on);
+    }
+
+    pub fn set_sound_keep_speakers(&mut self, on: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.sound_keep_speakers = Some(on);
+    }
+
+    pub fn set_sound_volume(&mut self, fingerprint: String, volume: SoundVolume) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.sound_volumes
+            .get_or_insert_with(Default::default)
+            .insert(fingerprint, volume);
     }
 
     pub fn set_hotkeys(&mut self, on: bool) {

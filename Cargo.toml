@@ -103,16 +103,29 @@ libc = "0.2.148"
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
 x11rb = { version = "0.14.0", features = ["xinput", "shape", "randr", "xfixes"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# the shared sound (src/sound/linux.rs): libpulse, which PulseAudio and
+# PipeWire both answer and every desktop has
+libpulse-binding = "2.30"
+libpulse-simple-binding = "2.29"
+
 [target.'cfg(windows)'.dependencies]
 # received files go to the clipboard as cut files (arboard can only copy)
 clipboard-win = "5.4.3"
 # the Windows service that keeps the daemon running (windows_supervisor.rs)
 windows-service = "0.8.1"
-# the rules of the Windows firewall the installer sets (windows_setup.rs)
+# the shared sound (src/sound/win.rs): recording the output in loopback and
+# playing, through WASAPI
+cpal = "0.18.2"
+# the rules of the Windows firewall the installer sets (windows_setup.rs);
+# muting the output while its sound goes to another computer (sound/win.rs)
 windows = { version = "0.61.2", features = [
     "Win32_Foundation",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
     "Win32_NetworkManagement_WindowsFirewall",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
     "Win32_System_Ole",
     "Win32_System_Variant",
 ] }
@@ -168,7 +181,7 @@ rdp_emulation = ["input-emulation/remote_desktop_portal"]
 name = "RustInput"
 icon = ["target/icon.icns", "rustinput-gtk/resources/io.github.felipemarques.RustInput.svg"]
 identifier = "io.github.felipemarques.RustInput"
-deb_depends = [ "libadwaita-1-0" ]
+deb_depends = [ "libadwaita-1-0", "libpulse0" ]
 resources = ["target/menubar-template.png"]
 
 [package.metadata.bundle.osx]

@@ -9,4 +9,6 @@
   <port port="4242" protocol="tcp"/>
   <!-- finding the computers on the network, when switched on -->
   <port port="4241" protocol="udp"/>
+  <!-- the shared sound, on the computer that listens -->
+  <port port="4243" protocol="udp"/>
 </service>

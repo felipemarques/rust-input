@@ -286,6 +286,24 @@ their place on the clipboard, when RustInput starts, or with **Remove unpasted f
 
 To turn file transfers off altogether, set `clipboard_files = false` in the [configuration](#configuration) file.
 
+## Shared sound
+
+Every computer's sound in the headphones of one (0.52.0, Linux and Windows): on the computer with the headphones,
+switch on **Preferences > Sound > Hear the other computers here**. Every few seconds it hands each computer of its
+list that is switched on a stream id and a key, over the encrypted and authenticated channel the computers already
+use; each one that sends its sound (**Send the sound of this computer to the one that listens**, on by default)
+records what it plays, 5 ms at a time, and sends it by UDP to port 4243 of the listening computer, each datagram
+sealed with ChaCha20-Poly1305. The listening computer holds each stream a little to even out the network (from 10 ms,
+more when datagrams arrive late), mixes them and plays them; each computer gets a row there with its volume and a
+mute button, kept for the next time.
+
+Meanwhile the speakers of a sending computer are silent, unless **Keep the speakers of this computer playing**: on
+Linux what plays moves to a silent sink, `rustinput_sound`, whose monitor is recorded (PulseAudio or PipeWire); on
+Windows the output is muted, which its loopback recording ignores. They play again when the listening computer stops
+listening or goes quiet for 16 seconds, when sending is switched off, and, after a crash, when RustInput starts
+again. A computer sends to one listening computer at a time, and a listening computer does not send its own sound.
+The sound goes uncompressed, 48 kHz stereo (about 1.5 Mbit/s per computer), on the local network only.
+
 ## Keyboard shortcuts
 
 | Keys | What they do |
@@ -835,7 +853,8 @@ This program will not transfer any information to other networked systems unless
 or the person installing or operating it.
 
 RustInput sends keyboard, mouse, clipboard and file data only to the computers its user adds and authorizes, over
-encrypted connections on the local network. If its user switches on **Show this computer to the others** (off by
+encrypted connections on the local network; the sound of a computer only to an authorized one whose user switched on
+**Hear the other computers here**, encrypted, while it listens. If its user switches on **Show this computer to the others** (off by
 default), it tells the computers of its local network its name, the fingerprint of its certificate, its port, its
 version and its system, with UDP broadcasts, and listens for theirs. Those computers can also see what its clipboard holds, and its history,
 in their Clipboards tab, unless its user switches that off in Preferences. The history of the clipboard is kept in
@@ -1168,6 +1187,15 @@ hotkeys = true
 # Clipboards tab
 clipboard_along = true
 
+# the shared sound (0.52.0): the sound of the other computers plays here (off
+# by default); the sound of this one goes to the one that listens (on by
+# default), with its speakers silent unless sound_keep_speakers; the UDP port
+# it arrives on while listening
+sound_listen = false
+sound_send = true
+sound_keep_speakers = false
+sound_port = 4243
+
 # hold Ctrl and the left Alt for the radial menu (on by default, X11 and Windows)
 radial_menu = true
 
@@ -1269,6 +1297,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] European Portuguese (pt-PT)
 - [x] An MCP server for AI agents (`rustinput mcp`)
 - [x] Updating on Linux with one click, from a signed list of checksums
+- [x] Shared sound: every computer in the headphones of one, each at its volume
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here

@@ -164,6 +164,17 @@ pub struct Service {
     /// the latest version, or why it is not known
     update_results: Receiver<Result<String, String>>,
     update_results_tx: Sender<Result<String, String>>,
+    /// the shared sound (0.52.0)
+    sound: crate::sound::control::SoundControl,
+    /// the answers of the computers to the streams handed out: handle, their
+    /// fingerprint, whether they send
+    sound_results:
+        tokio::sync::mpsc::UnboundedReceiver<(ClientHandle, Option<String>, Result<(), String>)>,
+    sound_results_tx:
+        tokio::sync::mpsc::UnboundedSender<(ClientHandle, Option<String>, Result<(), String>)>,
+    sound_tick: tokio::time::Interval,
+    /// what the window was told about the sound last
+    sound_shown: Option<rustinput_ipc::SoundState>,
     /// how installing a new version goes (0.51.0)
     install_progress: tokio::sync::mpsc::UnboundedReceiver<rustinput_ipc::Install>,
     install_progress_tx: tokio::sync::mpsc::UnboundedSender<rustinput_ipc::Install>,
@@ -339,6 +350,18 @@ impl Service {
         };
         let (update_results_tx, update_results) = channel();
         let (install_progress_tx, install_progress) = tokio::sync::mpsc::unbounded_channel();
+        // what an earlier RustInput left of the shared sound (the speakers
+        // it silenced), before this one shares it
+        std::thread::spawn(crate::sound::clean_up);
+        let sound = crate::sound::control::SoundControl::new(
+            config.sound_listen(),
+            config.sound_send(),
+            config.sound_keep_speakers(),
+            config.sound_port(),
+        );
+        let (sound_results_tx, sound_results) = tokio::sync::mpsc::unbounded_channel();
+        let mut sound_tick = tokio::time::interval(std::time::Duration::from_secs(1));
+        sound_tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         let (clipboard_results_tx, clipboard_results) = channel();
         let show_clipboard = config.show_clipboard();
         let keep_clipboard_history = config.clipboard_history() > 0;
@@ -416,6 +439,11 @@ impl Service {
             update_results_tx,
             install_progress,
             install_progress_tx,
+            sound,
+            sound_results,
+            sound_results_tx,
+            sound_tick,
+            sound_shown: None,
             not_authorized: HashMap::new(),
             show_clipboard,
             clipboard_seen: HashMap::new(),
@@ -487,6 +515,15 @@ impl Service {
                     self.check_updates();
                 }
                 Some(result) = self.update_results.recv() => self.updates_checked(result),
+                _ = self.sound_tick.tick(), if self.sound.active() => self.sound_turn(),
+                Some(why) = self.sound.failures.recv() => {
+                    log::warn!("sound: {why}");
+                    self.sound.failed(why);
+                    self.show_sound();
+                }
+                Some((handle, fingerprint, answer)) = self.sound_results.recv() => {
+                    self.sound_answered(handle, fingerprint, answer);
+                }
                 Some(state) = self.install_progress.recv() => {
                     self.updates.install = Some(state);
                     self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
@@ -652,6 +689,50 @@ impl Service {
             }
             FrontendRequest::CheckUpdates => self.check_updates(),
             FrontendRequest::InstallUpdate => self.install_update(),
+            FrontendRequest::SetSoundListen(on) => {
+                self.config.set_sound_listen(on);
+                self.save_config();
+                for (handle, fingerprint) in self.sound.set_listen(on) {
+                    let (cert, addrs) = (self.cert.clone(), self.client_addrs(handle));
+                    tokio::task::spawn_local(async move {
+                        if let Err(e) = arrangement::sound_stop(cert, addrs, fingerprint).await {
+                            log::debug!("sound: telling it no longer listens: {e}");
+                        }
+                    });
+                }
+                if on {
+                    self.sound_turn();
+                }
+                self.show_sound();
+            }
+            FrontendRequest::SetSoundSend(on) => {
+                self.config.set_sound_send(on);
+                self.save_config();
+                self.sound.set_send(on);
+                self.show_sound();
+            }
+            FrontendRequest::SetSoundKeepSpeakers(on) => {
+                self.config.set_sound_keep_speakers(on);
+                self.save_config();
+                self.sound.set_keep_speakers(on);
+                self.show_sound();
+            }
+            FrontendRequest::SetSoundVolume {
+                handle,
+                volume,
+                muted,
+            } => {
+                if let Some(fingerprint) = self.sound.fingerprint(handle) {
+                    let volume = volume.min(100);
+                    self.config.set_sound_volume(
+                        fingerprint,
+                        crate::config::SoundVolume { volume, muted },
+                    );
+                    self.save_config();
+                    self.sound.set_volume(handle, volume, muted);
+                    self.show_sound();
+                }
+            }
             FrontendRequest::UpdateNotified(version) => {
                 if self.updates.notified.as_ref() != Some(&version) {
                     self.config.set_update_notified(version.clone());
@@ -1149,6 +1230,9 @@ impl Service {
             seen = Some(env!("CARGO_PKG_VERSION").to_owned());
         }
         self.notify_frontend(FrontendEvent::WhatsNewSeen(seen));
+        let sound = self.sound_state();
+        self.sound_shown = Some(sound.clone());
+        self.notify_frontend(FrontendEvent::Sound(sound));
         self.report_discovered();
         let introductions: Vec<FrontendEvent> = self
             .introductions
@@ -1229,6 +1313,107 @@ impl Service {
         tokio::task::spawn_local(async move {
             let _ = results.send(update::latest().await);
         });
+    }
+
+    /// the computers of the list switched on: handle, name, fingerprint if
+    /// known (for the shared sound)
+    fn sound_clients(&self) -> Vec<(ClientHandle, String, Option<String>)> {
+        self.client_manager
+            .registered_clients()
+            .into_iter()
+            .filter(|h| {
+                self.client_manager
+                    .get_state(*h)
+                    .is_some_and(|(_, state)| state.active)
+            })
+            .map(|h| {
+                let (fingerprint, name) = self.peer(h);
+                (h, name, fingerprint)
+            })
+            .collect()
+    }
+
+    /// every second while the sound is shared: hands out the streams again,
+    /// stops sending to a computer that went quiet, tells the window
+    fn sound_turn(&mut self) {
+        let clients = self.sound_clients();
+        let keys = self.authorized_keys.read().expect("lock").clone();
+        for offer in self.sound.offers_due(&clients) {
+            let (cert, addrs, keys) = (
+                self.cert.clone(),
+                self.client_addrs(offer.handle),
+                keys.clone(),
+            );
+            let results = self.sound_results_tx.clone();
+            tokio::task::spawn_local(async move {
+                let handle = offer.handle;
+                // only a computer authorized here gets a key
+                let expected = match offer.fingerprint {
+                    Some(f) => f,
+                    None => match arrangement::describe(cert.clone(), addrs.clone(), None).await {
+                        Ok((f, _)) => f,
+                        Err(e) => {
+                            let _ = results.send((handle, None, Err(e.to_string())));
+                            return;
+                        }
+                    },
+                };
+                if !keys.contains_key(&expected) {
+                    let why = "it is not authorized here".to_owned();
+                    let _ = results.send((handle, Some(expected), Err(why)));
+                    return;
+                }
+                let answer = arrangement::sound(
+                    cert,
+                    addrs,
+                    expected.clone(),
+                    offer.port,
+                    offer.stream,
+                    offer.key,
+                )
+                .await
+                .map(|_| ())
+                .map_err(|e| match e {
+                    // its own words
+                    arrangement::ArrangeError::Refused(reason) => reason,
+                    e => e.to_string(),
+                });
+                let _ = results.send((handle, Some(expected), answer));
+            });
+        }
+        self.sound.tick();
+        self.show_sound();
+    }
+
+    fn sound_answered(
+        &mut self,
+        handle: ClientHandle,
+        fingerprint: Option<String>,
+        answer: Result<(), String>,
+    ) {
+        let volume = fingerprint
+            .as_deref()
+            .map(|f| self.config.sound_volume(f))
+            .unwrap_or_default();
+        self.sound
+            .answered(handle, fingerprint, answer, (volume.volume, volume.muted));
+        self.show_sound();
+    }
+
+    fn sound_state(&self) -> rustinput_ipc::SoundState {
+        self.sound.state(|fingerprint| {
+            let v = self.config.sound_volume(fingerprint);
+            (v.volume, v.muted)
+        })
+    }
+
+    /// tells the window about the sound, when something changed
+    fn show_sound(&mut self) {
+        let state = self.sound_state();
+        if self.sound_shown.as_ref() != Some(&state) {
+            self.sound_shown = Some(state.clone());
+            self.notify_frontend(FrontendEvent::Sound(state));
+        }
     }
 
     /// downloads the new version, checks it and installs it in place of this
@@ -2133,6 +2318,34 @@ impl Service {
                 fingerprint,
             } => {
                 self.introduced(from, name, fingerprint);
+                return;
+            }
+            ArrangementEvent::Sound {
+                from,
+                addr,
+                port,
+                stream,
+                key,
+                done,
+            } => {
+                let name = self
+                    .authorized_keys
+                    .read()
+                    .expect("lock")
+                    .get(&from)
+                    .cloned()
+                    .unwrap_or_else(|| addr.ip().to_string());
+                let result = self.sound.incoming(&from, &name, addr, port, &stream, &key);
+                if let Err(e) = &result {
+                    log::info!("sound: {name} listens; not sending: {e}");
+                }
+                let _ = done.send(result);
+                self.show_sound();
+                return;
+            }
+            ArrangementEvent::SoundStop { from } => {
+                self.sound.stopped(&from);
+                self.show_sound();
                 return;
             }
             ArrangementEvent::Identify { addr } => {

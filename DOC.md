@@ -869,6 +869,45 @@ in a line under the header bar (until "Later", for that version) and in the tray
 (the installer puts it there), which asks for administrator rights and installs; elsewhere
 **Download** opens the page of the release.
 
+### The shared sound (0.52.0)
+
+`src/sound/`. `control.rs` keeps what the service decides: while
+`sound_listen`, every 5 s (`OFFER_PERIOD`) each client switched on gets
+`Message::Sound { port, stream, key }` on the channel of the arrangement
+(`arrangement::sound`, with the fingerprint expected: a client not yet
+described is described first, and one not authorized here gets nothing).
+The answer is `SoundOn`, or `Refused` with why (sending off there, it
+listens itself, it sends to another one, recording failed in the last 60 s).
+A sending computer (`ArrangementEvent::Sound`) starts a `Sender` towards the
+IP of that connection and `port`, retargets it at each new offer, and drops
+it after 16 s without one (`OFFER_LIFETIME`) or on `SoundStop`.
+
+The threads are outside tokio: `Sender` reads 5 ms (240 frames, 48 kHz,
+stereo, s16le) from the backend and sends `wire` datagrams (`RIS1`, stream,
+number; ChaCha20-Poly1305 of ring with the stream and the number as nonce,
+the head as associated data). `Listener` binds UDP `sound_port` (IPv6 with
+IPv4 mapped), opens the datagrams of the streams it handed out and pushes
+them into a `jitter::Jitter` each; its playing thread pops one turn of
+every stream, mixes with the volumes and writes to the backend, whose
+blocking write paces the turns, and lets the output go after 2 s of
+nothing. Backends: `linux.rs` (libpulse: the silent sink `rustinput_sound`
+made the default, its module arguments carrying `rustinput.restore=<sink>`
+so `clean_up` at the next start puts the output back after a crash;
+`pa_simple` to record its monitor and to play) and `win.rs` (cpal/WASAPI
+loopback of the default output and playback, with a linear resampler for
+other rates; `IAudioEndpointVolume` mutes the output, with a marker file in
+`%LOCALAPPDATA%\RustInput` written first so only a mute RustInput made is
+undone). macOS has no backend.
+
+The window gets `FrontendEvent::Sound(SoundState)` and sends
+`SetSoundListen`, `SetSoundSend`, `SetSoundKeepSpeakers` and
+`SetSoundVolume { handle, volume, muted }`; the volumes are kept by
+fingerprint in `[sound_volumes]`. `e2e-tests/sound.sh` gives each instance a
+private PipeWire (`audio_stack.sh`: its own runtime folder, D-Bus and
+WirePlumber without the monitors of devices), and `lib.sh` points every
+instance's `PULSE_SERVER` at its own, so no test ever reaches the sound of
+the session.
+
 ### Installing a new version on Linux (0.51.0)
 
 `src/self_update.rs`. The release job of `release.yml` writes `SHA256SUMS`

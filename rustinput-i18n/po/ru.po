@@ -526,7 +526,7 @@ msgstr "Мышь перешла с {address}"
 msgid "{address} disconnected"
 msgstr "{address} отключён"
 
-#: rustinput-gtk/src/lib.rs:618
+#: rustinput-gtk/src/lib.rs:619
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Получено файлов с {name}: {count}, можно вставить"
 
@@ -1001,7 +1001,7 @@ msgstr "Менеджер паролей отметил это как секре�
 msgid "Password, hidden"
 msgstr "Пароль, скрыт"
 
-#: rustinput-gtk/src/window/imp.rs:263
+#: rustinput-gtk/src/window/imp.rs:265
 msgid "Failed to relaunch RustInput"
 msgstr "Не удалось перезапустить RustInput"
 
@@ -1097,319 +1097,383 @@ msgstr "Запускать RustInput вместе с сеансом"
 msgid "Without its window, in the tray. Off: start it from the menu of applications"
 msgstr "Без окна, в области уведомлений. Выключено: запускайте из меню приложений"
 
-#: rustinput-gtk/src/window.rs:109
+#: rustinput-gtk/src/window/sound.rs:54
+msgid "Sound"
+msgstr "Звук"
+
+#: rustinput-gtk/src/window/sound.rs:55
+msgid "Every computer in the headphones of one, each at its own volume"
+msgstr "Все компьютеры в наушниках одного, у каждого своя громкость"
+
+#: rustinput-gtk/src/window/sound.rs:61
+msgid "Hear the other computers here"
+msgstr "Слушать здесь другие компьютеры"
+
+#: rustinput-gtk/src/window/sound.rs:62
+msgid "Their sound plays on this computer; the volume of each is below"
+msgstr "Их звук воспроизводится на этом компьютере; громкость каждого — ниже"
+
+#: rustinput-gtk/src/window/sound.rs:65
+msgid "Send the sound of this computer to the one that listens"
+msgstr "Отправлять звук этого компьютера тому, который слушает"
+
+#: rustinput-gtk/src/window/sound.rs:66
+msgid "Only to a computer authorized here, encrypted"
+msgstr "Только на компьютер, авторизованный здесь, в зашифрованном виде"
+
+#: rustinput-gtk/src/window/sound.rs:69
+msgid "Keep the speakers of this computer playing"
+msgstr "Не выключать динамики этого компьютера"
+
+#: rustinput-gtk/src/window/sound.rs:70
+msgid "Off: they are silent while its sound plays on the other computer"
+msgstr "Выключено: они молчат, пока его звук играет на другом компьютере"
+
+#: rustinput-gtk/src/window/sound.rs:129
+msgid "The sound does not work: {error}"
+msgstr "Звук не работает: {error}"
+
+#: rustinput-gtk/src/window/sound.rs:130
+msgid "The sound of this computer plays on {name}"
+msgstr "Звук этого компьютера играет на {name}"
+
+#: rustinput-gtk/src/window/sound.rs:135
+msgid "No computer of the list is switched on to send its sound"
+msgstr "Ни один компьютер из списка не включён, чтобы отправлять звук"
+
+#: rustinput-gtk/src/window/sound.rs:191
+msgid "Mute"
+msgstr "Без звука"
+
+#: rustinput-gtk/src/window/sound.rs:268
+msgid "Asking for its sound…"
+msgstr "Запрос звука…"
+
+#: rustinput-gtk/src/window/sound.rs:269
+msgid "Its sound plays here"
+msgstr "Его звук играет здесь"
+
+#: rustinput-gtk/src/window/sound.rs:270
+msgid "It sends its sound; nothing plays there now"
+msgstr "Он отправляет звук; сейчас там ничего не играет"
+
+#: rustinput-gtk/src/window/sound.rs:271
+msgid "It does not send its sound: {why}"
+msgstr "Он не отправляет звук: {why}"
+
+#: rustinput-gtk/src/window.rs:110
 msgid "Undo changes"
 msgstr "Отменить изменения"
 
-#: rustinput-gtk/src/window.rs:110
+#: rustinput-gtk/src/window.rs:111
 msgid "Apply"
 msgstr "Применить"
 
-#: rustinput-gtk/src/window.rs:116
+#: rustinput-gtk/src/window.rs:117
 msgid "Identify monitors"
 msgstr "Определить мониторы"
 
-#: rustinput-gtk/src/window.rs:119
+#: rustinput-gtk/src/window.rs:120
 msgid "Shows the number of each monitor on it for a few seconds, on every computer"
 msgstr "Показывает номер каждого монитора прямо на нём на несколько секунд, на всех компьютерах"
 
-#: rustinput-gtk/src/window.rs:139
+#: rustinput-gtk/src/window.rs:140
 msgid "Click a computer to see where the mouse leaves it and to choose whole edges."
 msgstr "Нажмите на компьютер, чтобы увидеть, где мышь покидает его, и выбрать края целиком."
 
-#: rustinput-gtk/src/window.rs:154
+#: rustinput-gtk/src/window.rs:155
 msgid "Connection settings"
 msgstr "Параметры подключения"
 
-#: rustinput-gtk/src/window.rs:316
+#: rustinput-gtk/src/window.rs:317
 msgid "Arrangement applied"
 msgstr "Расположение применено"
 
-#: rustinput-gtk/src/window.rs:321
+#: rustinput-gtk/src/window.rs:322
 msgid "{name} did not show the numbers of its monitors: {error}"
 msgstr "На {name} не показаны номера мониторов: {error}"
 
-#: rustinput-gtk/src/window.rs:329
+#: rustinput-gtk/src/window.rs:330
 msgid "The screen of {name} did not lock: {error}"
 msgstr "Экран {name} не заблокирован: {error}"
 
-#: rustinput-gtk/src/window.rs:338
+#: rustinput-gtk/src/window.rs:339
 msgid "Arrangement sent to {name}"
 msgstr "Расположение отправлено на {name}"
 
-#: rustinput-gtk/src/window.rs:339
+#: rustinput-gtk/src/window.rs:340
 msgid "Arrangement not sent to {name}: {error}"
 msgstr "Расположение не отправлено на {name}: {error}"
 
-#: rustinput-gtk/src/window.rs:348
+#: rustinput-gtk/src/window.rs:349
 msgid "{name} changed the arrangement"
 msgstr "Компьютер {name} изменил расположение"
 
-#: rustinput-gtk/src/window.rs:362
+#: rustinput-gtk/src/window.rs:363
 msgid "{names} does not touch a computer this one reaches: move it next to one"
 msgstr "{names} не соприкасается ни с одним компьютером, доступным с этого: переместите его вплотную к одному из них"
 
-#: rustinput-gtk/src/window.rs:367
+#: rustinput-gtk/src/window.rs:368
 msgid "Made from the connections as they are now: arrange and apply"
 msgstr "Составлено по текущим подключениям: расставьте и примените"
 
-#: rustinput-gtk/src/window.rs:369
+#: rustinput-gtk/src/window.rs:370
 msgid "Changes not applied yet"
 msgstr "Изменения ещё не применены"
 
-#: rustinput-gtk/src/window.rs:371
+#: rustinput-gtk/src/window.rs:372
 msgid "{names} did not tell its size: update RustInput there to 0.26.0 or newer"
 msgstr "Размер не получен от {names}: обновите там RustInput до версии 0.26.0 или новее"
 
-#: rustinput-gtk/src/window.rs:376
+#: rustinput-gtk/src/window.rs:377
 msgid "Applied on the computers of the arrangement"
 msgstr "Применено на компьютерах расположения"
 
-#: rustinput-gtk/src/window.rs:396
+#: rustinput-gtk/src/window.rs:397
 msgid "Where the mouse leaves {name}"
 msgstr "Где мышь покидает {name}"
 
-#: rustinput-gtk/src/window.rs:402
+#: rustinput-gtk/src/window.rs:403
 msgid "Nowhere"
 msgstr "Нигде"
 
-#: rustinput-gtk/src/window.rs:403
+#: rustinput-gtk/src/window.rs:404
 msgid "It touches no other computer"
 msgstr "Не соприкасается ни с одним другим компьютером"
 
-#: rustinput-gtk/src/window.rs:410
+#: rustinput-gtk/src/window.rs:411
 msgid "Left edge: {name}"
 msgstr "Левый край: {name}"
 
-#: rustinput-gtk/src/window.rs:411
+#: rustinput-gtk/src/window.rs:412
 msgid "Right edge: {name}"
 msgstr "Правый край: {name}"
 
-#: rustinput-gtk/src/window.rs:412
+#: rustinput-gtk/src/window.rs:413
 msgid "Top edge: {name}"
 msgstr "Верхний край: {name}"
 
-#: rustinput-gtk/src/window.rs:413
+#: rustinput-gtk/src/window.rs:414
 msgid "Bottom edge: {name}"
 msgstr "Нижний край: {name}"
 
-#: rustinput-gtk/src/window.rs:416
+#: rustinput-gtk/src/window.rs:417
 msgid "The whole edge of both, the place along it in proportion"
 msgstr "Весь край у обоих, положение вдоль него пропорционально"
 
-#: rustinput-gtk/src/window.rs:418
+#: rustinput-gtk/src/window.rs:419
 msgid "{part}, where they touch; switch on for the whole edge of both, in proportion"
 msgstr "{part}, там, где они соприкасаются; включите, чтобы использовать весь край у обоих пропорционально"
 
-#: rustinput-gtk/src/window.rs:423
+#: rustinput-gtk/src/window.rs:424
 msgid "{part}, where they touch: the edge is shared"
 msgstr "{part}, там, где они соприкасаются: край разделён с другими"
 
-#: rustinput-gtk/src/window.rs:436
+#: rustinput-gtk/src/window.rs:437
 msgid "Whole edge, in proportion"
 msgstr "Весь край, пропорционально"
 
-#: rustinput-gtk/src/window.rs:951
+#: rustinput-gtk/src/window.rs:952
 msgid "As the system ({language})"
 msgstr "Как в системе ({language})"
 
-#: rustinput-gtk/src/window.rs:974
+#: rustinput-gtk/src/window.rs:975
 msgid "The windows change language when RustInput starts again"
 msgstr "Язык окон изменится после перезапуска RustInput"
 
-#: rustinput-gtk/src/window.rs:977
+#: rustinput-gtk/src/window.rs:978
 msgid "Restart now"
 msgstr "Перезапустить сейчас"
 
-#: rustinput-gtk/src/window.rs:1037
+#: rustinput-gtk/src/window.rs:1038
 msgid "RustInput {version} is installed: it runs when RustInput starts again"
 msgstr "RustInput {version} установлен: он заработает при следующем запуске RustInput"
 
-#: rustinput-gtk/src/window.rs:1068
+#: rustinput-gtk/src/window.rs:1069
 msgid "Asking GitHub…"
 msgstr "Запрос к GitHub…"
 
-#: rustinput-gtk/src/window.rs:1070
+#: rustinput-gtk/src/window.rs:1071
 msgid "Could not ask GitHub: {error}"
 msgstr "Не удалось обратиться к GitHub: {error}"
 
-#: rustinput-gtk/src/window.rs:1072
+#: rustinput-gtk/src/window.rs:1073
 msgid "RustInput {version} is out; this computer has {current}"
 msgstr "Вышел RustInput {version}; на этом компьютере {current}"
 
-#: rustinput-gtk/src/window.rs:1077
+#: rustinput-gtk/src/window.rs:1078
 msgid "{version} is the latest version"
 msgstr "{version} — последняя версия"
 
-#: rustinput-gtk/src/window.rs:1094
+#: rustinput-gtk/src/window.rs:1095
 msgid "Should RustInput look for new versions? It asks GitHub for the number of the latest version when it starts and every 12 hours; nothing about you or your computers is sent."
 msgstr "Проверять наличие новых версий RustInput? Программа запрашивает у GitHub номер последней версии при запуске и каждые 12 часов; никаких сведений о вас или ваших компьютерах не отправляется."
 
-#: rustinput-gtk/src/window.rs:1100
+#: rustinput-gtk/src/window.rs:1101
 msgid "No"
 msgstr "Нет"
 
-#: rustinput-gtk/src/window.rs:1101
+#: rustinput-gtk/src/window.rs:1102
 msgid "Yes, look for them"
 msgstr "Да, проверять"
 
-#: rustinput-gtk/src/window.rs:1103
+#: rustinput-gtk/src/window.rs:1104
 msgid "Later"
 msgstr "Позже"
 
-#: rustinput-gtk/src/window.rs:1112
+#: rustinput-gtk/src/window.rs:1113
 msgid "RustInput {version} is out; this computer has {current}."
 msgstr "Вышел RustInput {version}; на этом компьютере {current}."
 
-#: rustinput-gtk/src/window.rs:1179
+#: rustinput-gtk/src/window.rs:1180
 msgid "The update starts: Windows asks for administrator rights"
 msgstr "Начинается обновление: Windows запросит права администратора"
 
-#: rustinput-gtk/src/window.rs:1204
+#: rustinput-gtk/src/window.rs:1205
 msgid "Files copied in the file manager go along with the pointer. When this is off, only files chosen with “Copy to RustInput” are sent"
 msgstr "Файлы, скопированные в файловом менеджере, переходят вместе с указателем. Если выключено, отправляются только файлы, выбранные через «Копировать в RustInput»"
 
-#: rustinput-gtk/src/window.rs:1210
+#: rustinput-gtk/src/window.rs:1211
 msgid "“Copy to RustInput” in the file manager"
 msgstr "«Копировать в RustInput» в файловом менеджере"
 
-#: rustinput-gtk/src/window.rs:1211
+#: rustinput-gtk/src/window.rs:1212
 msgid "In the menu of files and folders: Explorer, Nemo and Nautilus"
 msgstr "В меню файлов и папок: Explorer, Nemo и Nautilus"
 
-#: rustinput-gtk/src/window.rs:1214
+#: rustinput-gtk/src/window.rs:1215
 msgid "Show the transfers window"
 msgstr "Показывать окно передач"
 
-#: rustinput-gtk/src/window.rs:1215
+#: rustinput-gtk/src/window.rs:1216
 msgid "With the progress, when files are sent or received"
 msgstr "С ходом передачи, когда файлы отправляются или принимаются"
 
-#: rustinput-gtk/src/window.rs:1218
+#: rustinput-gtk/src/window.rs:1219
 msgid "Ask before receiving more than"
 msgstr "Спрашивать перед получением более"
 
-#: rustinput-gtk/src/window.rs:1219
+#: rustinput-gtk/src/window.rs:1220
 msgid "Files copied on another computer that come along with the pointer. 0: never ask"
 msgstr "Файлы, скопированные на другом компьютере и пришедшие вместе с указателем. 0: никогда не спрашивать"
 
-#: rustinput-gtk/src/window.rs:1243
+#: rustinput-gtk/src/window.rs:1244
 msgid "Progress, history and log"
 msgstr "Ход передач, история и журнал"
 
-#: rustinput-gtk/src/window.rs:1246
+#: rustinput-gtk/src/window.rs:1247
 msgid "Open"
 msgstr "Открыть"
 
-#: rustinput-gtk/src/window.rs:1378
+#: rustinput-gtk/src/window.rs:1379
 msgid "Sharing the mouse and keyboard"
 msgstr "Совместное использование мыши и клавиатуры"
 
-#: rustinput-gtk/src/window.rs:1379
+#: rustinput-gtk/src/window.rs:1380
 msgid "Capture and emulation are on"
 msgstr "Захват и эмуляция включены"
 
-#: rustinput-gtk/src/window.rs:1382
+#: rustinput-gtk/src/window.rs:1383
 msgid "Input capture is off"
 msgstr "Захват ввода выключен"
 
-#: rustinput-gtk/src/window.rs:1383
+#: rustinput-gtk/src/window.rs:1384
 msgid "Needed for every connection"
 msgstr "Нужен для всех подключений"
 
-#: rustinput-gtk/src/window.rs:1399
+#: rustinput-gtk/src/window.rs:1400
 msgid "Sending"
 msgstr "Отправка"
 
-#: rustinput-gtk/src/window.rs:1400
+#: rustinput-gtk/src/window.rs:1401
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "За краем экрана мышь и клавиатура переходят на следующий компьютер"
 
-#: rustinput-gtk/src/window.rs:1413
+#: rustinput-gtk/src/window.rs:1414
 msgid "Receiving"
 msgstr "Приём"
 
-#: rustinput-gtk/src/window.rs:1414
+#: rustinput-gtk/src/window.rs:1415
 msgid "The other computers can control this one"
 msgstr "Другие компьютеры могут управлять этим"
 
-#: rustinput-gtk/src/window.rs:1417
+#: rustinput-gtk/src/window.rs:1418
 msgid "Input emulation is off"
 msgstr "Эмуляция ввода выключена"
 
-#: rustinput-gtk/src/window.rs:1418
+#: rustinput-gtk/src/window.rs:1419
 msgid "Needed for the other computers to control this one"
 msgstr "Нужна, чтобы другие компьютеры могли управлять этим"
 
-#: rustinput-gtk/src/window.rs:1435
+#: rustinput-gtk/src/window.rs:1436
 msgid "Paused: no other computer controls this one"
 msgstr "Приостановлен: никакой другой компьютер не управляет этим"
 
-#: rustinput-gtk/src/window.rs:1459
+#: rustinput-gtk/src/window.rs:1460
 msgid "Relaunch required"
 msgstr "Требуется перезапуск"
 
-#: rustinput-gtk/src/window.rs:1460
+#: rustinput-gtk/src/window.rs:1461
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "Разрешение «Универсальный доступ» предоставлено: перезапустите, чтобы включить захват и эмуляцию"
 
-#: rustinput-gtk/src/window.rs:1463
+#: rustinput-gtk/src/window.rs:1464
 msgid "Relaunch"
 msgstr "Перезапустить"
 
-#: rustinput-gtk/src/window.rs:1467
+#: rustinput-gtk/src/window.rs:1468
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "Предоставьте разрешение «Универсальный доступ», чтобы включить"
 
-#: rustinput-gtk/src/window.rs:1468
+#: rustinput-gtk/src/window.rs:1469
 msgid "Grant"
 msgstr "Предоставить"
 
-#: rustinput-gtk/src/window.rs:1508
+#: rustinput-gtk/src/window.rs:1509
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Когда этот компьютер пытается подключиться, {name} спрашивает, авторизовать ли его, и показывает код. Введите его здесь, чтобы взаимно авторизовать оба компьютера: для управления, буфера обмена и файлов."
 
-#: rustinput-gtk/src/window.rs:1514
+#: rustinput-gtk/src/window.rs:1515
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Когда этот компьютер пытается подключиться, другой компьютер спрашивает, авторизовать ли его, и показывает код. Введите его здесь, чтобы взаимно авторизовать оба компьютера: для управления, буфера обмена и файлов."
 
-#: rustinput-gtk/src/window.rs:1555
+#: rustinput-gtk/src/window.rs:1556
 msgid "Authorize with {name}"
 msgstr "Авторизация с {name}"
 
-#: rustinput-gtk/src/window.rs:1556
+#: rustinput-gtk/src/window.rs:1557
 msgid "Authorize with the other computer"
 msgstr "Авторизация с другим компьютером"
 
-#: rustinput-gtk/src/window.rs:1593
+#: rustinput-gtk/src/window.rs:1594
 msgid "Authorizing…"
 msgstr "Авторизация…"
 
-#: rustinput-gtk/src/window.rs:1718
+#: rustinput-gtk/src/window.rs:1719
 msgid "Update now"
 msgstr "Обновить сейчас"
 
-#: rustinput-gtk/src/window.rs:1723
+#: rustinput-gtk/src/window.rs:1724
 msgid "Download"
 msgstr "Скачать"
 
-#: rustinput-gtk/src/window.rs:1732
+#: rustinput-gtk/src/window.rs:1733
 msgid "Downloading RustInput {version}… {percent} %"
 msgstr "Загрузка RustInput {version}… {percent} %"
 
-#: rustinput-gtk/src/window.rs:1738
+#: rustinput-gtk/src/window.rs:1739
 msgid "Downloading RustInput {version}…"
 msgstr "Загрузка RustInput {version}…"
 
-#: rustinput-gtk/src/window.rs:1740
+#: rustinput-gtk/src/window.rs:1741
 msgid "Checking the signature of the new version…"
 msgstr "Проверка подписи новой версии…"
 
-#: rustinput-gtk/src/window.rs:1742
+#: rustinput-gtk/src/window.rs:1743
 msgid "Installing… the system may ask for the password of an administrator"
 msgstr "Установка… система может запросить пароль администратора"
 
-#: rustinput-gtk/src/window.rs:1748
+#: rustinput-gtk/src/window.rs:1749
 msgid "The update failed: {error}"
 msgstr "Обновление не удалось: {error}"
 
@@ -1459,105 +1523,110 @@ msgstr "Наведите на действие и отпустите"
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
+msgid "The sound of every computer in the headphones of one: switch on \"Hear the other computers here\" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there."
+msgstr "Звук всех компьютеров в наушниках одного: включите «Слушать здесь другие компьютеры» в «Настройках» компьютера с наушниками. Остальные отправляют ему свой звук в зашифрованном виде, а их динамики тем временем молчат; у каждого там своя громкость и отключение звука."
+
+#: CHANGELOG.md:16
+msgctxt "changelog"
 msgid "Linux: \"Update now\" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after \"Restart now\". AI agents can do it too (apply_update)."
 msgstr "Linux: «Обновить сейчас» загружает новую версию, проверяет подпись выпуска и устанавливает её вместо текущей; она заработает после «Перезапустить сейчас». Это могут сделать и ИИ-агенты (apply_update)."
 
-#: CHANGELOG.md:16
+#: CHANGELOG.md:20
 msgctxt "changelog"
 msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
 msgstr "ИИ-агент (Claude Code, Claude Desktop или любой клиент MCP) может видеть, где мышь и клавиатура, переводить их на другой компьютер, отправлять файлы и искать новую версию: `claude mcp add rustinput -- rustinput mcp`. Он никогда не авторизует компьютер, не набирает текст и не читает буфер обмена."
 
-#: CHANGELOG.md:20
+#: CHANGELOG.md:24
 msgctxt "changelog"
 msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr "Português (Portugal): окна, меню, список новшеств и установщик для Windows теперь говорят и на европейском португальском."
 
-#: CHANGELOG.md:24
+#: CHANGELOG.md:28
 msgctxt "changelog"
 msgid "After an update, the window shows what is new, once."
 msgstr "После обновления окно один раз показывает, что нового."
 
-#: CHANGELOG.md:25
+#: CHANGELOG.md:29
 msgctxt "changelog"
 msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr "Список компьютеров показывает, какая версия RustInput на каждом, и сообщает, если она старее, чем на этом."
 
-#: CHANGELOG.md:29
+#: CHANGELOG.md:33
 msgctxt "changelog"
 msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr "Linux: параметр «Запускать RustInput вместе с сеансом» на вкладке «Параметры» запускает программу без окна при входе в систему."
 
-#: CHANGELOG.md:33
+#: CHANGELOG.md:37
 msgctxt "changelog"
 msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr "`rustinput status`, `rustinput go <computer>` и `rustinput home` из терминала, а также `rustinput status --waybar` для модуля Waybar."
 
-#: CHANGELOG.md:38
+#: CHANGELOG.md:42
 msgctxt "changelog"
 msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
 msgstr "Искать в копиях: поле над карточками вкладки «Буферы обмена» ищет сразу по истории всех компьютеров."
 
-#: CHANGELOG.md:42
+#: CHANGELOG.md:46
 msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr "Буфер обмена — только по запросу: выключите «Переносить буфер обмена вместе с указателем» на вкладке «Параметры», и тогда AltGr + правый Shift + C переносит его на компьютер, где находится указатель, или забирает буфер с компьютера, откуда указатель пришёл."
 
-#: CHANGELOG.md:47
+#: CHANGELOG.md:51
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr "Значок в области уведомлений показывает, где мышь и клавиатура (синий знак, пока они на другом компьютере), а его меню переводит их на любой компьютер."
 
-#: CHANGELOG.md:52
+#: CHANGELOG.md:56
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr "Сочетания клавиш: AltGr + правый Shift + 1 … 9 — на соответствующий компьютер, + 0 — обратно сюда; правый Shift, удерживаемый 3 секунды, всегда возвращает указатель. Они на вкладке «Параметры»."
 
-#: CHANGELOG.md:57
+#: CHANGELOG.md:61
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr "Компьютер, сопряжённый с одним из ваших, предлагается остальным, и они один раз спрашивают, авторизовать ли его тоже."
 
-#: CHANGELOG.md:58
+#: CHANGELOG.md:62
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr "Имена других компьютеров больше не могут скрывать символы, меняющие направление текста."
 
-#: CHANGELOG.md:62
+#: CHANGELOG.md:66
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr "Раздел «В этой сети» на вкладке «Компьютеры» находит другие компьютеры поблизости с RustInput и добавляет их одним щелчком. Выключен, пока на каждом компьютере не включён параметр «Показывать этот компьютер другим»."
 
-#: CHANGELOG.md:67
+#: CHANGELOG.md:71
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr "Окно передач сообщает, что не отправилось или не пришло, и почему: ссылки на папки, файлы, изменённые или удалённые во время отправки (остальное продолжается), имена, недопустимые в другой системе."
 
-#: CHANGELOG.md:72
+#: CHANGELOG.md:76
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr "Большие копии, приходящие вместе с указателем, сначала запрашивают подтверждение (более 1 GB, настраивается параметром «Спрашивать перед получением более» на вкладке «Параметры»)."
 
-#: CHANGELOG.md:73
+#: CHANGELOG.md:77
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr "Передача, которая не помещается на другом компьютере, отклоняется до начала, с указанием размеров."
 
-#: CHANGELOG.md:77
+#: CHANGELOG.md:81
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr "Передача, прерванная сетью, перезапуском или выключением компьютера, продолжается с того байта, на котором остановилась."
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr "Пункт «Буферы обмена» в радиальном меню открывает вкладку «Буферы обмена»."
 
-#: CHANGELOG.md:85
+#: CHANGELOG.md:89
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr "История буфера обмена каждого компьютера, только в памяти: верните любую копию любого компьютера."
 
-#: CHANGELOG.md:89
+#: CHANGELOG.md:93
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr "Вкладка «Буферы обмена» показывает, что скопировал каждый компьютер, а «Скопировать сюда» переносит это сюда."

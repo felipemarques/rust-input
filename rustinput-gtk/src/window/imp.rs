@@ -124,6 +124,8 @@ pub struct Window {
     pub along_switch: RefCell<Option<gtk::Switch>>,
     /// the keyboard shortcuts (0.42.0)
     pub(crate) shortcuts: RefCell<Option<crate::window::shortcuts::Shortcuts>>,
+    /// the shared sound (0.52.0)
+    pub(crate) sound: RefCell<Option<crate::window::sound::Sound>>,
     /// the switches are being set to what the service has
     pub updating_files: Cell<bool>,
     pub clients: RefCell<Option<gio::ListStore>>,
@@ -372,6 +374,7 @@ impl ObjectImpl for Window {
         obj.setup_updates();
         obj.setup_clipboards();
         obj.setup_network();
+        obj.setup_sound();
         obj.setup_shortcuts();
         #[cfg(all(unix, not(target_os = "macos")))]
         obj.setup_autostart();
