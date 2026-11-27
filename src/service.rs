@@ -8,6 +8,7 @@ use crate::{
     config::{Config, ConfigClient},
     connect::RustInputConnection,
     crypto,
+    discovery::{self, DiscoveryHandle},
     dns::{DnsEvent, DnsResolver},
     emulation::{Emulation, EmulationEvent},
     files::{self, FilesHandle},
@@ -22,9 +23,9 @@ use futures::StreamExt;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use log;
 use rustinput_ipc::{
-    AsyncFrontendListener, ClientHandle, ClipboardHistory, ClipboardSeen, DEFAULT_PORT, EdgeLink,
-    FileOptions, FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError, LinkStats,
-    Position, Span, Status, Theme, TransferInfo, UpdateState,
+    AsyncFrontendListener, ClientHandle, ClipboardHistory, ClipboardSeen, DEFAULT_PORT, Discovered,
+    EdgeLink, FileOptions, FrontendEvent, FrontendRequest, IpcError, IpcListenerCreationError,
+    LinkStats, Position, Span, Status, Theme, TransferInfo, UpdateState,
     layout::{ArrangementView, Layout, Machine, Monitor, Peer as ArrangedPeer},
 };
 use std::{
@@ -123,6 +124,11 @@ pub struct Service {
     asked: HashMap<u64, (tokio::sync::oneshot::Sender<bool>, FrontendEvent)>,
     /// the last of them, for a window that connects later
     transfers: Vec<TransferInfo>,
+    /// the other computers running RustInput on the network
+    discovery: DiscoveryHandle,
+    discovered_rx: tokio::sync::mpsc::UnboundedReceiver<Vec<Discovered>>,
+    discovered: Vec<Discovered>,
+    discovery_on: bool,
     /// bytes and pings of the input channel, reported once a second
     netstats: NetStats,
     /// light or dark windows, as configured
@@ -307,6 +313,18 @@ impl Service {
         let (clipboard_results_tx, clipboard_results) = channel();
         let show_clipboard = config.show_clipboard();
         let keep_clipboard_history = config.clipboard_history() > 0;
+        let (discovered_tx, discovered_rx) = tokio::sync::mpsc::unbounded_channel();
+        let discovery_on = config.discovery();
+        let discovery = discovery::spawn(
+            discovery::Me {
+                name: name.clone(),
+                fingerprint: public_key_fingerprint.clone(),
+                port,
+            },
+            config.discovery_port(),
+            discovery_on,
+            discovered_tx,
+        );
         let service = Self {
             config,
             capture,
@@ -332,6 +350,10 @@ impl Service {
             transfer_asks,
             asked: HashMap::new(),
             transfers: Vec::new(),
+            discovery,
+            discovered_rx,
+            discovered: Vec::new(),
+            discovery_on,
             netstats,
             theme,
             pairing,
@@ -412,6 +434,10 @@ impl Service {
                     self.notify_frontend(FrontendEvent::Transfers(transfers));
                 }
                 Some(ask) = self.transfer_asks.recv() => self.ask_transfer(ask),
+                Some(found) = self.discovered_rx.recv() => {
+                    self.discovered = found;
+                    self.report_discovered();
+                }
                 _ = self.config.changed() => self.handle_config_change(),
                 Some(event) = self.pairing_events.recv() => self.handle_pairing_event(event),
                 Some(action) = self.radial_actions.recv() => self.radial_action(action),
@@ -503,6 +529,19 @@ impl Service {
             }
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
+            FrontendRequest::Discover(look) => self.discovery.look(look),
+            FrontendRequest::SetDiscovery(on) => {
+                self.discovery_on = on;
+                self.discovery.enable(on);
+                self.config.set_discovery(on);
+                self.save_config();
+                self.notify_frontend(FrontendEvent::Discovery(on));
+            }
+            FrontendRequest::AddDiscovered {
+                name,
+                address,
+                port,
+            } => self.add_discovered(name, address, port),
             FrontendRequest::AnswerTransfer { id, receive } => {
                 if let Some((reply, _)) = self.asked.remove(&id) {
                     log::info!(
@@ -630,6 +669,46 @@ impl Service {
         self.notify_frontend(FrontendEvent::FileOptions(options));
     }
 
+    /// The computers found on the network to the windows, with whether each
+    /// is authorized and already added here.
+    fn report_discovered(&mut self) {
+        let keys = self.authorized_keys.read().expect("lock").clone();
+        let clients = self.client_manager.get_client_states();
+        let found: Vec<Discovered> = self
+            .discovered
+            .iter()
+            .map(|d| {
+                let added = clients.iter().any(|(_, config, _)| {
+                    config.fix_ips.contains(&d.address)
+                        || config
+                            .hostname
+                            .as_deref()
+                            .is_some_and(|h| h.eq_ignore_ascii_case(&d.name))
+                });
+                Discovered {
+                    authorized: keys.contains_key(&d.fingerprint),
+                    added,
+                    ..d.clone()
+                }
+            })
+            .collect();
+        self.notify_frontend(FrontendEvent::Discovered(found));
+    }
+
+    /// Adds a computer found on the network: by its name and its address,
+    /// switched off like one added by hand; authorizing it is up to the code.
+    fn add_discovered(&mut self, name: String, address: IpAddr, port: u16) {
+        let handle = self.client_manager.add_client();
+        log::info!("added client {handle}: {name} ({address}) found on the network");
+        let (c, s) = self.client_manager.get_state(handle).expect("added");
+        self.notify_frontend(FrontendEvent::Created(handle, c, s));
+        self.update_hostname(handle, Some(name));
+        self.update_fix_ips(handle, vec![address]);
+        self.update_port(handle, port);
+        self.save_config();
+        self.report_discovered();
+    }
+
     /// Asks the window whether to receive large files sent by themselves;
     /// without a window to ask, they are not received.
     fn ask_transfer(&mut self, ask: files::Ask) {
@@ -753,6 +832,7 @@ impl Service {
                 Ok(port) => {
                     self.port = port;
                     self.file_channel.change_port(port);
+                    self.discovery.set_port(port);
                     self.notify_frontend(FrontendEvent::PortChanged(port, None));
                 }
                 Err(e) => self
@@ -890,6 +970,8 @@ impl Service {
             self.keep_clipboard_history,
         ));
         self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
+        self.notify_frontend(FrontendEvent::Discovery(self.discovery_on));
+        self.report_discovered();
         // what is still waiting for an answer
         self.asked.retain(|_, (reply, _)| !reply.is_closed());
         let questions: Vec<FrontendEvent> = self.asked.values().map(|(_, q)| q.clone()).collect();

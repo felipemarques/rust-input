@@ -113,6 +113,10 @@ struct ConfigToml {
     /// whether the authorized computers see what the clipboard of this one
     /// holds, in their Clipboard tab (on when not set)
     show_clipboard: Option<bool>,
+    /// tell the other computers on the network about this one, and look
+    /// for them (off by default: it sends the name of this computer to the
+    /// network, 0.40.0)
+    discovery: Option<bool>,
     /// how many copies the history of the clipboard keeps, in memory only
     /// (30 when not set, 0: none)
     clipboard_history: Option<usize>,
@@ -716,6 +720,30 @@ impl Config {
     pub fn set_show_clipboard(&mut self, show: bool) {
         let c = self.config_toml.get_or_insert_with(Default::default);
         c.show_clipboard = Some(show);
+    }
+
+    /// whether this computer tells the others on the network about itself
+    /// and looks for them (`discovery`, off by default: the user switches it
+    /// on, see the privacy policy)
+    pub fn discovery(&self) -> bool {
+        self.config_toml
+            .as_ref()
+            .and_then(|c| c.discovery)
+            .unwrap_or(false)
+    }
+
+    pub fn set_discovery(&mut self, on: bool) {
+        let c = self.config_toml.get_or_insert_with(Default::default);
+        c.discovery = Some(on);
+    }
+
+    /// The UDP port of the discovery: 4241, or `RUSTINPUT_DISCOVERY_PORT`,
+    /// so that tests do not show up on the network.
+    pub fn discovery_port(&self) -> u16 {
+        std::env::var("RUSTINPUT_DISCOVERY_PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or(crate::discovery::DISCOVERY_PORT)
     }
 
     /// how many copies the history of the clipboard keeps

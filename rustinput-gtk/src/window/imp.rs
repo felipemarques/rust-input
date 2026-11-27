@@ -30,6 +30,8 @@ pub struct Window {
     #[template_child]
     pub client_list: TemplateChild<ListBox>,
     #[template_child]
+    pub computers_box: TemplateChild<gtk::Box>,
+    #[template_child]
     pub client_placeholder: TemplateChild<ActionRow>,
     #[template_child]
     pub port_entry: TemplateChild<Entry>,
@@ -116,6 +118,8 @@ pub struct Window {
     pub file_switches: RefCell<Option<[gtk::Switch; 3]>>,
     /// MB above which files sent by themselves ask first (0.38.0)
     pub ask_spin: RefCell<Option<gtk::SpinButton>>,
+    /// the computers found on the network (0.40.0)
+    pub(crate) network: RefCell<Option<crate::window::network::Network>>,
     /// the switches are being set to what the service has
     pub updating_files: Cell<bool>,
     pub clients: RefCell<Option<gio::ListStore>>,
@@ -361,6 +365,7 @@ impl ObjectImpl for Window {
         obj.setup_language();
         obj.setup_updates();
         obj.setup_clipboards();
+        obj.setup_network();
     }
 }
 

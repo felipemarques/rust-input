@@ -1,5 +1,6 @@
 mod clipboard;
 mod imp;
+pub(crate) mod network;
 
 use std::collections::HashMap;
 

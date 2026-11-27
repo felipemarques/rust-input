@@ -432,6 +432,31 @@ The window grew to 1200 pixels wide by default, so the five tabs fit with their 
 language. `clipboard-view.sh` (end to end) checks text, image, a password (with `clip_owner.py`
 as the password manager), files and switching it off; `clipboard-shot.sh` takes pictures of it.
 
+## Finding the computers on the network (0.40.0)
+
+`src/discovery.rs`, only while `discovery` is on (off by default: it tells
+the network the name of the computer). JSON datagrams on UDP port 4241
+(`RUSTINPUT_DISCOVERY_PORT` for tests):
+`{"magic":"RID1","kind":…,"name","fingerprint","port","version","os"}`.
+
+- `announce` to the broadcast address when it starts, every minute and when
+  the port changes; `query` to the broadcast address every 5 seconds while a
+  window shows the Computers tab (`FrontendRequest::Discover`), answered with
+  `answer` to the sender alone; `bye` when switched off or closing.
+- Two sockets: one bound to port 4241 with `SO_REUSEADDR`, shared with other
+  programs on the computer, for the broadcasts, and one of its own on any
+  port, which sends and gets the answers to its questions (with the port
+  shared, an answer to it could go to another program).
+- Names are cut at 64 characters without control characters; messages of
+  other programs and of itself are ignored; a computer not heard of for
+  3 minutes is forgotten. The service marks each one as authorized (its
+  fingerprint is) and added (a connection has its address or name) and sends
+  the list with `FrontendEvent::Discovered`.
+- `FrontendRequest::AddDiscovered` adds a connection with its name, address
+  and port, switched off like one added by hand. The fingerprint a computer
+  claims is never authorized by this: anyone on the network can send these
+  datagrams. The code of the pairing does.
+
 ## Pairing
 
 Two devices can authorize each other from the controlling one (see

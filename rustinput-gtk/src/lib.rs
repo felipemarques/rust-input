@@ -561,6 +561,8 @@ fn build_ui(app: &Application) {
                         window.set_keep_clipboard_history(keep)
                     }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
+                    FrontendEvent::Discovered(found) => window.set_discovered(found),
+                    FrontendEvent::Discovery(on) => window.set_discovery(on),
                     FrontendEvent::AskTransfer {
                         id,
                         peer,
