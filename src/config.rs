@@ -42,6 +42,9 @@ pub fn local_commit() -> [u8; 8] {
 
 const CONFIG_FILE_NAME: &str = "config.toml";
 const CERT_FILE_NAME: &str = "rustinput.pem";
+/// files sent by themselves larger than this many MB ask first, see
+/// [`FileOptions::ask_above_mb`]
+const ASK_BEFORE_RECEIVING_MB: u64 = 1024;
 
 fn default_path() -> Result<PathBuf, VarError> {
     #[cfg(unix)]
@@ -91,6 +94,9 @@ struct ConfigToml {
     send_copied_files: Option<bool>,
     show_transfers_window: Option<bool>,
     file_manager_menu: Option<bool>,
+    /// files sent by themselves larger than this many MB are received only
+    /// when the user says so (1024, 0: never asked)
+    ask_before_receiving_mb: Option<u64>,
     radial_menu: Option<bool>,
     /// "system", "light" or "dark": a string, so a value this version does
     /// not know does not make the whole file unreadable
@@ -643,6 +649,9 @@ impl Config {
             send_copied: c.and_then(|c| c.send_copied_files).unwrap_or(false),
             show_window: c.and_then(|c| c.show_transfers_window).unwrap_or(true),
             file_manager_menu: c.and_then(|c| c.file_manager_menu).unwrap_or(true),
+            ask_above_mb: c
+                .and_then(|c| c.ask_before_receiving_mb)
+                .unwrap_or(ASK_BEFORE_RECEIVING_MB),
         }
     }
 
@@ -762,6 +771,7 @@ impl Config {
         c.send_copied_files = Some(options.send_copied);
         c.show_transfers_window = Some(options.show_window);
         c.file_manager_menu = Some(options.file_manager_menu);
+        c.ask_before_receiving_mb = Some(options.ask_above_mb);
     }
 
     /// release bind for returning control to the host

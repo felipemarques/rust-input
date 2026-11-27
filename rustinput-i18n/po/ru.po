@@ -407,6 +407,29 @@ msgstr "не подключён"
 msgid "mouse here"
 msgstr "мышь здесь"
 
+#: rustinput-gtk/src/ask_transfer.rs:34
+msgid "Receive {size} from {name}?"
+msgstr "Получить {size} с {name}?"
+
+#: rustinput-gtk/src/ask_transfer.rs:43
+msgid "{count} file copied on {name} came along with the pointer. It waits in the temporary folder until you paste it."
+msgid_plural "{count} files copied on {name} came along with the pointer. They wait in the temporary folder until you paste them."
+msgstr[0] "{count} файл, скопированный на {name}, пришёл вместе с указателем. Он ждёт во временной папке, пока вы его не вставите."
+msgstr[1] "{count} файла, скопированные на {name}, пришли вместе с указателем. Они ждут во временной папке, пока вы их не вставите."
+msgstr[2] "{count} файлов, скопированных на {name}, пришли вместе с указателем. Они ждут во временной папке, пока вы их не вставите."
+
+#: rustinput-gtk/src/ask_transfer.rs:56
+msgid "Refuse"
+msgstr "Отказаться"
+
+#: rustinput-gtk/src/ask_transfer.rs:57
+msgid "Receive"
+msgstr "Получить"
+
+#: rustinput-gtk/src/ask_transfer.rs:97
+msgid "Receive files?"
+msgstr "Получить файлы?"
+
 #: rustinput-gtk/src/authorization_window.rs:25
 msgid "Certificate not authorized"
 msgstr "Сертификат не авторизован"
@@ -447,35 +470,35 @@ msgstr "Версия там: {peer} · такая же"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "Версия там: {peer} · здесь: {local}"
 
-#: rustinput-gtk/src/lib.rs:264
+#: rustinput-gtk/src/lib.rs:265
 msgid "Quit"
 msgstr "Выйти"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/lib.rs:266
 msgid "_File"
 msgstr "_Файл"
 
-#: rustinput-gtk/src/lib.rs:479
+#: rustinput-gtk/src/lib.rs:480
 msgid "{name} and this computer authorized each other"
 msgstr "{name} и этот компьютер взаимно авторизованы"
 
-#: rustinput-gtk/src/lib.rs:484
+#: rustinput-gtk/src/lib.rs:485
 msgid "Not authorized: {error}"
 msgstr "Авторизация не выполнена: {error}"
 
-#: rustinput-gtk/src/lib.rs:491
+#: rustinput-gtk/src/lib.rs:492
 msgid "{address} connected"
 msgstr "{address} подключён"
 
-#: rustinput-gtk/src/lib.rs:498
+#: rustinput-gtk/src/lib.rs:499
 msgid "The mouse came from {address}"
 msgstr "Мышь перешла с {address}"
 
-#: rustinput-gtk/src/lib.rs:504
+#: rustinput-gtk/src/lib.rs:505
 msgid "{address} disconnected"
 msgstr "{address} отключён"
 
-#: rustinput-gtk/src/lib.rs:583
+#: rustinput-gtk/src/lib.rs:590
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "Получено файлов с {name}: {count}, можно вставить"
 
@@ -875,7 +898,7 @@ msgstr "Менеджер паролей отметил это как секре�
 msgid "Password, hidden"
 msgstr "Пароль, скрыт"
 
-#: rustinput-gtk/src/window/imp.rs:251
+#: rustinput-gtk/src/window/imp.rs:253
 msgid "Failed to relaunch RustInput"
 msgstr "Не удалось перезапустить RustInput"
 
@@ -1063,103 +1086,111 @@ msgstr "Показывать окно передач"
 msgid "With the progress, when files are sent or received"
 msgstr "С ходом передачи, когда файлы отправляются или принимаются"
 
+#: rustinput-gtk/src/window.rs:1143
+msgid "Ask before receiving more than"
+msgstr "Спрашивать перед получением более"
+
 #: rustinput-gtk/src/window.rs:1144
+msgid "Files copied on another computer that come along with the pointer. 0: never ask"
+msgstr "Файлы, скопированные на другом компьютере и пришедшие вместе с указателем. 0: никогда не спрашивать"
+
+#: rustinput-gtk/src/window.rs:1168
 msgid "Progress, history and log"
 msgstr "Ход передач, история и журнал"
 
-#: rustinput-gtk/src/window.rs:1147
+#: rustinput-gtk/src/window.rs:1171
 msgid "Open"
 msgstr "Открыть"
 
-#: rustinput-gtk/src/window.rs:1264
+#: rustinput-gtk/src/window.rs:1303
 msgid "Sharing the mouse and keyboard"
 msgstr "Совместное использование мыши и клавиатуры"
 
-#: rustinput-gtk/src/window.rs:1265
+#: rustinput-gtk/src/window.rs:1304
 msgid "Capture and emulation are on"
 msgstr "Захват и эмуляция включены"
 
-#: rustinput-gtk/src/window.rs:1268
+#: rustinput-gtk/src/window.rs:1307
 msgid "Input capture is off"
 msgstr "Захват ввода выключен"
 
-#: rustinput-gtk/src/window.rs:1269
+#: rustinput-gtk/src/window.rs:1308
 msgid "Needed for every connection"
 msgstr "Нужен для всех подключений"
 
-#: rustinput-gtk/src/window.rs:1285
+#: rustinput-gtk/src/window.rs:1324
 msgid "Sending"
 msgstr "Отправка"
 
-#: rustinput-gtk/src/window.rs:1286
+#: rustinput-gtk/src/window.rs:1325
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "За краем экрана мышь и клавиатура переходят на следующий компьютер"
 
-#: rustinput-gtk/src/window.rs:1299
+#: rustinput-gtk/src/window.rs:1338
 msgid "Receiving"
 msgstr "Приём"
 
-#: rustinput-gtk/src/window.rs:1300
+#: rustinput-gtk/src/window.rs:1339
 msgid "The other computers can control this one"
 msgstr "Другие компьютеры могут управлять этим"
 
-#: rustinput-gtk/src/window.rs:1303
+#: rustinput-gtk/src/window.rs:1342
 msgid "Input emulation is off"
 msgstr "Эмуляция ввода выключена"
 
-#: rustinput-gtk/src/window.rs:1304
+#: rustinput-gtk/src/window.rs:1343
 msgid "Needed for the other computers to control this one"
 msgstr "Нужна, чтобы другие компьютеры могли управлять этим"
 
-#: rustinput-gtk/src/window.rs:1321
+#: rustinput-gtk/src/window.rs:1360
 msgid "Paused: no other computer controls this one"
 msgstr "Приостановлен: никакой другой компьютер не управляет этим"
 
-#: rustinput-gtk/src/window.rs:1345
+#: rustinput-gtk/src/window.rs:1384
 msgid "Relaunch required"
 msgstr "Требуется перезапуск"
 
-#: rustinput-gtk/src/window.rs:1346
+#: rustinput-gtk/src/window.rs:1385
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "Разрешение «Универсальный доступ» предоставлено: перезапустите, чтобы включить захват и эмуляцию"
 
-#: rustinput-gtk/src/window.rs:1349
+#: rustinput-gtk/src/window.rs:1388
 msgid "Relaunch"
 msgstr "Перезапустить"
 
-#: rustinput-gtk/src/window.rs:1353
+#: rustinput-gtk/src/window.rs:1392
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "Предоставьте разрешение «Универсальный доступ», чтобы включить"
 
-#: rustinput-gtk/src/window.rs:1354
+#: rustinput-gtk/src/window.rs:1393
 msgid "Grant"
 msgstr "Предоставить"
 
-#: rustinput-gtk/src/window.rs:1394
+#: rustinput-gtk/src/window.rs:1433
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Когда этот компьютер пытается подключиться, {name} спрашивает, авторизовать ли его, и показывает код. Введите его здесь, чтобы взаимно авторизовать оба компьютера: для управления, буфера обмена и файлов."
 
-#: rustinput-gtk/src/window.rs:1400
+#: rustinput-gtk/src/window.rs:1439
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "Когда этот компьютер пытается подключиться, другой компьютер спрашивает, авторизовать ли его, и показывает код. Введите его здесь, чтобы взаимно авторизовать оба компьютера: для управления, буфера обмена и файлов."
 
-#: rustinput-gtk/src/window.rs:1441
+#: rustinput-gtk/src/window.rs:1480
 msgid "Authorize with {name}"
 msgstr "Авторизация с {name}"
 
-#: rustinput-gtk/src/window.rs:1442
+#: rustinput-gtk/src/window.rs:1481
 msgid "Authorize with the other computer"
 msgstr "Авторизация с другим компьютером"
 
-#: rustinput-gtk/src/window.rs:1479
+#: rustinput-gtk/src/window.rs:1518
 msgid "Authorizing…"
 msgstr "Авторизация…"
 
-#: rustinput-gtk/src/window.rs:1603
+#: rustinput-gtk/src/window.rs:1642
 msgid "Update now"
 msgstr "Обновить сейчас"
 
-#: rustinput-gtk/src/window.rs:1605
+#: rustinput-gtk/src/window.rs:1644
 msgid "Download"
 msgstr "Скачать"
 

@@ -643,7 +643,7 @@ impl Manager {
                         state.synced = Some(key);
                         let count = paths.len();
                         log::info!("sending the {count} copied item(s) to {peer}, as it asked");
-                        files.send(peer, paths);
+                        files.send(peer, paths, false);
                         Ok(Fetched::Files(count))
                     }
                     _ => Err("files go only to a computer connected with file transfers on".into()),
@@ -711,7 +711,7 @@ impl Manager {
         };
         // recorded right away so a second push of the same files is a no-op
         state.synced = Some(key);
-        files.send(peer, paths);
+        files.send(peer, paths, true);
     }
 
     async fn start_transfer(&mut self, peer: Peer, content: Option<Content>) {

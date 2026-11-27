@@ -1,4 +1,5 @@
 mod arrangement;
+mod ask_transfer;
 mod authorization_window;
 mod client_object;
 mod client_row;
@@ -560,6 +561,12 @@ fn build_ui(app: &Application) {
                         window.set_keep_clipboard_history(keep)
                     }
                     FrontendEvent::ShowTransfers => transfers_window.present(),
+                    FrontendEvent::AskTransfer {
+                        id,
+                        peer,
+                        files,
+                        bytes,
+                    } => ask_transfer::ask(&window, id, &peer, files, bytes),
                     FrontendEvent::ShowClipboardsTab => window.show_clipboards(),
                     FrontendEvent::FileOptions(options) => {
                         window.set_file_options(options);

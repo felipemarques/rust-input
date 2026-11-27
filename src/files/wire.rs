@@ -66,6 +66,8 @@ struct Resumable {
     entries: Vec<Entry>,
     #[serde(default)]
     continued: bool,
+    #[serde(default)]
+    automatic: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -96,6 +98,9 @@ pub(crate) enum Frame {
         /// offered again by itself, after its connection was lost (not
         /// sent again by the user)
         continued: bool,
+        /// sent by itself, because the files were copied when the pointer
+        /// moved to the receiver (0.38.0): large ones ask the user there
+        automatic: bool,
     },
     /// the answer to [`Frame::OfferResumable`]: the receiver wants the data
     /// from `at` on (the start, for a new transfer)
@@ -165,6 +170,7 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
             key,
             entries,
             continued,
+            automatic,
             ..
         } => (
             OFFER_RESUMABLE,
@@ -172,6 +178,7 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
                 key: key.clone(),
                 entries: entries.clone(),
                 continued: *continued,
+                automatic: *automatic,
             })?,
         ),
         Frame::AcceptAt { at, .. } => {
@@ -238,6 +245,7 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Resu
                 key,
                 entries,
                 continued,
+                automatic,
             } = serde_json::from_slice(&rest)
                 .map_err(|e| invalid(format!("invalid offer: {e}")))?;
             if key.is_empty() || key.len() > 128 {
@@ -248,6 +256,7 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Resu
                 key,
                 entries,
                 continued,
+                automatic,
             }
         }
         ACCEPT_AT => {
@@ -332,6 +341,7 @@ mod tests {
                     modified: Some(1_700_000_000),
                 }],
                 continued: true,
+                automatic: true,
             },
             Frame::AcceptAt {
                 id: 8,

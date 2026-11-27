@@ -32,7 +32,7 @@ pub(crate) use manifest::files_key;
 pub(crate) use tls::AuthorizedKeys;
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     fs, io,
     net::SocketAddr,
@@ -46,7 +46,7 @@ use rustinput_ipc::{TransferInfo, TransferState, human_size};
 use tokio::{
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
-    sync::mpsc,
+    sync::{mpsc, oneshot},
     task::{JoinHandle, spawn_local},
     time::timeout,
 };
@@ -104,6 +104,19 @@ fn now_ms() -> u64 {
         .map_or(0, |d| d.as_millis() as u64)
 }
 
+/// Files sent by themselves that are larger than the user wants to receive
+/// without being asked (see [`FilesHandle::set_ask_above`]): the service asks
+/// the window, and answers on `reply`.
+pub(crate) struct Ask {
+    /// to tell the answer apart
+    pub(crate) id: u64,
+    /// the sending device
+    pub(crate) peer: String,
+    pub(crate) files: u32,
+    pub(crate) bytes: u64,
+    pub(crate) reply: oneshot::Sender<bool>,
+}
+
 /// a device that takes part in file transfers
 #[derive(Clone, Debug)]
 pub(crate) struct PeerInfo {
@@ -126,7 +139,8 @@ impl PeerInfo {
 enum Request {
     AddPeer(PeerInfo),
     RemovePeer(Peer),
-    Send(Peer, Vec<PathBuf>),
+    Send(Peer, Vec<PathBuf>, bool),
+    AskAbove(u64),
     SendNow(Vec<PathBuf>),
     Cancel(u64),
     CancelAll,
@@ -156,8 +170,16 @@ impl FilesHandle {
     }
 
     /// sends the copied `paths` (files and folders) to the peer
-    pub(crate) fn send(&self, peer: Peer, paths: Vec<PathBuf>) {
-        self.request(Request::Send(peer, paths));
+    /// `automatic`: because they were copied when the pointer moved there,
+    /// not because the user chose to send them
+    pub(crate) fn send(&self, peer: Peer, paths: Vec<PathBuf>, automatic: bool) {
+        self.request(Request::Send(peer, paths, automatic));
+    }
+
+    /// files sent by themselves larger than this many bytes are received
+    /// only when the user says so, 0: never asked
+    pub(crate) fn set_ask_above(&self, bytes: u64) {
+        self.request(Request::AskAbove(bytes));
     }
 
     /// sends `paths` to every connected device right away ("Copy to
@@ -196,6 +218,7 @@ pub(crate) fn spawn(
     port: u16,
     clipboard: ClipboardHandle,
     reports: Sender<Vec<TransferInfo>>,
+    asks: Sender<Ask>,
     pairing: Pairing,
     arrangement: Arrangement,
     enabled: bool,
@@ -221,6 +244,8 @@ pub(crate) fn spawn(
         internal_rx,
         internal_tx,
         reports,
+        asks,
+        ask_above: Default::default(),
         clipboard,
         cert,
         authorized,
@@ -339,6 +364,8 @@ struct Outgoing {
     key: Option<String>,
     /// resumable: its connection was lost, it goes on once there is one
     interrupted: bool,
+    /// sent by itself, see [`FilesHandle::send`]
+    automatic: bool,
 }
 
 impl Outgoing {
@@ -430,6 +457,14 @@ enum Internal {
     Closed {
         conn: u64,
     },
+    /// a transfer offered on `conn` is large and was sent by itself: the
+    /// user decides
+    Ask {
+        conn: u64,
+        files: u32,
+        bytes: u64,
+        reply: oneshot::Sender<bool>,
+    },
     /// The resumable transfer "<fingerprint>/<key>" is offered again on
     /// `conn` while another connection still receives it: that one is dead
     /// without knowing it (the sender only offers it on one connection at a
@@ -445,6 +480,10 @@ struct Task {
     internal_rx: Receiver<Internal>,
     internal_tx: Sender<Internal>,
     reports: Sender<Vec<TransferInfo>>,
+    /// large transfers sent by themselves, for the user to decide
+    asks: Sender<Ask>,
+    /// see [`FilesHandle::set_ask_above`]
+    ask_above: Rc<Cell<u64>>,
     clipboard: ClipboardHandle,
     cert: Certificate,
     authorized: AuthorizedKeys,
@@ -577,7 +616,8 @@ impl Task {
                     self.fail_outgoing(id, "the device disconnected".into());
                 }
             }
-            Request::Send(peer, paths) => self.send(peer, paths),
+            Request::Send(peer, paths, automatic) => self.send(peer, paths, automatic),
+            Request::AskAbove(bytes) => self.ask_above.set(bytes),
             Request::SendNow(paths) => {
                 self.explicit.extend(paths);
                 self.explicit_at = Some(tokio::time::Instant::now() + MERGE_DELAY);
@@ -632,11 +672,11 @@ impl Task {
         }
         log::info!("sending {} item(s) chosen in a file manager", paths.len());
         for peer in targets {
-            self.send(peer, paths.clone());
+            self.send(peer, paths.clone(), false);
         }
     }
 
-    fn send(&mut self, peer: Peer, paths: Vec<PathBuf>) {
+    fn send(&mut self, peer: Peer, paths: Vec<PathBuf>, automatic: bool) {
         let Some(info) = self.peers.get(&peer) else {
             log::info!("{peer} does not take file transfers, the copied files stay here");
             return;
@@ -661,6 +701,7 @@ impl Task {
             resume,
             key: None,
             interrupted: false,
+            automatic,
         });
         // listing large folders takes a while, the input must not wait for it
         let internal = self.internal_tx.clone();
@@ -827,6 +868,25 @@ impl Task {
                 self.receive_failed(conn, id, peer, progress, reason);
             }
             Internal::Closed { conn } => self.closed(conn),
+            Internal::Ask {
+                conn,
+                files,
+                bytes,
+                reply,
+            } => {
+                let id = self.uid();
+                let peer = self.conn_name(conn);
+                log::info!("{peer} sends {} by itself: asking", human_size(bytes));
+                let ask = Ask {
+                    id,
+                    peer,
+                    files,
+                    bytes,
+                    reply,
+                };
+                // without the service the answer is no
+                let _ = self.asks.send(ask);
+            }
             Internal::Preempt { conn, tag } => {
                 let stale: Vec<u64> = self
                     .conns
@@ -924,6 +984,7 @@ impl Task {
                 busy: self.busy.clone(),
                 refused: self.refused.clone(),
                 received: self.received_tags.clone(),
+                ask_above: self.ask_above.clone(),
             },
             reader,
         ));
@@ -1223,6 +1284,7 @@ impl Task {
                     key: key.clone(),
                     entries: manifest.entries.clone(),
                     continued: outgoing.interrupted,
+                    automatic: outgoing.automatic,
                 },
                 None => Frame::Offer {
                     id: outgoing.id,
@@ -2040,9 +2102,51 @@ struct Reader {
     refused: Rc<RefCell<HashSet<String>>>,
     /// resumable transfers received in this run, see [`ALREADY_RECEIVED`]
     received: Rc<RefCell<HashSet<String>>>,
+    /// see [`FilesHandle::set_ask_above`]
+    ask_above: Rc<Cell<u64>>,
 }
 
 impl Reader {
+    /// Whether an offer has to ask the user first: sent by itself, the
+    /// first time (not going on after its connection was lost), and larger
+    /// than what is received without asking. Then the user is asked.
+    fn ask(&self, automatic: bool, continued: bool, entries: &[Entry]) -> Option<Asking> {
+        let limit = self.ask_above.get();
+        let bytes: u64 = entries.iter().map(|e| e.size).sum();
+        if !automatic || continued || limit == 0 || bytes <= limit {
+            return None;
+        }
+        let (reply, answer) = oneshot::channel();
+        let files = entries.iter().filter(|e| !e.dir).count() as u32;
+        let _ = self.internal.send(Internal::Ask {
+            conn: self.conn,
+            files,
+            bytes,
+            reply,
+        });
+        let until =
+            tokio::time::Instant::now() + Duration::from_secs(rustinput_ipc::ASK_TRANSFER_SECONDS);
+        Some(Asking {
+            answer,
+            until,
+            limit,
+        })
+    }
+
+    /// Whether `needed` more bytes fit below the folder of received files,
+    /// leaving [`store::margin`] free: why not, if they do not.
+    fn no_room(dir: &Path, needed: u64) -> Option<String> {
+        let (free, total) = store::space(dir)?;
+        let margin = store::margin(total);
+        (needed.saturating_add(margin) > free).then(|| {
+            format!(
+                "not enough free space there: {} needed, {} free",
+                human_size(needed),
+                human_size(free.saturating_sub(margin))
+            )
+        })
+    }
+
     /// the answer to an offer: the folder to receive it into, or why not;
     /// `resumable`: its key, and whether it goes on by itself after its
     /// connection was lost
@@ -2058,6 +2162,13 @@ impl Reader {
         };
         let files = listing(&entries);
         let started_ms = now_ms();
+        let bytes: u64 = entries.iter().map(|e| e.size).sum();
+        if resumable.is_none() {
+            if let Some(reason) = Self::no_room(dir, bytes) {
+                log::warn!("files from {}: {reason}", self.fingerprint);
+                return (decline(reason), None);
+            }
+        }
         let (incoming, reply, resumed, tag) = match resumable {
             None => match store::Receiving::start(dir, id, entries).await {
                 Ok(receiving) => {
@@ -2104,6 +2215,18 @@ impl Reader {
                     tag: tag.clone(),
                 };
                 match store::Receiving::resumable(dir, id, &self.fingerprint, &key, entries).await {
+                    Ok((receiving, _))
+                        if Self::no_room(dir, bytes - receiving.bytes_done).is_some() =>
+                    {
+                        let reason =
+                            Self::no_room(dir, bytes - receiving.bytes_done).expect("checked");
+                        log::warn!("files from {}: {reason}", self.fingerprint);
+                        // what arrived before stays, for when there is room
+                        if receiving.bytes_done == 0 {
+                            receiving.discard().await;
+                        }
+                        return (decline(reason), None);
+                    }
                     Ok((receiving, at)) => {
                         let resumed = (receiving.bytes_done > 0).then_some(receiving.bytes_done);
                         let incoming = Incoming {
@@ -2145,20 +2268,113 @@ impl Reader {
     }
 }
 
+/// an offer waiting for the user, see [`Reader::ask`]
+struct Asking {
+    answer: oneshot::Receiver<bool>,
+    until: tokio::time::Instant,
+    /// what is received without asking, in bytes
+    limit: u64,
+}
+
+/// an offer waiting for the user, with what it offers
+struct Pending {
+    id: u32,
+    key: String,
+    entries: Vec<Entry>,
+    asking: Asking,
+}
+
+/// stops a task when dropped
+struct AbortOnDrop(JoinHandle<()>);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+/// what the reader of a connection waits for
+enum Read {
+    Frame(Frame),
+    /// the user answered an offer (`Some(receive)`), or did not in time
+    Answer(Pending, Option<bool>),
+}
+
 /// reads the frames of a connection: receives the transfers of the peer and
 /// passes the answers about our own transfers on
 async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
+    // The frames come from a task of their own, so that an offer can wait
+    // for the user while the rest goes on (reading a frame can not be
+    // interrupted halfway).
+    let (frames_tx, mut frames) = mpsc::channel(4);
+    let _forward = AbortOnDrop(spawn_local(async move {
+        loop {
+            match wire::read_frame(&mut reader).await {
+                Ok(frame) => {
+                    if frames_tx.send(frame).await.is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    log::debug!("file channel: {e}");
+                    break;
+                }
+            }
+        }
+    }));
     let mut current: Option<Incoming> = None;
+    let mut pending: Option<Pending> = None;
     loop {
-        let frame = match wire::read_frame(&mut reader).await {
-            Ok(frame) => frame,
-            Err(e) => {
-                log::debug!("file channel: {e}");
-                break;
+        let read = tokio::select! {
+            frame = frames.recv() => match frame {
+                Some(frame) => Read::Frame(frame),
+                None => break,
+            },
+            answer = async {
+                let p = pending.as_mut().expect("pending");
+                tokio::time::timeout_at(p.asking.until, &mut p.asking.answer).await
+            }, if pending.is_some() => {
+                let answer = match answer {
+                    Ok(Ok(receive)) => Some(receive),
+                    Ok(Err(_)) => Some(false),
+                    Err(_) => None,
+                };
+                Read::Answer(pending.take().expect("pending"), answer)
+            }
+        };
+        let frame = match read {
+            Read::Frame(frame) => frame,
+            Read::Answer(p, answer) => {
+                let reply = match answer {
+                    Some(true) => {
+                        let (reply, incoming) =
+                            r.offer(p.id, Some((p.key, false)), p.entries).await;
+                        current = incoming;
+                        reply
+                    }
+                    Some(false) => Frame::Decline {
+                        id: p.id,
+                        reason: format!(
+                            "refused there: copies larger than {} sent by themselves are \
+                            received only when the user says so",
+                            human_size(p.asking.limit)
+                        ),
+                    },
+                    None => Frame::Decline {
+                        id: p.id,
+                        reason: "nobody answered there in time".into(),
+                    },
+                };
+                if r.writer.send(reply).await.is_err() {
+                    break;
+                }
+                *r.receiving.borrow_mut() = current.as_ref().map(Incoming::progress);
+                continue;
             }
         };
         match frame {
             Frame::Offer { id, entries } => {
+                pending = None;
                 if let Some(previous) = current.take() {
                     if !previous.receiving.kept() {
                         previous.discard().await;
@@ -2175,16 +2391,27 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                 key,
                 entries,
                 continued,
+                automatic,
             } => {
+                pending = None;
                 if let Some(previous) = current.take() {
                     if !previous.receiving.kept() {
                         previous.discard().await;
                     }
                 }
-                let (reply, incoming) = r.offer(id, Some((key, continued)), entries).await;
-                current = incoming;
-                if r.writer.send(reply).await.is_err() {
-                    break;
+                if let Some(asking) = r.ask(automatic, continued, &entries) {
+                    pending = Some(Pending {
+                        id,
+                        key,
+                        entries,
+                        asking,
+                    });
+                } else {
+                    let (reply, incoming) = r.offer(id, Some((key, continued)), entries).await;
+                    current = incoming;
+                    if r.writer.send(reply).await.is_err() {
+                        break;
+                    }
                 }
             }
             Frame::Start { id, file, offset } => {
@@ -2216,6 +2443,9 @@ async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
                 }
             }
             Frame::Cancel { id } => {
+                if pending.as_ref().is_some_and(|p| p.id == id) {
+                    pending = None;
+                }
                 if current.as_ref().is_some_and(|c| c.id == id) {
                     let c = current.take().expect("current transfer");
                     let progress = c.progress().progress;

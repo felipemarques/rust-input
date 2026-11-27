@@ -116,6 +116,11 @@ pub struct Service {
     peer_states: HashMap<ClientHandle, (bool, bool)>,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
+    /// large transfers sent by themselves, to ask the window about
+    transfer_asks: Receiver<files::Ask>,
+    /// those asked, by the id the window answers with, and the question
+    /// for a window that connects later
+    asked: HashMap<u64, (tokio::sync::oneshot::Sender<bool>, FrontendEvent)>,
     /// the last of them, for a window that connects later
     transfers: Vec<TransferInfo>,
     /// bytes and pings of the input channel, reported once a second
@@ -236,6 +241,7 @@ impl Service {
             incoming: listener.links(),
         };
         let (reports_tx, transfer_reports) = channel();
+        let (asks_tx, transfer_asks) = channel();
         let name = hostname::get()
             .ok()
             .and_then(|h| h.into_string().ok())
@@ -253,6 +259,7 @@ impl Service {
             config.port(),
             clipboard.clone(),
             reports_tx,
+            asks_tx,
             pairing.clone(),
             arrangement.clone(),
             clipboard.files_enabled(),
@@ -276,6 +283,7 @@ impl Service {
         let file_options = config.file_options();
         let theme = config.theme();
         clipboard.set_send_copied(file_options.available && file_options.send_copied);
+        file_channel.set_ask_above(file_options.ask_above_mb.saturating_mul(1024 * 1024));
         files::menu::install(file_options.available && file_options.file_manager_menu);
 
         // input capture + emulation
@@ -321,6 +329,8 @@ impl Service {
             file_channel,
             file_options,
             transfer_reports,
+            transfer_asks,
+            asked: HashMap::new(),
             transfers: Vec::new(),
             netstats,
             theme,
@@ -401,6 +411,7 @@ impl Service {
                     self.transfers = transfers.clone();
                     self.notify_frontend(FrontendEvent::Transfers(transfers));
                 }
+                Some(ask) = self.transfer_asks.recv() => self.ask_transfer(ask),
                 _ = self.config.changed() => self.handle_config_change(),
                 Some(event) = self.pairing_events.recv() => self.handle_pairing_event(event),
                 Some(action) = self.radial_actions.recv() => self.radial_action(action),
@@ -492,6 +503,15 @@ impl Service {
             }
             FrontendRequest::SaveConfiguration => self.save_config(),
             FrontendRequest::SetFileOptions(options) => self.set_file_options(options, true),
+            FrontendRequest::AnswerTransfer { id, receive } => {
+                if let Some((reply, _)) = self.asked.remove(&id) {
+                    log::info!(
+                        "files sent by themselves: {}",
+                        if receive { "received" } else { "refused" }
+                    );
+                    let _ = reply.send(receive);
+                }
+            }
             FrontendRequest::SetTheme(theme) => {
                 self.theme = theme;
                 self.config.set_theme(theme);
@@ -599,12 +619,34 @@ impl Service {
         }
         self.clipboard
             .set_send_copied(options.available && options.send_copied);
+        if let Some(files) = &self.files {
+            files.set_ask_above(options.ask_above_mb.saturating_mul(1024 * 1024));
+        }
         self.file_options = options;
         if save {
             self.config.set_file_options(options);
             self.save_config();
         }
         self.notify_frontend(FrontendEvent::FileOptions(options));
+    }
+
+    /// Asks the window whether to receive large files sent by themselves;
+    /// without a window to ask, they are not received.
+    fn ask_transfer(&mut self, ask: files::Ask) {
+        self.asked.retain(|_, (reply, _)| !reply.is_closed());
+        if !self.frontend_listener.has_frontends() {
+            log::info!("files sent by themselves: no window to ask, refused");
+            let _ = ask.reply.send(false);
+            return;
+        }
+        let question = FrontendEvent::AskTransfer {
+            id: ask.id,
+            peer: ask.peer,
+            files: ask.files,
+            bytes: ask.bytes,
+        };
+        self.asked.insert(ask.id, (ask.reply, question.clone()));
+        self.notify_frontend(question);
     }
 
     fn handle_config_change(&mut self) {
@@ -848,6 +890,12 @@ impl Service {
             self.keep_clipboard_history,
         ));
         self.notify_frontend(FrontendEvent::Transfers(self.transfers.clone()));
+        // what is still waiting for an answer
+        self.asked.retain(|_, (reply, _)| !reply.is_closed());
+        let questions: Vec<FrontendEvent> = self.asked.values().map(|(_, q)| q.clone()).collect();
+        for question in questions {
+            self.notify_frontend(question);
+        }
     }
 
     /// Pauses RustInput on this computer, or lets it go on: paused, the

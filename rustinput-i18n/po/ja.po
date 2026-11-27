@@ -407,6 +407,27 @@ msgstr "未接続"
 msgid "mouse here"
 msgstr "マウスはここ"
 
+#: rustinput-gtk/src/ask_transfer.rs:34
+msgid "Receive {size} from {name}?"
+msgstr "{name} から {size} を受信しますか?"
+
+#: rustinput-gtk/src/ask_transfer.rs:43
+msgid "{count} file copied on {name} came along with the pointer. It waits in the temporary folder until you paste it."
+msgid_plural "{count} files copied on {name} came along with the pointer. They wait in the temporary folder until you paste them."
+msgstr[0] "{name} でコピーした {count} 個のファイルがポインターと一緒に届きました。貼り付けるまで一時フォルダーで待機します。"
+
+#: rustinput-gtk/src/ask_transfer.rs:56
+msgid "Refuse"
+msgstr "拒否"
+
+#: rustinput-gtk/src/ask_transfer.rs:57
+msgid "Receive"
+msgstr "受信"
+
+#: rustinput-gtk/src/ask_transfer.rs:97
+msgid "Receive files?"
+msgstr "ファイルを受信しますか?"
+
 #: rustinput-gtk/src/authorization_window.rs:25
 msgid "Certificate not authorized"
 msgstr "証明書が承認されていません"
@@ -447,35 +468,35 @@ msgstr "相手のバージョン：{peer} · 同じ"
 msgid "Its version: {peer} · this one: {local}"
 msgstr "相手のバージョン：{peer} · このコンピューター：{local}"
 
-#: rustinput-gtk/src/lib.rs:264
+#: rustinput-gtk/src/lib.rs:265
 msgid "Quit"
 msgstr "終了"
 
-#: rustinput-gtk/src/lib.rs:265
+#: rustinput-gtk/src/lib.rs:266
 msgid "_File"
 msgstr "ファイル(_F)"
 
-#: rustinput-gtk/src/lib.rs:479
+#: rustinput-gtk/src/lib.rs:480
 msgid "{name} and this computer authorized each other"
 msgstr "{name} とこのコンピューターが互いに承認されました"
 
-#: rustinput-gtk/src/lib.rs:484
+#: rustinput-gtk/src/lib.rs:485
 msgid "Not authorized: {error}"
 msgstr "承認されませんでした：{error}"
 
-#: rustinput-gtk/src/lib.rs:491
+#: rustinput-gtk/src/lib.rs:492
 msgid "{address} connected"
 msgstr "{address} と接続しました"
 
-#: rustinput-gtk/src/lib.rs:498
+#: rustinput-gtk/src/lib.rs:499
 msgid "The mouse came from {address}"
 msgstr "マウスが {address} から移ってきました"
 
-#: rustinput-gtk/src/lib.rs:504
+#: rustinput-gtk/src/lib.rs:505
 msgid "{address} disconnected"
 msgstr "{address} との接続が切れました"
 
-#: rustinput-gtk/src/lib.rs:583
+#: rustinput-gtk/src/lib.rs:590
 msgid "Files received from {name}: {count}, ready to paste"
 msgstr "{name} からファイルを {count} 個受信しました。貼り付けできます"
 
@@ -859,7 +880,7 @@ msgstr "パスワードマネージャーが秘密として印を付けました
 msgid "Password, hidden"
 msgstr "パスワード (非表示)"
 
-#: rustinput-gtk/src/window/imp.rs:251
+#: rustinput-gtk/src/window/imp.rs:253
 msgid "Failed to relaunch RustInput"
 msgstr "RustInput を再起動できませんでした"
 
@@ -1047,103 +1068,111 @@ msgstr "転送ウィンドウを表示"
 msgid "With the progress, when files are sent or received"
 msgstr "ファイルの送受信時に進行状況を表示します"
 
+#: rustinput-gtk/src/window.rs:1143
+msgid "Ask before receiving more than"
+msgstr "次のサイズを超える受信は確認する"
+
 #: rustinput-gtk/src/window.rs:1144
+msgid "Files copied on another computer that come along with the pointer. 0: never ask"
+msgstr "別のコンピューターでコピーされ、ポインターと一緒に届くファイル。0: 確認しない"
+
+#: rustinput-gtk/src/window.rs:1168
 msgid "Progress, history and log"
 msgstr "進行状況、履歴、ログ"
 
-#: rustinput-gtk/src/window.rs:1147
+#: rustinput-gtk/src/window.rs:1171
 msgid "Open"
 msgstr "開く"
 
-#: rustinput-gtk/src/window.rs:1264
+#: rustinput-gtk/src/window.rs:1303
 msgid "Sharing the mouse and keyboard"
 msgstr "マウスとキーボードを共有中"
 
-#: rustinput-gtk/src/window.rs:1265
+#: rustinput-gtk/src/window.rs:1304
 msgid "Capture and emulation are on"
 msgstr "キャプチャとエミュレーションはオンです"
 
-#: rustinput-gtk/src/window.rs:1268
+#: rustinput-gtk/src/window.rs:1307
 msgid "Input capture is off"
 msgstr "入力キャプチャはオフです"
 
-#: rustinput-gtk/src/window.rs:1269
+#: rustinput-gtk/src/window.rs:1308
 msgid "Needed for every connection"
 msgstr "すべての接続先に必要です"
 
-#: rustinput-gtk/src/window.rs:1285
+#: rustinput-gtk/src/window.rs:1324
 msgid "Sending"
 msgstr "送信"
 
-#: rustinput-gtk/src/window.rs:1286
+#: rustinput-gtk/src/window.rs:1325
 msgid "Past a screen edge, the mouse and keyboard go to the next computer"
 msgstr "画面の端を越えると、マウスとキーボードが隣のコンピューターに移ります"
 
-#: rustinput-gtk/src/window.rs:1299
+#: rustinput-gtk/src/window.rs:1338
 msgid "Receiving"
 msgstr "受信"
 
-#: rustinput-gtk/src/window.rs:1300
+#: rustinput-gtk/src/window.rs:1339
 msgid "The other computers can control this one"
 msgstr "他のコンピューターからこのコンピューターを操作できます"
 
-#: rustinput-gtk/src/window.rs:1303
+#: rustinput-gtk/src/window.rs:1342
 msgid "Input emulation is off"
 msgstr "入力エミュレーションはオフです"
 
-#: rustinput-gtk/src/window.rs:1304
+#: rustinput-gtk/src/window.rs:1343
 msgid "Needed for the other computers to control this one"
 msgstr "他のコンピューターからこのコンピューターを操作するのに必要です"
 
-#: rustinput-gtk/src/window.rs:1321
+#: rustinput-gtk/src/window.rs:1360
 msgid "Paused: no other computer controls this one"
 msgstr "一時停止中：ほかのコンピューターからは操作されません"
 
-#: rustinput-gtk/src/window.rs:1345
+#: rustinput-gtk/src/window.rs:1384
 msgid "Relaunch required"
 msgstr "再起動が必要です"
 
-#: rustinput-gtk/src/window.rs:1346
+#: rustinput-gtk/src/window.rs:1385
 msgid "Accessibility granted: restart to turn on capture and emulation"
 msgstr "アクセシビリティが許可されました。再起動するとキャプチャとエミュレーションがオンになります"
 
-#: rustinput-gtk/src/window.rs:1349
+#: rustinput-gtk/src/window.rs:1388
 msgid "Relaunch"
 msgstr "再起動"
 
-#: rustinput-gtk/src/window.rs:1353
+#: rustinput-gtk/src/window.rs:1392
 msgid "Grant the Accessibility permission to turn it on"
 msgstr "オンにするには、アクセシビリティの権限を許可してください"
 
-#: rustinput-gtk/src/window.rs:1354
+#: rustinput-gtk/src/window.rs:1393
 msgid "Grant"
 msgstr "許可"
 
-#: rustinput-gtk/src/window.rs:1394
+#: rustinput-gtk/src/window.rs:1433
 msgid "When this computer tries to connect, {name} asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "このコンピューターが接続しようとすると、{name} で承認するかどうかが確認され、コードが表示されます。そのコードをここに入力すると、両方のコンピューターが互いに承認されます（操作、クリップボード、ファイルが対象）。"
 
-#: rustinput-gtk/src/window.rs:1400
+#: rustinput-gtk/src/window.rs:1439
 msgid "When this computer tries to connect, the other computer asks whether to authorize it and shows a code. Enter it here to authorize both computers on each other: for control, clipboard and files."
 msgstr "このコンピューターが接続しようとすると、相手のコンピューターで承認するかどうかが確認され、コードが表示されます。そのコードをここに入力すると、両方のコンピューターが互いに承認されます（操作、クリップボード、ファイルが対象）。"
 
-#: rustinput-gtk/src/window.rs:1441
+#: rustinput-gtk/src/window.rs:1480
 msgid "Authorize with {name}"
 msgstr "{name} との相互承認"
 
-#: rustinput-gtk/src/window.rs:1442
+#: rustinput-gtk/src/window.rs:1481
 msgid "Authorize with the other computer"
 msgstr "相手のコンピューターとの相互承認"
 
-#: rustinput-gtk/src/window.rs:1479
+#: rustinput-gtk/src/window.rs:1518
 msgid "Authorizing…"
 msgstr "承認中…"
 
-#: rustinput-gtk/src/window.rs:1603
+#: rustinput-gtk/src/window.rs:1642
 msgid "Update now"
 msgstr "今すぐアップデート"
 
-#: rustinput-gtk/src/window.rs:1605
+#: rustinput-gtk/src/window.rs:1644
 msgid "Download"
 msgstr "ダウンロード"
 

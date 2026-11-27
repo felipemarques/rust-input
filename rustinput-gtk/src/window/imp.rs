@@ -114,6 +114,8 @@ pub struct Window {
     /// the switches of the file transfer settings: sending copied files, the
     /// file manager menu, the transfers window
     pub file_switches: RefCell<Option<[gtk::Switch; 3]>>,
+    /// MB above which files sent by themselves ask first (0.38.0)
+    pub ask_spin: RefCell<Option<gtk::SpinButton>>,
     /// the switches are being set to what the service has
     pub updating_files: Cell<bool>,
     pub clients: RefCell<Option<gio::ListStore>>,
