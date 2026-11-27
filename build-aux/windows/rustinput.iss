@@ -76,6 +76,9 @@ ShowLanguageDialog=auto
 ; since 6.5), the language of Windows picks it
 Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"
+#if FileExists(CompilerPath + "Languages\Portuguese.isl")
+Name: "portuguese"; MessagesFile: "compiler:Languages\Portuguese.isl"
+#endif
 #if FileExists(CompilerPath + "Languages\Spanish.isl")
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 #endif
@@ -122,6 +125,20 @@ brazilianportuguese.ChangeNoService=nenhum serviço do Windows: a janela do Rust
 brazilianportuguese.ChangeFirewall=as regras "RustInput (UDP)" e "RustInput (TCP)" do firewall do Windows, que deixam os outros computadores alcançar o rustinput.exe
 brazilianportuguese.ChangeMenu=o item "Copiar para o RustInput" no menu do Explorer, que o RustInput acrescenta (dá para desligar nas configurações)
 brazilianportuguese.ChangeUninstall=Desinstalar (Configurações > Aplicativos) desfaz tudo isso e mantém as configurações do RustInput.
+
+#if FileExists(CompilerPath + "Languages\Portuguese.isl")
+portuguese.TaskService=Executar o RustInput como serviço do Windows (recomendado): inicia com o Windows, mesmo sem a janela, e chega também aos programas executados como administrador
+portuguese.TaskTray=Mostrar o ícone do RustInput na área de notificação ao iniciar sessão no Windows
+portuguese.UpdateShortcut=Atualizar o RustInput
+portuguese.SettingUp=A configurar o serviço do Windows e a firewall...
+portuguese.SetupFailed=O RustInput foi instalado, mas a configuração do serviço do Windows ou da firewall falhou (código %1).%n%nDetalhes: %2
+portuguese.ChangesTitle=Alterações no Windows:
+portuguese.ChangeService=o serviço do Windows "RustInput", que inicia com o Windows e executa o RustInput com os direitos de administrador do utilizador que está ao ecrã
+portuguese.ChangeNoService=nenhum serviço do Windows: a janela do RustInput inicia-o, sem direitos de administrador (remove o serviço, se existir)
+portuguese.ChangeFirewall=as regras "RustInput (UDP)" e "RustInput (TCP)" da firewall do Windows, que permitem aos outros computadores chegar ao rustinput.exe
+portuguese.ChangeMenu=o item "Copiar para o RustInput" no menu do Explorador, que o RustInput acrescenta (pode ser desligado nas definições)
+portuguese.ChangeUninstall=Desinstalar (Definições > Aplicações) desfaz tudo isto e mantém as definições do RustInput.
+#endif
 
 #if FileExists(CompilerPath + "Languages\Spanish.isl")
 spanish.TaskService=Ejecutar RustInput como servicio de Windows (recomendado): se inicia con Windows, también sin su ventana, y llega también a los programas ejecutados como administrador
