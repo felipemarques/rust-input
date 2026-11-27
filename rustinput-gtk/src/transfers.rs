@@ -67,6 +67,12 @@ pub(crate) fn title(t: &TransferInfo) -> String {
         (TransferState::Removed, _) => trf("{files} from {name}: not pasted", &values),
         (TransferState::Failed(_), true) => trf("Sending {files} to {name} failed", &values),
         (TransferState::Failed(_), false) => trf("Receiving {files} from {name} failed", &values),
+        (TransferState::Interrupted, true) => {
+            trf("Sending {files} to {name}: interrupted", &values)
+        }
+        (TransferState::Interrupted, false) => {
+            trf("Receiving {files} from {name}: interrupted", &values)
+        }
     }
 }
 
@@ -74,16 +80,27 @@ pub(crate) fn title(t: &TransferInfo) -> String {
 pub(crate) fn details(t: &TransferInfo, now_ms: u64) -> String {
     let end = t.finished_ms.unwrap_or(now_ms);
     let seconds = end.saturating_sub(t.started_ms) as f64 / 1000.0;
-    let speed = t.bytes_done as f64 / seconds.max(0.001);
+    // went on where it stopped: since then, and what came since then
+    let resumed = t.resumed_bytes.unwrap_or(0);
+    let speed = t.bytes_done.saturating_sub(resumed) as f64 / seconds.max(0.001);
     let took = || {
-        trf(
-            "{size} in {time} ({speed}/s)",
-            &[
-                ("size", &human_size(t.bytes)),
-                ("time", &duration(seconds.round() as u64)),
-                ("speed", &human_size(speed as u64)),
-            ],
-        )
+        let values: [(&str, &dyn std::fmt::Display); 3] = [
+            ("size", &human_size(t.bytes)),
+            ("time", &duration(seconds.round() as u64)),
+            ("speed", &human_size(speed as u64)),
+        ];
+        match t.resumed_bytes {
+            Some(at) => trf(
+                "{size}, the last {rest} in {time} ({speed}/s): it went on where it had stopped",
+                &[
+                    ("size", &human_size(t.bytes)),
+                    ("rest", &human_size(t.bytes.saturating_sub(at))),
+                    ("time", &duration(seconds.round() as u64)),
+                    ("speed", &human_size(speed as u64)),
+                ],
+            ),
+            None => trf("{size} in {time} ({speed}/s)", &values),
+        }
     };
     match &t.state {
         TransferState::Waiting if t.files == 0 => tr("Listing the files…").to_owned(),
@@ -133,6 +150,14 @@ pub(crate) fn details(t: &TransferInfo, now_ms: u64) -> String {
             "{reason}, after {done} of {count} files",
             t.files.into(),
             &[("reason", reason), ("done", &t.files_done)],
+        ),
+        TransferState::Interrupted => trf(
+            "{done} of {size}. The connection was lost: it goes on from here when {name} is back",
+            &[
+                ("done", &human_size(t.bytes_done)),
+                ("size", &human_size(t.bytes)),
+                ("name", &t.peer),
+            ],
         ),
     }
 }
@@ -340,11 +365,10 @@ impl Transfers {
                 row.location.replace(t.location.clone());
             }
         }
-        self.remove.set_sensitive(
-            transfers
-                .iter()
-                .any(|t| !t.sending && t.state == TransferState::Done),
-        );
+        // what arrived of interrupted transfers goes too
+        self.remove.set_sensitive(transfers.iter().any(|t| {
+            !t.sending && matches!(t.state, TransferState::Done | TransferState::Interrupted)
+        }));
         self.open_for_long_transfers(transfers);
     }
 
@@ -352,7 +376,9 @@ impl Transfers {
         let mut first_seen = self.first_seen.borrow_mut();
         first_seen.retain(|id, _| transfers.iter().any(|t| t.id == *id && t.active()));
         let show = self.options.borrow().is_some_and(|o| o.show_window);
-        for t in transfers.iter().filter(|t| t.active()) {
+        // not for one waiting for its connection
+        let moving = |t: &&TransferInfo| t.active() && t.state != TransferState::Interrupted;
+        for t in transfers.iter().filter(moving) {
             let seen = *first_seen.entry(t.id).or_insert_with(Instant::now);
             if show && seen.elapsed() >= SHOW_AFTER && self.opened_for.borrow_mut().insert(t.id) {
                 // shown without asking for the focus: the user may be typing
@@ -460,6 +486,7 @@ mod tests {
             started_ms: 10_000,
             finished_ms: None,
             location: None,
+            resumed_bytes: None,
         }
     }
 

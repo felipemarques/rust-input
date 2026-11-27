@@ -25,6 +25,13 @@ const DATA: u8 = 4;
 const CANCEL: u8 = 5;
 const COMPLETE: u8 = 6;
 const ABORT: u8 = 7;
+// only to peers that announced `CAP_FILE_RESUME`
+const OFFER_RESUMABLE: u8 = 8;
+const ACCEPT_AT: u8 = 9;
+const START: u8 = 10;
+
+/// length of [`Position::tail`]: a SHA-256
+pub(crate) const TAIL_HASH: usize = 32;
 
 /// a file or folder of a transfer
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -37,6 +44,28 @@ pub(crate) struct Entry {
     pub(crate) size: u64,
     /// modification time in seconds since the Unix epoch
     pub(crate) modified: Option<u64>,
+}
+
+/// Where a resumable transfer goes on: the receiver has every file before
+/// the `file`-th (counting files only, not folders) and the first `offset`
+/// bytes of that one.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct Position {
+    pub(crate) file: u32,
+    pub(crate) offset: u64,
+    /// SHA-256 of the last bytes before `offset` (up to
+    /// [`super::store::TAIL`]), for the sender to check that they are still
+    /// those of its file; zeros when `offset` is 0
+    pub(crate) tail: [u8; TAIL_HASH],
+}
+
+/// the payload of [`Frame::OfferResumable`]
+#[derive(Serialize, Deserialize)]
+struct Resumable {
+    key: String,
+    entries: Vec<Entry>,
+    #[serde(default)]
+    continued: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +86,24 @@ pub(crate) enum Frame {
     /// the receiver abandons the transfer, the sender answers with
     /// [`Frame::Cancel`] once it stopped sending
     Abort { id: u32 },
+    /// like [`Frame::Offer`], for a transfer that goes on where it stopped
+    /// when the connection is lost: `key` is the same every time these
+    /// files are offered by this sender, so the receiver finds what it kept
+    OfferResumable {
+        id: u32,
+        key: String,
+        entries: Vec<Entry>,
+        /// offered again by itself, after its connection was lost (not
+        /// sent again by the user)
+        continued: bool,
+    },
+    /// the answer to [`Frame::OfferResumable`]: the receiver wants the data
+    /// from `at` on (the start, for a new transfer)
+    AcceptAt { id: u32, at: Position },
+    /// the sender begins the data at the `file`-th file, `offset` bytes into
+    /// it: the position of [`Frame::AcceptAt`], or the start of that file
+    /// when what the receiver has of it is not what the sender has
+    Start { id: u32, file: u32, offset: u64 },
 }
 
 impl Frame {
@@ -68,7 +115,10 @@ impl Frame {
             | Frame::Data { id, .. }
             | Frame::Cancel { id }
             | Frame::Complete { id }
-            | Frame::Abort { id } => *id,
+            | Frame::Abort { id }
+            | Frame::OfferResumable { id, .. }
+            | Frame::AcceptAt { id, .. }
+            | Frame::Start { id, .. } => *id,
         }
     }
 }
@@ -111,6 +161,32 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
         Frame::Cancel { .. } => (CANCEL, vec![]),
         Frame::Complete { .. } => (COMPLETE, vec![]),
         Frame::Abort { .. } => (ABORT, vec![]),
+        Frame::OfferResumable {
+            key,
+            entries,
+            continued,
+            ..
+        } => (
+            OFFER_RESUMABLE,
+            serde_json::to_vec(&Resumable {
+                key: key.clone(),
+                entries: entries.clone(),
+                continued: *continued,
+            })?,
+        ),
+        Frame::AcceptAt { at, .. } => {
+            let mut payload = Vec::with_capacity(12 + TAIL_HASH);
+            payload.extend_from_slice(&at.file.to_be_bytes());
+            payload.extend_from_slice(&at.offset.to_be_bytes());
+            payload.extend_from_slice(&at.tail);
+            (ACCEPT_AT, payload)
+        }
+        Frame::Start { file, offset, .. } => {
+            let mut payload = Vec::with_capacity(12);
+            payload.extend_from_slice(&file.to_be_bytes());
+            payload.extend_from_slice(&offset.to_be_bytes());
+            (START, payload)
+        }
     };
     // data frames are written without copying their bytes
     let data: &[u8] = match frame {
@@ -157,6 +233,46 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(reader: &mut R) -> io::Resu
         CANCEL => Frame::Cancel { id },
         COMPLETE => Frame::Complete { id },
         ABORT => Frame::Abort { id },
+        OFFER_RESUMABLE => {
+            let Resumable {
+                key,
+                entries,
+                continued,
+            } = serde_json::from_slice(&rest)
+                .map_err(|e| invalid(format!("invalid offer: {e}")))?;
+            if key.is_empty() || key.len() > 128 {
+                return Err(invalid("invalid key of a resumable offer"));
+            }
+            Frame::OfferResumable {
+                id,
+                key,
+                entries,
+                continued,
+            }
+        }
+        ACCEPT_AT => {
+            if rest.len() != 12 + TAIL_HASH {
+                return Err(invalid("invalid position"));
+            }
+            Frame::AcceptAt {
+                id,
+                at: Position {
+                    file: u32::from_be_bytes(rest[..4].try_into().expect("4 bytes")),
+                    offset: u64::from_be_bytes(rest[4..12].try_into().expect("8 bytes")),
+                    tail: rest[12..].try_into().expect("hash"),
+                },
+            }
+        }
+        START => {
+            if rest.len() != 12 {
+                return Err(invalid("invalid start"));
+            }
+            Frame::Start {
+                id,
+                file: u32::from_be_bytes(rest[..4].try_into().expect("4 bytes")),
+                offset: u64::from_be_bytes(rest[4..12].try_into().expect("8 bytes")),
+            }
+        }
         _ => return Err(invalid(format!("unknown frame type {kind}"))),
     };
     Ok(frame)
@@ -206,6 +322,34 @@ mod tests {
             Frame::Cancel { id: 7 },
             Frame::Complete { id: 7 },
             Frame::Abort { id: 7 },
+            Frame::OfferResumable {
+                id: 8,
+                key: "ab".repeat(32),
+                entries: vec![Entry {
+                    path: "grande.iso".into(),
+                    dir: false,
+                    size: 5_000_000_000,
+                    modified: Some(1_700_000_000),
+                }],
+                continued: true,
+            },
+            Frame::AcceptAt {
+                id: 8,
+                at: Position {
+                    file: 3,
+                    offset: 4_294_967_296 + 17,
+                    tail: [0x5a; TAIL_HASH],
+                },
+            },
+            Frame::AcceptAt {
+                id: 8,
+                at: Position::default(),
+            },
+            Frame::Start {
+                id: 8,
+                file: 3,
+                offset: 0,
+            },
         ] {
             assert_eq!(roundtrip(frame.clone()).await, frame);
         }
@@ -238,6 +382,21 @@ mod tests {
         a.write_all(&[DATA, 0xff, 0xff, 0xff, 0xff])
             .await
             .expect("write");
+        assert!(read_frame(&mut b).await.is_err());
+        // a position that is too short
+        let (mut a, mut b) = tokio::io::duplex(64);
+        a.write_all(&[ACCEPT_AT, 0, 0, 0, 8, 0, 0, 0, 1, 0, 0, 0, 0])
+            .await
+            .expect("write");
+        assert!(read_frame(&mut b).await.is_err());
+        // a resumable offer without a key
+        let (mut a, mut b) = tokio::io::duplex(64);
+        let payload = br#"{"key":"","entries":[]}"#;
+        let mut frame = vec![OFFER_RESUMABLE];
+        frame.extend_from_slice(&(4 + payload.len() as u32).to_be_bytes());
+        frame.extend_from_slice(&[0, 0, 0, 1]);
+        frame.extend_from_slice(payload);
+        a.write_all(&frame).await.expect("write");
         assert!(read_frame(&mut b).await.is_err());
         // an offer that is not a list of entries
         let (mut a, mut b) = tokio::io::duplex(64);

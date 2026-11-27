@@ -15,6 +15,11 @@
 //! as cut files: pasting moves them out of that folder to wherever the user
 //! pastes, so nothing is left behind. Everything is written to a log (see
 //! [`journal`]).
+//!
+//! With a device that announced `CAP_FILE_RESUME` (0.37.0) a transfer whose
+//! connection is lost is not given up: the receiver keeps what arrived, the
+//! sender keeps the transfer, and once they are connected again it goes on
+//! from the first byte that is missing (see [`store`]).
 
 mod journal;
 mod manifest;
@@ -39,7 +44,7 @@ use std::{
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{TransferInfo, TransferState, human_size};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf},
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt, ReadHalf, WriteHalf},
     net::{TcpListener, TcpStream},
     sync::mpsc,
     task::{JoinHandle, spawn_local},
@@ -56,7 +61,7 @@ use crate::{
 };
 use journal::Journal;
 use manifest::Manifest;
-use wire::{CHUNK_SIZE, Entry, Frame};
+use wire::{CHUNK_SIZE, Entry, Frame, Position};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
@@ -74,6 +79,8 @@ const REPLACED_GRACE: Duration = Duration::from_secs(10 * 60);
 const MAX_HISTORY: usize = 100;
 /// frames waiting to be written on a connection, data has to wait for room
 const WRITE_QUEUE: usize = 8;
+/// why a transfer stopped when its connection went away
+const LOST: &str = "the connection was lost";
 
 type Stream = TlsStream<TcpStream>;
 
@@ -94,6 +101,8 @@ pub(crate) struct PeerInfo {
     pub(crate) fingerprint: String,
     /// where its file channel listens, for devices this one connects to
     pub(crate) connect_to: Option<SocketAddr>,
+    /// its transfers go on where they stopped (`CAP_FILE_RESUME`)
+    pub(crate) resume: bool,
 }
 
 impl PeerInfo {
@@ -216,6 +225,9 @@ pub(crate) fn spawn(
         connecting: HashSet::new(),
         outgoing: Vec::new(),
         incoming: HashMap::new(),
+        standby: HashMap::new(),
+        busy: Default::default(),
+        refused: Default::default(),
         history: Vec::new(),
         explicit: Vec::new(),
         explicit_at: None,
@@ -237,6 +249,8 @@ struct Progress {
     bytes: u64,
     bytes_done: u64,
     current: Option<String>,
+    /// went on where it stopped: the bytes there already, and when
+    resumed: Option<(u64, u64)>,
 }
 
 /// the transfer the reader of a connection is receiving
@@ -245,12 +259,30 @@ struct Receive {
     id: u32,
     started_ms: u64,
     progress: Progress,
+    /// resumable: "<fingerprint>/<key>", and the folder kept to go on with
+    kept: Option<(String, PathBuf)>,
+}
+
+/// Keys of resumable transfers being received right now, "<fingerprint of
+/// the sender>/<key>": the same files offered over a second connection are
+/// not written into the same folder. Removed when dropped.
+struct Busy {
+    keys: Rc<RefCell<HashSet<String>>>,
+    tag: String,
+}
+
+impl Drop for Busy {
+    fn drop(&mut self) {
+        self.keys.borrow_mut().remove(&self.tag);
+    }
 }
 
 struct Conn {
     fingerprint: String,
     /// this device opened the connection
     initiated: bool,
+    /// where it connected to, if it opened it
+    addr: Option<SocketAddr>,
     writer: mpsc::Sender<Frame>,
     receiving: Rc<RefCell<Option<Receive>>>,
     tasks: [JoinHandle<()>; 2],
@@ -284,11 +316,17 @@ struct Outgoing {
     peer: Peer,
     fingerprint: String,
     initiated: bool,
-    manifest: Option<Manifest>,
+    manifest: Option<Rc<Manifest>>,
     listing: Listing,
     started_ms: u64,
     progress: Rc<RefCell<Progress>>,
     state: OutState,
+    /// the device goes on with transfers where they stopped
+    resume: bool,
+    /// resumable: what identifies these files to the receiver
+    key: Option<String>,
+    /// resumable: its connection was lost, it goes on once there is one
+    interrupted: bool,
 }
 
 impl Outgoing {
@@ -316,6 +354,9 @@ struct Record {
     dir: Option<PathBuf>,
     /// received: when a newer transfer replaced it on the clipboard
     replaced: Option<Instant>,
+    /// received and interrupted: "<fingerprint>/<key>" and the folder kept
+    /// to go on with
+    kept: Option<(String, PathBuf)>,
 }
 
 impl Record {
@@ -329,6 +370,7 @@ enum Internal {
     Connected {
         fingerprint: String,
         initiated: bool,
+        addr: Option<SocketAddr>,
         stream: Box<Stream>,
     },
     ConnectFailed {
@@ -356,6 +398,10 @@ enum Internal {
         id: u32,
         started_ms: u64,
         listing: Listing,
+        /// resumable: "<fingerprint>/<key>"
+        tag: Option<String>,
+        /// it goes on at this many bytes
+        resumed: Option<u64>,
     },
     Received {
         conn: u64,
@@ -396,6 +442,16 @@ struct Task {
     connecting: HashSet<String>,
     outgoing: Vec<Outgoing>,
     incoming: HashMap<(u64, u32), IncomingInfo>,
+    /// Where to connect to again while a resumable transfer with a device
+    /// waits for its connection, by fingerprint: when the input channel is
+    /// gone as well, the device is no longer among `peers`, and the
+    /// transfer would only go on once the pointer crosses to it.
+    standby: HashMap<String, SocketAddr>,
+    /// resumable transfers being received, see [`Busy`]
+    busy: Rc<RefCell<HashSet<String>>>,
+    /// resumable transfers cancelled here, "<fingerprint>/<key>": offered
+    /// again, they are refused
+    refused: Rc<RefCell<HashSet<String>>>,
     history: Vec<Record>,
     /// chosen in a file manager, waiting for the rest of the selection
     explicit: Vec<PathBuf>,
@@ -487,11 +543,12 @@ impl Task {
             Request::RemovePeer(peer) => {
                 self.peers.remove(&peer);
                 // transfers still waiting for this device are dropped, running
-                // ones finish or fail with their connection
+                // ones finish or fail with their connection; resumable ones
+                // wait for the device to be back
                 let waiting: Vec<u32> = self
                     .outgoing
                     .iter()
-                    .filter(|o| o.peer == peer && o.conn().is_none())
+                    .filter(|o| o.peer == peer && o.conn().is_none() && !o.resume)
                     .map(|o| o.id)
                     .collect();
                 for id in waiting {
@@ -562,7 +619,8 @@ impl Task {
             log::info!("{peer} does not take file transfers, the copied files stay here");
             return;
         };
-        let (fingerprint, initiated) = (info.fingerprint.clone(), info.initiated());
+        let (fingerprint, initiated, resume) =
+            (info.fingerprint.clone(), info.initiated(), info.resume);
         let id = self.next_transfer;
         self.next_transfer = self.next_transfer.wrapping_add(1);
         let uid = self.uid();
@@ -578,6 +636,9 @@ impl Task {
             started_ms: now_ms(),
             progress: Default::default(),
             state: OutState::Scanning,
+            resume,
+            key: None,
+            interrupted: false,
         });
         // listing large folders takes a while, the input must not wait for it
         let internal = self.internal_tx.clone();
@@ -596,6 +657,7 @@ impl Task {
             .values()
             .find(|p| p.fingerprint == fingerprint && p.connect_to.is_some())
             .and_then(|p| p.connect_to)
+            .or_else(|| self.standby.get(&fingerprint).copied())
         else {
             return;
         };
@@ -611,8 +673,9 @@ impl Task {
             Internal::Connected {
                 fingerprint,
                 initiated,
+                addr,
                 stream,
-            } => self.connected(fingerprint, initiated, *stream),
+            } => self.connected(fingerprint, initiated, addr, *stream),
             Internal::ConnectFailed { fingerprint } => {
                 self.connecting.remove(&fingerprint);
                 self.retry_later(fingerprint);
@@ -642,7 +705,10 @@ impl Task {
                             files(manifest.files() as u32),
                             human_size(manifest.bytes())
                         );
-                        o.manifest = Some(manifest);
+                        if o.resume {
+                            o.key = Some(manifest::resume_key(&manifest));
+                        }
+                        o.manifest = Some(Rc::new(manifest));
                         o.state = OutState::Waiting;
                         self.journal.write(&text);
                     }
@@ -660,8 +726,20 @@ impl Task {
                     }
                 }
                 Err(reason) => {
-                    self.send_frame(id, |id| Frame::Cancel { id }).await;
-                    self.fail_outgoing(id, reason);
+                    let Some(o) = self.outgoing.iter().find(|o| o.id == id) else {
+                        return;
+                    };
+                    // its connection was closed meanwhile, which interrupted it
+                    if !matches!(o.state, OutState::Streaming(..)) {
+                        return;
+                    }
+                    let resumable = o.key.is_some();
+                    if resumable && reason == LOST {
+                        self.interrupt(id);
+                    } else {
+                        self.send_frame(id, |id| Frame::Cancel { id }).await;
+                        self.fail_outgoing(id, reason);
+                    }
                 }
             },
             Internal::Receiving {
@@ -669,15 +747,44 @@ impl Task {
                 id,
                 started_ms,
                 listing,
+                tag,
+                resumed,
             } => {
                 let bytes = listing.iter().map(|(_, size)| size).sum();
-                let text = format!(
-                    "↓ from {}: receiving {}, {}",
-                    self.conn_name(conn),
-                    files(listing.len() as u32),
-                    human_size(bytes)
-                );
+                let text = match resumed {
+                    Some(at) => format!(
+                        "↓ from {}: going on with {}, {}, at {}",
+                        self.conn_name(conn),
+                        files(listing.len() as u32),
+                        human_size(bytes),
+                        human_size(at)
+                    ),
+                    None => format!(
+                        "↓ from {}: receiving {}, {}",
+                        self.conn_name(conn),
+                        files(listing.len() as u32),
+                        human_size(bytes)
+                    ),
+                };
                 self.journal.write(&text);
+                // the interrupted transfer goes on under the same id
+                let earlier = tag.and_then(|tag| {
+                    self.history.iter().position(|r| {
+                        r.info.state == TransferState::Interrupted
+                            && r.kept.as_ref().is_some_and(|(t, _)| *t == tag)
+                    })
+                });
+                if let Some(index) = earlier {
+                    let record = self.history.remove(index);
+                    self.incoming.insert(
+                        (conn, id),
+                        IncomingInfo {
+                            uid: record.info.id,
+                            started_ms,
+                            listing: Vec::new(),
+                        },
+                    );
+                }
                 let info = self.incoming_info(conn, id, started_ms);
                 info.listing = listing;
             }
@@ -740,7 +847,13 @@ impl Task {
         });
     }
 
-    fn connected(&mut self, fingerprint: String, initiated: bool, stream: Stream) {
+    fn connected(
+        &mut self,
+        fingerprint: String,
+        initiated: bool,
+        addr: Option<SocketAddr>,
+        stream: Stream,
+    ) {
         if initiated {
             self.connecting.remove(&fingerprint);
         }
@@ -759,12 +872,17 @@ impl Task {
         let (frames_tx, frames_rx) = mpsc::channel(WRITE_QUEUE);
         let receiving: Rc<RefCell<Option<Receive>>> = Default::default();
         let read = spawn_local(read_loop(
-            conn,
+            Reader {
+                conn,
+                fingerprint: fingerprint.clone(),
+                writer: frames_tx.clone(),
+                receiving: receiving.clone(),
+                received_dir: self.received_dir.clone(),
+                internal: self.internal_tx.clone(),
+                busy: self.busy.clone(),
+                refused: self.refused.clone(),
+            },
             reader,
-            frames_tx.clone(),
-            receiving.clone(),
-            self.received_dir.clone(),
-            self.internal_tx.clone(),
         ));
         let write = spawn_local(write_loop(
             conn,
@@ -777,6 +895,7 @@ impl Task {
             Conn {
                 fingerprint,
                 initiated,
+                addr,
                 writer: frames_tx,
                 receiving,
                 tasks: [read, write],
@@ -789,38 +908,65 @@ impl Task {
         let Some(closed) = self.conns.remove(&conn) else {
             return;
         };
-        let running: Vec<u32> = self
+        let running: Vec<(u32, bool)> = self
             .outgoing
             .iter()
             .filter(|o| o.conn() == Some(conn))
-            .map(|o| o.id)
+            .map(|o| (o.id, o.key.is_some()))
             .collect();
-        for id in running {
-            self.fail_outgoing(id, "the connection was lost".into());
+        for (id, resumable) in running {
+            if resumable {
+                self.interrupt(id);
+            } else {
+                self.fail_outgoing(id, LOST.into());
+            }
         }
-        if let Some(receive) = closed.receiving.borrow_mut().take() {
+        let receive = closed.receiving.borrow_mut().take();
+        if let Some(receive) = receive {
             let peer = self.name(&closed.fingerprint);
-            self.receive_failed(
-                conn,
-                receive.id,
-                peer,
-                receive.progress,
-                "the connection was lost".into(),
-            );
+            match receive.kept {
+                Some(kept) => {
+                    self.receive_interrupted(conn, receive.id, peer, receive.progress, kept)
+                }
+                None => self.receive_failed(conn, receive.id, peer, receive.progress, LOST.into()),
+            }
         }
         self.incoming.retain(|(c, _), _| *c != conn);
         if closed.initiated {
+            if let Some(addr) = closed.addr {
+                if self.waiting_for(&closed.fingerprint) {
+                    self.standby.insert(closed.fingerprint.clone(), addr);
+                }
+            }
             self.retry_later(closed.fingerprint.clone());
         }
     }
 
+    /// whether a resumable transfer with the device waits to go on
+    fn waiting_for(&self, fingerprint: &str) -> bool {
+        let prefix = format!("{fingerprint}/");
+        self.outgoing
+            .iter()
+            .any(|o| o.fingerprint == fingerprint && o.key.is_some())
+            || self.history.iter().any(|r| {
+                r.info.state == TransferState::Interrupted
+                    && r.kept
+                        .as_ref()
+                        .is_some_and(|(tag, _)| tag.starts_with(&prefix))
+            })
+    }
+
     /// connects again in a while, if the device still takes file transfers
-    fn retry_later(&self, fingerprint: String) {
-        let wanted = self
+    /// or a resumable transfer with it waits to go on
+    fn retry_later(&mut self, fingerprint: String) {
+        let peer = self
             .peers
             .values()
             .any(|p| p.fingerprint == fingerprint && p.connect_to.is_some());
-        if !wanted {
+        if !self.waiting_for(&fingerprint) {
+            self.standby.remove(&fingerprint);
+        }
+        if !peer && !self.standby.contains_key(&fingerprint) {
             return;
         }
         let internal = self.internal_tx.clone();
@@ -842,17 +988,47 @@ impl Task {
             return;
         };
         match frame {
-            Frame::Accept { .. } => {
+            Frame::Accept { .. } | Frame::AcceptAt { .. } => {
+                let at = match frame {
+                    Frame::AcceptAt { at, .. } => Some(at),
+                    _ => None,
+                };
                 let Some(writer) = self.conns.get(&conn).map(|c| c.writer.clone()) else {
                     return;
                 };
                 let outgoing = &mut self.outgoing[index];
-                let Some(manifest) = outgoing.manifest.take() else {
+                let Some(manifest) = outgoing.manifest.clone() else {
                     return;
                 };
+                if at.is_some() != outgoing.key.is_some() {
+                    log::debug!("file channel: {frame:?} does not answer the offer");
+                    return;
+                }
                 let (progress, internal) = (outgoing.progress.clone(), self.internal_tx.clone());
                 let task = spawn_local(async move {
-                    let result = stream(id, manifest, writer, progress).await;
+                    let result = async {
+                        let mut from = Position::default();
+                        if let Some(at) = at {
+                            from = resume_at(&manifest, at).await?;
+                            if from != Position::default() {
+                                log::info!(
+                                    "sending files: going on at file {}, byte {}",
+                                    from.file,
+                                    from.offset
+                                );
+                            }
+                            writer
+                                .send(Frame::Start {
+                                    id,
+                                    file: from.file,
+                                    offset: from.offset,
+                                })
+                                .await
+                                .map_err(|_| LOST.to_owned())?;
+                        }
+                        stream(id, &manifest, from, writer, progress).await
+                    };
+                    let result = result.await;
                     let _ = internal.send(Internal::Streamed { id, result });
                 });
                 outgoing.state = OutState::Streaming(conn, task);
@@ -933,20 +1109,37 @@ impl Task {
             if !matches!(outgoing.state, OutState::Waiting) {
                 continue;
             }
-            let Some((&conn, c)) = self.conns.iter().find(|(_, c)| {
-                c.fingerprint == outgoing.fingerprint && c.initiated == outgoing.initiated
-            }) else {
+            // a resumable transfer may go on over the connection in the
+            // other direction, the same as before is preferred
+            let same = |c: &&Conn| c.fingerprint == outgoing.fingerprint;
+            let Some(conn) = self
+                .conns
+                .iter()
+                .filter(|(_, c)| same(c))
+                .filter(|(_, c)| c.initiated == outgoing.initiated || outgoing.key.is_some())
+                .min_by_key(|(_, c)| c.initiated != outgoing.initiated)
+                .map(|(&conn, _)| conn)
+            else {
                 continue;
             };
+            let c = &self.conns[&conn];
             if busy.contains(&conn) || !started.insert(conn) {
                 continue;
             }
             let Some(manifest) = &outgoing.manifest else {
                 continue;
             };
-            let offer = Frame::Offer {
-                id: outgoing.id,
-                entries: manifest.entries.clone(),
+            let offer = match &outgoing.key {
+                Some(key) => Frame::OfferResumable {
+                    id: outgoing.id,
+                    key: key.clone(),
+                    entries: manifest.entries.clone(),
+                    continued: outgoing.interrupted,
+                },
+                None => Frame::Offer {
+                    id: outgoing.id,
+                    entries: manifest.entries.clone(),
+                },
             };
             // the queue has room: nothing else is offered on this connection
             if c.writer.try_send(offer).is_ok() {
@@ -969,7 +1162,102 @@ impl Task {
         // the sender answers with Cancel, then the reader discards the files
         if let Some(c) = incoming.and_then(|(conn, id)| self.conns.get(&conn).map(|c| (c, id))) {
             let _ = c.0.writer.try_send(Frame::Abort { id: c.1 });
+            return;
         }
+        // interrupted here: what was kept goes, and the sender is refused
+        // when it offers the files again
+        let interrupted = self
+            .history
+            .iter()
+            .position(|r| r.info.id == uid && r.info.state == TransferState::Interrupted);
+        if let Some(index) = interrupted {
+            let record = &mut self.history[index];
+            if let Some((tag, root)) = record.kept.take() {
+                store::remove_partial(&root);
+                self.refused.borrow_mut().insert(tag);
+            }
+            record.info.state = TransferState::Failed("cancelled".into());
+            record.info.finished_ms = Some(now_ms());
+            let text = format!(
+                "↓ from {}: {} cancelled, what had arrived is removed",
+                record.info.peer,
+                files(record.info.files)
+            );
+            self.journal.write(&text);
+        }
+    }
+
+    /// A resumable transfer this device sends lost its connection: it waits
+    /// for the device to be connected again, and goes on where it stopped.
+    fn interrupt(&mut self, id: u32) {
+        let Some(outgoing) = self.outgoing.iter_mut().find(|o| o.id == id) else {
+            return;
+        };
+        if outgoing.conn().is_none() {
+            // waiting already
+            return;
+        }
+        if let OutState::Streaming(_, task) = &outgoing.state {
+            task.abort();
+        }
+        outgoing.state = OutState::Waiting;
+        outgoing.interrupted = true;
+        let (p, fingerprint) = (
+            outgoing.progress.borrow().clone(),
+            outgoing.fingerprint.clone(),
+        );
+        outgoing.progress.borrow_mut().current = None;
+        let peer = self.name(&fingerprint);
+        log::info!("sending files to {peer}: {LOST}, it goes on when {peer} is back");
+        let text = format!(
+            "↑ to {peer}: interrupted after {} of {} files ({} of {}), goes on when {peer} is back",
+            p.files_done,
+            p.files,
+            human_size(p.bytes_done),
+            human_size(p.bytes)
+        );
+        self.journal.write(&text);
+        self.start_next();
+    }
+
+    /// A resumable transfer this device receives lost its connection: what
+    /// arrived is kept, for when the sender offers the files again.
+    fn receive_interrupted(
+        &mut self,
+        conn: u64,
+        id: u32,
+        peer: String,
+        progress: Progress,
+        kept: (String, PathBuf),
+    ) {
+        let incoming = self.incoming_info(conn, id, now_ms());
+        let (uid, started_ms) = (incoming.uid, incoming.started_ms);
+        self.incoming.remove(&(conn, id));
+        log::info!("receiving files from {peer}: {LOST}, what arrived is kept to go on with");
+        let text = format!(
+            "↓ from {peer}: interrupted after {} of {} files ({} of {}), kept to go on with",
+            progress.files_done,
+            progress.files,
+            human_size(progress.bytes_done),
+            human_size(progress.bytes)
+        );
+        self.journal.write(&text);
+        let mut info = info(
+            uid,
+            false,
+            peer,
+            &progress,
+            TransferState::Interrupted,
+            started_ms,
+        );
+        info.current = None;
+        self.history.push(Record {
+            info,
+            paths: Vec::new(),
+            dir: None,
+            replaced: None,
+            kept: Some(kept),
+        });
     }
 
     fn cancel_outgoing(&mut self, id: u32) {
@@ -1041,11 +1329,23 @@ impl Task {
     /// records a finished transfer, for the user and in the log
     fn finished(&mut self, f: Finished) {
         let now = now_ms();
-        let seconds = now.saturating_sub(f.started_ms) as f64 / 1000.0;
         let p = &f.progress;
+        // gone on where it stopped: the speed of what came since then
+        let (since, moved) = match p.resumed {
+            Some((there, at)) => (at, p.bytes_done.saturating_sub(there)),
+            None => (f.started_ms, p.bytes_done),
+        };
+        let seconds = now.saturating_sub(since) as f64 / 1000.0;
         let rate = || {
-            let speed = (p.bytes_done as f64 / seconds.max(0.001)) as u64;
-            format!("in {seconds:.1} s ({}/s)", human_size(speed))
+            let speed = (moved as f64 / seconds.max(0.001)) as u64;
+            match p.resumed {
+                Some((there, _)) => format!(
+                    "in {seconds:.1} s ({}/s) going on at {}",
+                    human_size(speed),
+                    human_size(there)
+                ),
+                None => format!("in {seconds:.1} s ({}/s)", human_size(speed)),
+            }
         };
         let dir = f
             .paths
@@ -1089,10 +1389,16 @@ impl Task {
             paths: f.paths,
             dir,
             replaced: None,
+            kept: None,
         });
         // the oldest go first, but not received files waiting to be pasted
+        // nor those waiting to go on
         while self.history.len() > MAX_HISTORY {
-            match self.history.iter().position(|r| !r.ready()) {
+            match self
+                .history
+                .iter()
+                .position(|r| !r.ready() && r.kept.is_none())
+            {
                 Some(oldest) => self.history.remove(oldest),
                 None => break,
             };
@@ -1125,13 +1431,21 @@ impl Task {
         }
     }
 
-    /// removes the received files that were not pasted
+    /// removes the received files that were not pasted, and what arrived
+    /// of interrupted transfers
     fn remove_received(&mut self) {
         let ready: Vec<usize> = (0..self.history.len())
             .filter(|&i| self.history[i].ready())
             .collect();
         for index in ready {
             self.retire(index, TransferState::Removed);
+        }
+        for record in &mut self.history {
+            if let Some((_, root)) = record.kept.take() {
+                store::remove_partial(&root);
+                record.info.state = TransferState::Removed;
+                record.info.finished_ms = Some(now_ms());
+            }
         }
     }
 
@@ -1165,6 +1479,7 @@ impl Task {
         let mut transfers: Vec<TransferInfo> = Vec::new();
         for outgoing in &self.outgoing {
             let state = match outgoing.state {
+                OutState::Waiting if outgoing.interrupted => TransferState::Interrupted,
                 OutState::Scanning | OutState::Waiting => TransferState::Waiting,
                 _ => TransferState::Running,
             };
@@ -1253,9 +1568,10 @@ fn info(
         bytes_done: progress.bytes_done,
         current: progress.current.clone(),
         state,
-        started_ms,
+        started_ms: progress.resumed.map_or(started_ms, |(_, at)| at),
         finished_ms: None,
         location: None,
+        resumed_bytes: progress.resumed.map(|(bytes, _)| bytes),
     }
 }
 
@@ -1343,6 +1659,7 @@ impl Accept {
             let _ = self.internal.send(Internal::Connected {
                 fingerprint,
                 initiated: false,
+                addr: None,
                 stream: Box::new(stream.into()),
             });
         }
@@ -1404,6 +1721,7 @@ async fn connect(
             let _ = internal.send(Internal::Connected {
                 fingerprint,
                 initiated: true,
+                addr: Some(addr),
                 stream: Box::new(stream.into()),
             });
         }
@@ -1414,21 +1732,104 @@ async fn connect(
     }
 }
 
-/// sends the contents of the files of a transfer, one file after the other
+/// the name of the file of `entry`, without its folders
+fn file_name(entry: &Entry) -> String {
+    entry
+        .path
+        .rsplit('/')
+        .next()
+        .unwrap_or(&entry.path)
+        .to_owned()
+}
+
+/// Where a resumable transfer goes on, from where the receiver asks (`at`):
+/// there, if the last bytes it has of that file are those of this file, else
+/// at the start of that file. A file that changed since it was copied ends
+/// the transfer.
+async fn resume_at(manifest: &Manifest, at: Position) -> Result<Position, String> {
+    let files: Vec<(&Entry, &PathBuf)> = manifest
+        .entries
+        .iter()
+        .filter(|e| !e.dir)
+        .zip(&manifest.sources)
+        .collect();
+    let index = at.file as usize;
+    let start = Position {
+        file: at.file,
+        ..Default::default()
+    };
+    if index > files.len() {
+        return Err("the receiver asked for a file the transfer does not have".into());
+    }
+    let Some(&(entry, source)) = files.get(index) else {
+        // everything arrived
+        return Ok(start);
+    };
+    if at.offset == 0 || at.offset > entry.size {
+        return Ok(start);
+    }
+    let name = file_name(entry);
+    let (path, size, modified) = (source.clone(), entry.size, entry.modified);
+    let same = tokio::task::spawn_blocking(move || {
+        as_user(|| {
+            let mut file = fs::File::open(&path)?;
+            let metadata = file.metadata()?;
+            if metadata.len() != size
+                || (modified.is_some() && manifest::modified(&metadata) != modified)
+            {
+                return Ok(None);
+            }
+            Ok(Some(store::tail_hash(&mut file, at.offset)? == at.tail))
+        })
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    match same {
+        Ok(Some(true)) => Ok(Position {
+            offset: at.offset,
+            ..start
+        }),
+        Ok(Some(false)) => {
+            log::info!("{name}: what the receiver has is not this file, it is sent again");
+            Ok(start)
+        }
+        Ok(None) => Err(format!("{name} changed since it was copied")),
+        Err(e) => Err(format!("{name}: {e}")),
+    }
+}
+
+/// Sends the contents of the files of a transfer, one file after the
+/// other, from `from` on (the start, unless a resumable transfer goes on).
 async fn stream(
     id: u32,
-    manifest: Manifest,
+    manifest: &Manifest,
+    from: Position,
     writer: mpsc::Sender<Frame>,
     progress: Rc<RefCell<Progress>>,
 ) -> Result<(), String> {
     let files = manifest.entries.iter().filter(|e| !e.dir);
-    for (entry, source) in files.zip(&manifest.sources) {
-        let name = entry
-            .path
-            .rsplit('/')
-            .next()
-            .unwrap_or(&entry.path)
-            .to_owned();
+    let before = files
+        .clone()
+        .take(from.file as usize)
+        .map(|e| e.size)
+        .sum::<u64>()
+        + from.offset;
+    {
+        let mut progress = progress.borrow_mut();
+        progress.files_done = from.file;
+        progress.bytes_done = before;
+        progress.resumed = (before > 0).then(|| (before, now_ms()));
+    }
+    for (index, (entry, source)) in files.zip(&manifest.sources).enumerate() {
+        if index < from.file as usize {
+            continue;
+        }
+        let skip = if index == from.file as usize {
+            from.offset
+        } else {
+            0
+        };
+        let name = file_name(entry);
         progress.borrow_mut().current = Some(name.clone());
         let path = source.clone();
         let mut file = tokio::task::spawn_blocking(move || as_user(|| std::fs::File::open(&path)))
@@ -1436,7 +1837,12 @@ async fn stream(
             .map_err(|e| e.to_string())
             .and_then(|opened| opened.map_err(|e| format!("{name}: {e}")))
             .map(tokio::fs::File::from_std)?;
-        let mut remaining = entry.size;
+        if skip > 0 {
+            file.seek(io::SeekFrom::Start(skip))
+                .await
+                .map_err(|e| format!("{name}: {e}"))?;
+        }
+        let mut remaining = entry.size - skip;
         while remaining > 0 {
             let mut chunk = vec![0; remaining.min(CHUNK_SIZE as u64) as usize];
             file.read_exact(&mut chunk).await.map_err(|e| {
@@ -1450,7 +1856,7 @@ async fn stream(
             writer
                 .send(Frame::Data { id, bytes: chunk })
                 .await
-                .map_err(|_| "the connection was lost".to_owned())?;
+                .map_err(|_| LOST.to_owned())?;
             remaining -= length;
             progress.borrow_mut().bytes_done += length;
         }
@@ -1481,28 +1887,151 @@ async fn write_loop(
     let _ = internal.send(Internal::Closed { conn });
 }
 
-/// reads the frames of a connection: receives the transfers of the peer and
-/// passes the answers about our own transfers on
-async fn read_loop(
+/// a transfer the reader of a connection is receiving
+struct Incoming {
+    id: u32,
+    started_ms: u64,
+    receiving: store::Receiving,
+    /// resumable: its key, taken while it is received
+    busy: Option<Busy>,
+    /// went on where it stopped: the bytes there already, and when
+    resumed: Option<(u64, u64)>,
+}
+
+impl Incoming {
+    fn progress(&self) -> Receive {
+        let r = &self.receiving;
+        Receive {
+            id: self.id,
+            started_ms: self.started_ms,
+            progress: Progress {
+                files: r.files as u32,
+                files_done: r.files_done as u32,
+                bytes: r.bytes,
+                bytes_done: r.bytes_done,
+                current: r.current_name(),
+                resumed: self.resumed,
+            },
+            kept: self
+                .busy
+                .as_ref()
+                .map(|b| (b.tag.clone(), self.receiving.partial())),
+        }
+    }
+
+    /// gives the transfer up: removes what arrived
+    async fn discard(self) {
+        self.receiving.discard().await;
+    }
+}
+
+/// what the reader of a connection needs besides the connection
+struct Reader {
     conn: u64,
-    mut reader: ReadHalf<Stream>,
+    /// fingerprint of the peer
+    fingerprint: String,
     writer: mpsc::Sender<Frame>,
     receiving: Rc<RefCell<Option<Receive>>>,
     received_dir: Option<PathBuf>,
     internal: Sender<Internal>,
-) {
-    let mut current: Option<(u32, u64, store::Receiving)> = None;
-    let progress_of = |id: u32, started_ms: u64, r: &store::Receiving| Receive {
-        id,
-        started_ms,
-        progress: Progress {
-            files: r.files as u32,
-            files_done: r.files_done as u32,
-            bytes: r.bytes,
-            bytes_done: r.bytes_done,
-            current: r.current_name(),
-        },
-    };
+    busy: Rc<RefCell<HashSet<String>>>,
+    refused: Rc<RefCell<HashSet<String>>>,
+}
+
+impl Reader {
+    /// the answer to an offer: the folder to receive it into, or why not;
+    /// `resumable`: its key, and whether it goes on by itself after its
+    /// connection was lost
+    async fn offer(
+        &self,
+        id: u32,
+        resumable: Option<(String, bool)>,
+        entries: Vec<Entry>,
+    ) -> (Frame, Option<Incoming>) {
+        let decline = |reason: String| Frame::Decline { id, reason };
+        let Some(dir) = &self.received_dir else {
+            return (decline("no folder to receive files into".into()), None);
+        };
+        let files = listing(&entries);
+        let started_ms = now_ms();
+        let (incoming, reply, resumed, tag) = match resumable {
+            None => match store::Receiving::start(dir, id, entries).await {
+                Ok(receiving) => {
+                    let incoming = Incoming {
+                        id,
+                        started_ms,
+                        receiving,
+                        busy: None,
+                        resumed: None,
+                    };
+                    (incoming, Frame::Accept { id }, None, None)
+                }
+                Err(e) => return (decline(e.to_string()), None),
+            },
+            Some((key, continued)) => {
+                let tag = format!("{}/{key}", self.fingerprint);
+                // cancelled here while interrupted: not when it goes on by
+                // itself, but when the user sends the files again
+                if continued && self.refused.borrow().contains(&tag) {
+                    return (decline("the transfer was cancelled here".into()), None);
+                }
+                self.refused.borrow_mut().remove(&tag);
+                if !self.busy.borrow_mut().insert(tag.clone()) {
+                    return (
+                        decline("these files are coming over another connection".into()),
+                        None,
+                    );
+                }
+                let busy = Busy {
+                    keys: self.busy.clone(),
+                    tag: tag.clone(),
+                };
+                match store::Receiving::resumable(dir, id, &self.fingerprint, &key, entries).await {
+                    Ok((receiving, at)) => {
+                        let resumed = (receiving.bytes_done > 0).then_some(receiving.bytes_done);
+                        let incoming = Incoming {
+                            id,
+                            started_ms,
+                            receiving,
+                            busy: Some(busy),
+                            resumed: None,
+                        };
+                        (incoming, Frame::AcceptAt { id, at }, resumed, Some(tag))
+                    }
+                    Err(e) => return (decline(e.to_string()), None),
+                }
+            }
+        };
+        let _ = self.internal.send(Internal::Receiving {
+            conn: self.conn,
+            id,
+            started_ms,
+            listing: files,
+            tag,
+            resumed,
+        });
+        (reply, Some(incoming))
+    }
+
+    /// the transfer failed here: it goes, and the sender is told
+    async fn failed(&self, current: Incoming, reason: String) {
+        let progress = current.progress().progress;
+        let id = current.id;
+        current.discard().await;
+        let _ = self.writer.send(Frame::Abort { id }).await;
+        let _ = self.internal.send(Internal::ReceiveFailed {
+            conn: self.conn,
+            id,
+            reason,
+            progress,
+        });
+    }
+}
+
+/// reads the frames of a connection: receives the transfers of the peer and
+/// passes the answers about our own transfers on
+async fn read_loop(r: Reader, mut reader: ReadHalf<Stream>) {
+    let mut current: Option<Incoming> = None;
     loop {
         let frame = match wire::read_frame(&mut reader).await {
             Ok(frame) => frame,
@@ -1513,64 +2042,69 @@ async fn read_loop(
         };
         match frame {
             Frame::Offer { id, entries } => {
-                if let Some((_, _, previous)) = current.take() {
-                    previous.discard().await;
+                if let Some(previous) = current.take() {
+                    if !previous.receiving.kept() {
+                        previous.discard().await;
+                    }
                 }
-                let files = listing(&entries);
-                let started_ms = now_ms();
-                let reply = match &received_dir {
-                    None => Frame::Decline {
-                        id,
-                        reason: "no folder to receive files into".into(),
-                    },
-                    Some(dir) => match store::Receiving::start(dir, id, entries).await {
-                        Ok(receiving) => {
-                            current = Some((id, started_ms, receiving));
-                            let _ = internal.send(Internal::Receiving {
-                                conn,
-                                id,
-                                started_ms,
-                                listing: files,
-                            });
-                            Frame::Accept { id }
-                        }
-                        Err(e) => Frame::Decline {
-                            id,
-                            reason: e.to_string(),
-                        },
-                    },
-                };
-                if writer.send(reply).await.is_err() {
+                let (reply, incoming) = r.offer(id, None, entries).await;
+                current = incoming;
+                if r.writer.send(reply).await.is_err() {
                     break;
                 }
             }
-            Frame::Data { id, bytes } => {
-                let Some((current_id, _, receiving)) = current.as_mut() else {
+            Frame::OfferResumable {
+                id,
+                key,
+                entries,
+                continued,
+            } => {
+                if let Some(previous) = current.take() {
+                    if !previous.receiving.kept() {
+                        previous.discard().await;
+                    }
+                }
+                let (reply, incoming) = r.offer(id, Some((key, continued)), entries).await;
+                current = incoming;
+                if r.writer.send(reply).await.is_err() {
+                    break;
+                }
+            }
+            Frame::Start { id, file, offset } => {
+                let Some(c) = current.as_mut().filter(|c| c.id == id) else {
                     continue;
                 };
-                if *current_id != id {
-                    continue;
+                if offset > 0 {
+                    log::info!("file channel: going on at file {file}, byte {offset}");
                 }
-                if let Err(e) = receiving.write(&bytes).await {
-                    let (id, started_ms, receiving) = current.take().expect("current transfer");
-                    let progress = progress_of(id, started_ms, &receiving).progress;
-                    receiving.discard().await;
-                    let _ = writer.send(Frame::Abort { id }).await;
-                    let _ = internal.send(Internal::ReceiveFailed {
-                        conn,
-                        id,
-                        reason: e.to_string(),
-                        progress,
-                    });
+                match c.receiving.begin(file, offset).await {
+                    Ok(()) => {
+                        // what was there already, to tell the speed of the rest
+                        let there = c.receiving.bytes_done;
+                        c.resumed = (there > 0).then_some((there, now_ms()));
+                    }
+                    Err(e) => {
+                        let c = current.take().expect("current transfer");
+                        r.failed(c, e.to_string()).await;
+                    }
+                }
+            }
+            Frame::Data { id, bytes } => {
+                let Some(c) = current.as_mut().filter(|c| c.id == id) else {
+                    continue;
+                };
+                if let Err(e) = c.receiving.write(&bytes).await {
+                    let c = current.take().expect("current transfer");
+                    r.failed(c, e.to_string()).await;
                 }
             }
             Frame::Cancel { id } => {
-                if current.as_ref().is_some_and(|(c, _, _)| *c == id) {
-                    let (id, started_ms, receiving) = current.take().expect("current transfer");
-                    let progress = progress_of(id, started_ms, &receiving).progress;
-                    receiving.discard().await;
-                    let _ = internal.send(Internal::ReceiveFailed {
-                        conn,
+                if current.as_ref().is_some_and(|c| c.id == id) {
+                    let c = current.take().expect("current transfer");
+                    let progress = c.progress().progress;
+                    c.discard().await;
+                    let _ = r.internal.send(Internal::ReceiveFailed {
+                        conn: r.conn,
                         id,
                         reason: "cancelled".into(),
                         progress,
@@ -1578,33 +2112,38 @@ async fn read_loop(
                 }
             }
             frame => {
-                let _ = internal.send(Internal::Frame { conn, frame });
+                let _ = r.internal.send(Internal::Frame {
+                    conn: r.conn,
+                    frame,
+                });
             }
         }
         // a transfer is complete once its last byte (or its offer, if it
         // only has empty files) arrived
-        if current.as_ref().is_some_and(|(_, _, r)| r.is_complete()) {
-            let (id, started_ms, receiving) = current.take().expect("current transfer");
-            let progress = progress_of(id, started_ms, &receiving).progress;
-            let paths = receiving.finish();
-            if writer.send(Frame::Complete { id }).await.is_err() {
+        if current.as_ref().is_some_and(|c| c.receiving.is_complete()) {
+            let c = current.take().expect("current transfer");
+            let progress = c.progress().progress;
+            let id = c.id;
+            let paths = c.receiving.finish();
+            if r.writer.send(Frame::Complete { id }).await.is_err() {
                 break;
             }
-            let _ = internal.send(Internal::Received {
-                conn,
+            let _ = r.internal.send(Internal::Received {
+                conn: r.conn,
                 id,
                 paths,
                 progress,
             });
         }
-        *receiving.borrow_mut() = current
-            .as_ref()
-            .map(|(id, started_ms, r)| progress_of(*id, *started_ms, r));
+        *r.receiving.borrow_mut() = current.as_ref().map(Incoming::progress);
     }
-    if let Some((_, _, receiving)) = current.take() {
-        receiving.discard().await;
+    // a resumable transfer stays for when it goes on
+    if let Some(c) = current.take() {
+        if !c.receiving.kept() {
+            c.discard().await;
+        }
     }
-    let _ = internal.send(Internal::Closed { conn });
+    let _ = r.internal.send(Internal::Closed { conn: r.conn });
 }
 
 /// Runs `f` with the rights of the user logged on: when RustInput runs as
@@ -1618,5 +2157,102 @@ fn as_user<T>(f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
     #[cfg(not(windows))]
     {
         f()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sha2::{Digest, Sha256};
+
+    fn at(file: u32, offset: u64, tail: &[u8]) -> Position {
+        Position {
+            file,
+            offset,
+            tail: if tail.is_empty() {
+                [0; wire::TAIL_HASH]
+            } else {
+                Sha256::digest(tail).into()
+            },
+        }
+    }
+
+    #[tokio::test]
+    async fn the_sender_goes_on_where_the_receiver_has_the_same_bytes() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = dir.path().join("Pasta");
+        fs::create_dir(&folder).unwrap();
+        fs::write(folder.join("a.bin"), b"0123456789").unwrap();
+        fs::write(folder.join("b.bin"), b"abcdef").unwrap();
+        let manifest = manifest::scan(std::slice::from_ref(&folder)).unwrap();
+        // the receiver has a.bin and "abc" of b.bin
+        let from = resume_at(&manifest, at(1, 3, b"abc")).await.unwrap();
+        assert_eq!((from.file, from.offset), (1, 3));
+        // what it has is not this file: b.bin again
+        let from = resume_at(&manifest, at(1, 3, b"xyz")).await.unwrap();
+        assert_eq!((from.file, from.offset), (1, 0));
+        // longer than the file, or nothing of it
+        let from = resume_at(&manifest, at(1, 99, b"abc")).await.unwrap();
+        assert_eq!((from.file, from.offset), (1, 0));
+        let from = resume_at(&manifest, at(0, 0, b"")).await.unwrap();
+        assert_eq!(from, Position::default());
+        // everything arrived
+        let from = resume_at(&manifest, at(2, 0, b"")).await.unwrap();
+        assert_eq!((from.file, from.offset), (2, 0));
+        assert!(resume_at(&manifest, at(3, 0, b"")).await.is_err());
+        // a file that changed since it was copied ends the transfer
+        fs::write(folder.join("b.bin"), b"abcdefgh").unwrap();
+        let changed = resume_at(&manifest, at(1, 3, b"abc")).await.unwrap_err();
+        assert!(changed.contains("b.bin changed"), "{changed}");
+    }
+
+    #[tokio::test]
+    async fn the_rest_is_streamed_from_the_position() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("a.bin"), b"0123456789").unwrap();
+        fs::write(dir.path().join("b.bin"), b"abcdef").unwrap();
+        let manifest =
+            manifest::scan(&[dir.path().join("a.bin"), dir.path().join("b.bin")]).unwrap();
+        let (writer, mut frames) = mpsc::channel(16);
+        let progress = Rc::new(RefCell::new(Progress {
+            files: 2,
+            bytes: 16,
+            ..Default::default()
+        }));
+        let from = Position {
+            file: 1,
+            offset: 2,
+            ..Default::default()
+        };
+        tokio::task::LocalSet::new()
+            .run_until(stream(7, &manifest, from, writer, progress.clone()))
+            .await
+            .unwrap();
+        let mut data = Vec::new();
+        while let Ok(frame) = frames.try_recv() {
+            match frame {
+                Frame::Data { id: 7, bytes } => data.extend(bytes),
+                frame => panic!("{frame:?}"),
+            }
+        }
+        assert_eq!(data, b"cdef");
+        let progress = progress.borrow();
+        assert_eq!((progress.files_done, progress.bytes_done), (2, 16));
+        assert_eq!(progress.resumed.map(|(bytes, _)| bytes), Some(12));
+    }
+
+    #[test]
+    fn the_key_follows_the_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("a.bin");
+        fs::write(&file, b"0123").unwrap();
+        let key = manifest::resume_key(&manifest::scan(std::slice::from_ref(&file)).unwrap());
+        assert_eq!(key.len(), 64);
+        assert_eq!(
+            key,
+            manifest::resume_key(&manifest::scan(std::slice::from_ref(&file)).unwrap())
+        );
+        fs::write(&file, b"01234").unwrap();
+        assert_ne!(key, manifest::resume_key(&manifest::scan(&[file]).unwrap()));
     }
 }

@@ -272,6 +272,14 @@ fn line(t: &TransferInfo) -> String {
                 }
             }
         },
+        TransferState::Interrupted => {
+            let values: [(&str, &dyn std::fmt::Display); 3] =
+                [("files", &files), ("name", name), ("percent", &percent)];
+            match t.sending {
+                true => trf("{files} to {name}: interrupted at {percent}%", &values),
+                false => trf("{files} from {name}: interrupted at {percent}%", &values),
+            }
+        }
         TransferState::Done if t.sending => {
             return format!(
                 "✓ {}",
@@ -368,6 +376,7 @@ mod tests {
             started_ms: 0,
             finished_ms: None,
             location: None,
+            resumed_bytes: None,
         }
     }
 

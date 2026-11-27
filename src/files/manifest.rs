@@ -31,7 +31,7 @@ impl Manifest {
     }
 }
 
-fn modified(metadata: &Metadata) -> Option<u64> {
+pub(crate) fn modified(metadata: &Metadata) -> Option<u64> {
     metadata
         .modified()
         .ok()?
@@ -125,6 +125,30 @@ fn add(manifest: &mut Manifest, path: &Path, name: String) -> io::Result<()> {
         log::warn!("skipping {path:?}: not a regular file");
     }
     Ok(())
+}
+
+/// Identifies the files of a resumable transfer to the receiver: the same
+/// files, unchanged, get the same key, so that offering them again goes on
+/// where an earlier transfer of them stopped. Hex of a SHA-256 of where they
+/// are here and of the entries.
+pub(crate) fn resume_key(manifest: &Manifest) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(b"resume");
+    for source in &manifest.sources {
+        hasher.update(source.to_string_lossy().as_bytes());
+        hasher.update([0]);
+    }
+    for entry in &manifest.entries {
+        hasher.update(entry.path.as_bytes());
+        hasher.update([0, u8::from(entry.dir)]);
+        hasher.update(entry.size.to_be_bytes());
+        hasher.update(entry.modified.unwrap_or(0).to_be_bytes());
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// Identifies a list of copied files by their paths, sizes and modification
