@@ -530,6 +530,14 @@ went down; the right Shift alone fires on its release when it was held 3 s
   from another one (it releases that one first). Nothing moves while
   paused.
 
+## Searching the copies (0.45.0)
+
+The search above the cards of the Clipboards tab only filters what the
+window has: each card shows the copies of its history whose text start (up
+to 1024 characters, `CLIPBOARD_HISTORY_TEXT`) or file names have the words,
+without regard to case, all of them while searching. Nothing is asked of the
+service for it.
+
 ## The clipboard only when asked (0.44.0)
 
 `clipboard_along` (on by default) decides whether this computer sends its

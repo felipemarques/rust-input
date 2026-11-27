@@ -65,6 +65,23 @@ pub struct Card {
     history: RefCell<Option<ClipboardHistory>>,
     show_all: Cell<bool>,
     bring: RefCell<Option<Bring>>,
+    /// what the search asks for, in lower case; empty: no search (0.45.0)
+    query: RefCell<String>,
+}
+
+/// whether a copy of the history has `query` (lower case) in its text or in
+/// the names of its files
+fn matches(item: &ClipboardHistoryItem, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    match &item.peek {
+        ClipboardPeek::Text { start, .. } => start.to_lowercase().contains(query),
+        ClipboardPeek::Files { names, .. } => {
+            names.iter().any(|n| n.to_lowercase().contains(query))
+        }
+        _ => false,
+    }
 }
 
 impl Window {
@@ -124,6 +141,27 @@ impl Window {
             }
         ));
         imp.along_switch.replace(Some(along));
+        // the search in the copies, above the cards (0.45.0)
+        let search = gtk::SearchEntry::builder()
+            .placeholder_text(tr("Search the copies"))
+            .hexpand(true)
+            .build();
+        let list = imp.clipboard_list.get();
+        if let Some(parent) = list.parent().and_then(|p| p.downcast::<gtk::Box>().ok()) {
+            parent.insert_child_after(&search, list.prev_sibling().as_ref());
+        }
+        search.connect_search_changed(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |entry| {
+                let query = entry.text().trim().to_lowercase();
+                window.imp().clipboard_query.replace(query.clone());
+                for card in window.imp().clipboard_cards.borrow().iter() {
+                    card.query.replace(query.clone());
+                    card.show_history();
+                }
+            }
+        ));
         // this computer first, before the service answers
         self.card(None, "");
     }
@@ -236,6 +274,7 @@ impl Window {
             return;
         }
         let card = Card::new(handle, name);
+        card.query.replace(imp.clipboard_query.borrow().clone());
         card.button.connect_clicked(clone!(
             #[weak(rename_to = window)]
             self,
@@ -470,6 +509,7 @@ impl Card {
             clear,
             history: RefCell::new(None),
             show_all: Cell::new(false),
+            query: Default::default(),
             bring: RefCell::new(None),
         }
     }
@@ -527,11 +567,21 @@ impl Card {
             ClipboardHistory::Older => Some(tr("Its RustInput is older, without a history.")),
         };
         let current = self.hash.get();
-        let items: Vec<&ClipboardHistoryItem> = match history {
+        let query = self.query.borrow().clone();
+        let all: Vec<&ClipboardHistoryItem> = match history {
             ClipboardHistory::Items(items) => {
                 items.iter().filter(|i| Some(i.hash) != current).collect()
             }
             _ => Vec::new(),
+        };
+        let items: Vec<&ClipboardHistoryItem> =
+            all.iter().copied().filter(|i| matches(i, &query)).collect();
+        let searching = !query.is_empty();
+        let note = match note {
+            None if searching && items.is_empty() && !all.is_empty() => {
+                Some(tr("No copy here has what is searched for."))
+            }
+            note => note,
         };
         if note.is_none() && items.is_empty() {
             // nothing copied before what it holds now
@@ -545,6 +595,13 @@ impl Card {
         self.clear.set_visible(here && !items.is_empty());
         self.history_title.set_label(&if items.is_empty() {
             tr("History").to_owned()
+        } else if searching {
+            trn(
+                "History · {count} copy found",
+                "History · {count} copies found",
+                items.len() as u64,
+                &[],
+            )
         } else {
             trn(
                 "History · {count} copy before",
@@ -553,7 +610,8 @@ impl Card {
                 &[],
             )
         });
-        let shown = if self.show_all.get() {
+        // what the search found is shown whole
+        let shown = if self.show_all.get() || searching {
             items.len()
         } else {
             items.len().min(FIRST_ITEMS)
@@ -561,7 +619,8 @@ impl Card {
         for item in &items[..shown] {
             self.history_list.append(&self.history_row(item));
         }
-        self.more.set_visible(items.len() > FIRST_ITEMS);
+        self.more
+            .set_visible(items.len() > FIRST_ITEMS && !searching);
         self.more.set_label(&if self.show_all.get() {
             tr("Show fewer").to_owned()
         } else {
@@ -841,4 +900,36 @@ fn texture(png: &[u8]) -> Option<gdk::Texture> {
     loader
         .pixbuf()
         .map(|pixbuf| gdk::Texture::for_pixbuf(&pixbuf))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(peek: ClipboardPeek) -> ClipboardHistoryItem {
+        ClipboardHistoryItem {
+            hash: 1,
+            when: 0,
+            peek,
+        }
+    }
+
+    #[test]
+    fn the_search_looks_into_texts_and_file_names() {
+        let text = item(ClipboardPeek::Text {
+            start: "SELECT name FROM Clientes".into(),
+            chars: 25,
+            lines: 1,
+            formatted: false,
+        });
+        let files = item(ClipboardPeek::Files {
+            names: vec!["Relatório Final.pdf".into()],
+            count: 1,
+        });
+        assert!(matches(&text, ""));
+        assert!(matches(&text, "clientes"));
+        assert!(!matches(&text, "pedidos"));
+        assert!(matches(&files, "relatório"));
+        assert!(!matches(&files, "select"));
+    }
 }

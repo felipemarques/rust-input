@@ -34,6 +34,7 @@ Move the pointer past the edge of the screen and keep working on the next comput
 | 👀 See what every computer copied, in one tab, and bring it here with one click | ✅ ¹⁶ | ✅ ¹⁶ | ✅ ² | ✅ ² |
 | 🕘 History of what each computer copied, in memory only; bring back any copy of any computer | ✅ ¹⁷ | ✅ ¹⁷ | — | ✅ ² |
 | ✋ The clipboard only when you ask (AltGr + right Shift + C), instead of along with the pointer | ✅ ²⁶ | ✅ ²⁶ | ✅ ² | ✅ ² |
+| 🔍 Search the history of the clipboards of every computer | ✅ ²⁷ | ✅ ²⁷ | — | ✅ ² |
 | 🎡 Radial menu: hold Ctrl+Alt, point at an action, let go | ✅ | ✅ | — | — |
 | ⌨️ Keyboard shortcuts to go to a computer, the next one or back here | ✅ ²³ | ✅ ²³ | ✅ ²⁴ | ✅ ²⁴ |
 | 📶 Latency and network usage of each connection, with charts of the last minute | ✅ ⁷ | ✅ | ✅ ² | ✅ ² |
@@ -95,6 +96,7 @@ switched on, on both computers (see [Finding the computers on the network](#find
 menu.
 ²⁵ New in 0.43.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
 ²⁶ New in 0.44.0: tested in automated runs between two Linux (X11) computers, not yet by hand.
+²⁷ New in 0.45.0: tested in automated runs on Linux (X11), not yet by hand.
 
 <p align="center">
   <img src="screenshots/main-window.png" width="820" alt="The Computers page of RustInput: this computer, its status and a connection">
@@ -151,6 +153,10 @@ transferred when it differs from what the two devices exchanged last.
 > - Files are not transferred, and neither is content larger than 64 MiB.
 
 To turn the clipboard synchronization off, set `clipboard = false` in the [configuration](#configuration) file.
+
+**Search the copies**, above the cards, looks into the history of every computer at once: the start of the texts and
+the names of copied files and folders, whatever the case. While it is typed, every copy that has it shows, not only the
+first five.
 
 ### Only when you ask
 
@@ -1192,6 +1198,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] Keyboard shortcuts to go to a computer, the next one or back here
 - [x] The tray icon shows where the mouse and keyboard are, and moves them to any computer
 - [x] The clipboard only when you ask (AltGr + right Shift + C)
+- [x] Search the history of the clipboards
 
 
 ## Detailed OS Support

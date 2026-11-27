@@ -819,91 +819,109 @@ msgstr "{files} من {name}، تم اللصق"
 msgid "{files} from {name}, not pasted"
 msgstr "{files} من {name}، لم يتم اللصق"
 
-#: rustinput-gtk/src/window/clipboard.rs:101
+#: rustinput-gtk/src/window/clipboard.rs:118
 msgid "Bring the clipboard along with the pointer"
 msgstr "نقل الحافظة مع المؤشر"
 
-#: rustinput-gtk/src/window/clipboard.rs:102
+#: rustinput-gtk/src/window/clipboard.rs:119
 msgid "Off: what is copied here goes to another computer only with AltGr + right Shift + C, the radial menu or the Clipboards tab"
 msgstr "معطّل: ما يُنسخ هنا لا يذهب إلى كمبيوتر آخر إلا بـ AltGr + Shift الأيمن + C، أو القائمة الدائرية، أو لسان الحافظات"
 
-#: rustinput-gtk/src/window/clipboard.rs:300
+#: rustinput-gtk/src/window/clipboard.rs:146
+msgid "Search the copies"
+msgstr "البحث في النسخ"
+
+#: rustinput-gtk/src/window/clipboard.rs:339
 msgid "Copying…"
 msgstr "جارٍ النسخ…"
 
-#: rustinput-gtk/src/window/clipboard.rs:320
+#: rustinput-gtk/src/window/clipboard.rs:359
 msgid "Copy here"
 msgstr "انسخ هنا"
 
-#: rustinput-gtk/src/window/clipboard.rs:324
+#: rustinput-gtk/src/window/clipboard.rs:363
 msgid "Back on the clipboard"
 msgstr "عاد إلى الحافظة"
 
-#: rustinput-gtk/src/window/clipboard.rs:325
+#: rustinput-gtk/src/window/clipboard.rs:364
 msgid "Could not put it back on the clipboard: {error}"
 msgstr "تعذّرت إعادته إلى الحافظة: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:329
+#: rustinput-gtk/src/window/clipboard.rs:368
 msgid "The files of {name} are on their way here"
 msgstr "ملفات {name} في طريقها إلى هنا"
 
-#: rustinput-gtk/src/window/clipboard.rs:333
+#: rustinput-gtk/src/window/clipboard.rs:372
 msgid "Copied here from {name}"
 msgstr "نُسخ هنا من {name}"
 
-#: rustinput-gtk/src/window/clipboard.rs:334
+#: rustinput-gtk/src/window/clipboard.rs:373
 msgid "Could not copy from {name}: {error}"
 msgstr "تعذّر النسخ من {name}: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:375
+#: rustinput-gtk/src/window/clipboard.rs:414
 msgid "Asking…"
 msgstr "جارٍ السؤال…"
 
-#: rustinput-gtk/src/window/clipboard.rs:398
+#: rustinput-gtk/src/window/clipboard.rs:437
 msgid "Put it on the clipboard of this computer"
 msgstr "ضعه في حافظة هذا الكمبيوتر"
 
-#: rustinput-gtk/src/window/clipboard.rs:428
+#: rustinput-gtk/src/window/clipboard.rs:467
 msgid "Clear"
 msgstr "مسح"
 
-#: rustinput-gtk/src/window/clipboard.rs:429
+#: rustinput-gtk/src/window/clipboard.rs:468
 msgid "Forget the history of this computer"
 msgstr "نسيان سجل هذا الكمبيوتر"
 
-#: rustinput-gtk/src/window/clipboard.rs:484
+#: rustinput-gtk/src/window/clipboard.rs:524
 msgid "The clipboard is not shared on this computer (clipboard = false)"
 msgstr "الحافظة غير مشتركة على هذا الكمبيوتر (clipboard = false)"
 
-#: rustinput-gtk/src/window/clipboard.rs:487
+#: rustinput-gtk/src/window/clipboard.rs:527
 msgid "Does not show its clipboard"
 msgstr "لا يُظهر حافظته"
 
-#: rustinput-gtk/src/window/clipboard.rs:489
+#: rustinput-gtk/src/window/clipboard.rs:529
 msgid "Could not be asked: {error}"
 msgstr "تعذّر السؤال: {error}"
 
-#: rustinput-gtk/src/window/clipboard.rs:520
+#: rustinput-gtk/src/window/clipboard.rs:560
 msgid "No history is kept on this computer: switch it on in Preferences."
 msgstr "لا يُحتفظ بسجل على هذا الكمبيوتر: شغّله من التفضيلات."
 
-#: rustinput-gtk/src/window/clipboard.rs:523
+#: rustinput-gtk/src/window/clipboard.rs:563
 msgid "It keeps no history of its clipboard."
 msgstr "لا يحتفظ بسجل لحافظته."
 
-#: rustinput-gtk/src/window/clipboard.rs:524
+#: rustinput-gtk/src/window/clipboard.rs:564
 msgid "New copies can not be noticed on its system yet (Wayland): no history."
 msgstr "لا يمكن بعد ملاحظة النسخ الجديدة على نظامه (Wayland): لا يوجد سجل."
 
-#: rustinput-gtk/src/window/clipboard.rs:527
+#: rustinput-gtk/src/window/clipboard.rs:567
 msgid "Its RustInput is older, without a history."
 msgstr "إصدار RustInput لديه أقدم، بلا سجل."
 
-#: rustinput-gtk/src/window/clipboard.rs:547
+#: rustinput-gtk/src/window/clipboard.rs:582
+msgid "No copy here has what is searched for."
+msgstr "لا توجد نسخة هنا تحتوي على ما يُبحث عنه."
+
+#: rustinput-gtk/src/window/clipboard.rs:597
 msgid "History"
 msgstr "السجل"
 
-#: rustinput-gtk/src/window/clipboard.rs:549
+#: rustinput-gtk/src/window/clipboard.rs:599
+msgid "History · {count} copy found"
+msgid_plural "History · {count} copies found"
+msgstr[0] "السجل · لم يُعثر على نسخ"
+msgstr[1] "السجل · نسخة واحدة"
+msgstr[2] "السجل · نسختان"
+msgstr[3] "السجل · {count} نسخ"
+msgstr[4] "السجل · {count} نسخة"
+msgstr[5] "السجل · {count} نسخة"
+
+#: rustinput-gtk/src/window/clipboard.rs:606
 msgid "History · {count} copy before"
 msgid_plural "History · {count} copies before"
 msgstr[0] "السجل · {count} نسخة سابقة"
@@ -913,23 +931,23 @@ msgstr[3] "السجل · {count} نسخ سابقة"
 msgstr[4] "السجل · {count} نسخة سابقة"
 msgstr[5] "السجل · {count} نسخة سابقة"
 
-#: rustinput-gtk/src/window/clipboard.rs:566
+#: rustinput-gtk/src/window/clipboard.rs:625
 msgid "Show fewer"
 msgstr "عرض أقل"
 
-#: rustinput-gtk/src/window/clipboard.rs:568
+#: rustinput-gtk/src/window/clipboard.rs:627
 msgid "Show all {count}"
 msgstr "عرض الكل ({count})"
 
-#: rustinput-gtk/src/window/clipboard.rs:591
+#: rustinput-gtk/src/window/clipboard.rs:650
 msgid "Formatted text"
 msgstr "نص منسّق"
 
-#: rustinput-gtk/src/window/clipboard.rs:593
+#: rustinput-gtk/src/window/clipboard.rs:652
 msgid "Text"
 msgstr "نص"
 
-#: rustinput-gtk/src/window/clipboard.rs:599
+#: rustinput-gtk/src/window/clipboard.rs:658
 msgid "{count} character"
 msgid_plural "{count} characters"
 msgstr[0] "{count} حرف"
@@ -939,15 +957,15 @@ msgstr[3] "{count} أحرف"
 msgstr[4] "{count} حرفًا"
 msgstr[5] "{count} حرف"
 
-#: rustinput-gtk/src/window/clipboard.rs:609
+#: rustinput-gtk/src/window/clipboard.rs:668
 msgid "Image, {width} × {height}"
 msgstr "صورة، {width} × {height}"
 
-#: rustinput-gtk/src/window/clipboard.rs:627
+#: rustinput-gtk/src/window/clipboard.rs:686
 msgid "Image"
 msgstr "صورة"
 
-#: rustinput-gtk/src/window/clipboard.rs:638
+#: rustinput-gtk/src/window/clipboard.rs:697
 msgid "{count} file or folder"
 msgid_plural "{count} files and folders"
 msgstr[0] "{count} ملف أو مجلد"
@@ -957,15 +975,15 @@ msgstr[3] "{count} ملفات ومجلدات"
 msgstr[4] "{count} ملفًا ومجلدًا"
 msgstr[5] "{count} ملف ومجلد"
 
-#: rustinput-gtk/src/window/clipboard.rs:683
+#: rustinput-gtk/src/window/clipboard.rs:742
 msgid "Copy"
 msgstr "نسخ"
 
-#: rustinput-gtk/src/window/clipboard.rs:709
+#: rustinput-gtk/src/window/clipboard.rs:768
 msgid "Empty"
 msgstr "فارغة"
 
-#: rustinput-gtk/src/window/clipboard.rs:735
+#: rustinput-gtk/src/window/clipboard.rs:794
 msgid "{count} line"
 msgid_plural "{count} lines"
 msgstr[0] "{count} سطر"
@@ -975,7 +993,7 @@ msgstr[3] "{count} أسطر"
 msgstr[4] "{count} سطرًا"
 msgstr[5] "{count} سطر"
 
-#: rustinput-gtk/src/window/clipboard.rs:775
+#: rustinput-gtk/src/window/clipboard.rs:834
 msgid "and {count} more"
 msgid_plural "and {count} more"
 msgstr[0] "و{count} أخرى"
@@ -985,15 +1003,15 @@ msgstr[3] "و{count} أخرى"
 msgstr[4] "و{count} أخرى"
 msgstr[5] "و{count} أخرى"
 
-#: rustinput-gtk/src/window/clipboard.rs:802
+#: rustinput-gtk/src/window/clipboard.rs:861
 msgid "A password manager marked it as secret: it is not shown, but it can be copied."
 msgstr "علّمه مدير كلمات المرور على أنه سرّي: لا يُعرض، لكن يمكن نسخه."
 
-#: rustinput-gtk/src/window/clipboard.rs:810
+#: rustinput-gtk/src/window/clipboard.rs:869
 msgid "Password, hidden"
 msgstr "كلمة مرور، مخفية"
 
-#: rustinput-gtk/src/window/imp.rs:261
+#: rustinput-gtk/src/window/imp.rs:263
 msgid "Failed to relaunch RustInput"
 msgstr "تعذّرت إعادة تشغيل RustInput"
 

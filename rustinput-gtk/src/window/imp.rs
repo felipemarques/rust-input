@@ -140,6 +140,8 @@ pub struct Window {
     #[template_child]
     pub clipboard_list: TemplateChild<gtk::Box>,
     pub clipboard_cards: RefCell<Vec<super::clipboard::Card>>,
+    /// what the search of the copies asks for, in lower case (0.45.0)
+    pub clipboard_query: RefCell<String>,
     /// asks the service about the clipboards while the tab is shown
     pub clipboard_timer: RefCell<Option<glib::SourceId>>,
     #[template_child]
