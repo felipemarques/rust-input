@@ -502,12 +502,22 @@ number of the latest release when it starts and every 12 hours, and nothing else
 - the tray icon gets a green sign with an arrow up, its tooltip says "RustInput 0.32.0 is out" and its menu has
   **Update to RustInput 0.32.0…**;
 - a notification of the system says so, once for each version, also after RustInput starts again. It does not show
-  when the window is in front, because the window says it already. Clicking it shows the window; on Linux and macOS
-  its button **Download** opens the release page. On Windows it is a notification of the tray icon;
+  when the window is in front, because the window says it already. Clicking it shows the window; its button **Update
+  now** installs it (Linux), or **Download** opens the release page. On Windows it is a notification of the tray icon;
 - a line under the header bar of the window says so, until **Later**.
 
+On Linux (0.51.0), **Update now** installs the new version itself: it downloads `SHA256SUMS` and `SHA256SUMS.sig` of
+the release, checks that the signature is the one of the release key built into RustInput (Ed25519; the public half is
+[build-aux/release-key.pub](build-aux/release-key.pub)), downloads the file for this installation and compares its
+SHA-256 with its line, and only then puts it in place of the one it runs from: the executable (the old one stays as
+`rustinput.previous`), the AppImage, or the package of Debian (with `pkexec apt-get`, which asks for the password of
+an administrator). HTTPS proves the files came from GitHub; the signature, that they came from the author of
+RustInput, even if the account or a release were tampered with. Anything that does not match is refused and
+RustInput stays as it was. The new version runs after **Restart now**. From Flatpak, or a folder of the system without
+a package, **Download** opens the release page instead.
+
 On Windows, **Update now** runs the updater the installer put next to RustInput (`update-rustinput.ps1`, the
-Start menu's "Update RustInput"), which asks for administrator rights once. Elsewhere, **Download** opens the release
+Start menu's "Update RustInput"), which asks for administrator rights once. On macOS, **Download** opens the release
 page. **Preferences > Updates** switches it on or off (`check_updates` in `config.toml`) and asks right away with
 **Check now**. Without `check_updates` there are no notifications, but **Check now** still shows a new version on the
 tray icon.
@@ -829,8 +839,8 @@ encrypted connections on the local network. If its user switches on **Show this 
 default), it tells the computers of its local network its name, the fingerprint of its certificate, its port, its
 version and its system, with UDP broadcasts, and listens for theirs. Those computers can also see what its clipboard holds, and its history,
 in their Clipboards tab, unless its user switches that off in Preferences. The history of the clipboard is kept in
-memory only, never written to disk. The installer and `update-rustinput.ps1` connect only to GitHub, to find
-and download releases of RustInput. If its user says yes when the window first asks (or switches it on in
+memory only, never written to disk. The installer, `update-rustinput.ps1` and **Update now** connect only to
+GitHub, to find and download releases of RustInput, and only when asked. If its user says yes when the window first asks (or switches it on in
 Preferences), RustInput asks GitHub for the number of its latest release when it starts and every 12 hours: one request
 for `github.com/felipemarques/rust-input/releases/latest`, which carries nothing about the user or the computers. It can
 be switched off at any time. RustInput collects no usage data and sends nothing anywhere else.
@@ -1052,6 +1062,7 @@ Other clients take the command `rustinput` with the argument `mcp` (on Windows, 
 | `switch_computer` | The mouse and keyboard to a computer, by name or number, or `home` |
 | `send_files` | Files and folders to the connected computers, as "Copy to RustInput" does |
 | `check_update` | Asks GitHub for the latest version, unless that is switched off |
+| `apply_update` | Installs the new version (Linux, as **Update now** does); it runs after **Restart now** |
 
 An agent never authorizes or pairs a computer (the code is there for a person to compare two screens), never types,
 presses keys or moves the pointer, and never reads a clipboard or its history: those stay with the person at the
@@ -1257,6 +1268,7 @@ Where `left` can be either `left`, `right`, `top` or `bottom`.
 - [x] What is new after an update, once; the version of RustInput of each computer in the list
 - [x] European Portuguese (pt-PT)
 - [x] An MCP server for AI agents (`rustinput mcp`)
+- [x] Updating on Linux with one click, from a signed list of checksums
 - [x] Find the computers running RustInput on the network, if switched on
 - [x] A computer paired with one of yours is offered to the others of the group, which ask once
 - [x] Keyboard shortcuts to go to a computer, the next one or back here

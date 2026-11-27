@@ -102,6 +102,16 @@ fn tools() -> Value {
                 switched that off, and tells whether it is newer than this one.",
             "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
             "annotations": { "readOnlyHint": true, "openWorldHint": true }
+        },
+        {
+            "name": "apply_update",
+            "title": "Install the new version",
+            "description": "Downloads the new version of RustInput from GitHub, checks its \
+                signature and installs it in place of this one (Linux). It runs once RustInput \
+                starts again, which the person does with Restart now. Use check_update first.",
+            "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+            "annotations": { "readOnlyHint": false, "destructiveHint": false,
+                "idempotentHint": true, "openWorldHint": true }
         }
     ])
 }
@@ -250,6 +260,7 @@ async fn call(name: &str, arguments: &Value) -> Option<Result<String, Failed>> {
         "switch_computer" => switch(arguments).await,
         "send_files" => send(arguments).await,
         "check_update" => check_update().await,
+        "apply_update" => apply_update().await,
         _ => return None,
     })
 }
@@ -354,6 +365,66 @@ async fn check_update() -> Result<String, Failed> {
         }
         (None, None, _) => format!("RustInput {this}; the latest version is not known yet."),
     })
+}
+
+async fn apply_update() -> Result<String, Failed> {
+    let (mut rx, mut tx) = connect_async(Some(Duration::from_millis(500)))
+        .await
+        .map_err(CliError::from)?;
+    let mut updates = None;
+    let _ = crate::where_now_with(&mut rx, |event| {
+        if let FrontendEvent::Updates(u) = event {
+            updates = Some(u.clone());
+        }
+    })
+    .await?;
+    let updates = updates.unwrap_or_default();
+    let latest = match (&updates.latest, updates.available) {
+        (Some(latest), true) => latest.clone(),
+        _ => {
+            return Err(Failed(format!(
+                "no newer version is known: RustInput {} (check_update asks GitHub)",
+                version()
+            )));
+        }
+    };
+    if let Some(rustinput_ipc::Install::Installed(installed)) = &updates.install {
+        return Ok(format!(
+            "RustInput {installed} is installed already; it runs once RustInput starts again \
+             (Restart now in its window)."
+        ));
+    }
+    if !updates.installable {
+        return Err(Failed(format!(
+            "this RustInput does not install new versions itself (it does on Linux, from its \
+             executable, AppImage or package of Debian): {}",
+            updates.url
+        )));
+    }
+    tx.request(FrontendRequest::InstallUpdate)
+        .await
+        .map_err(CliError::from)?;
+    let outcome = tokio::time::timeout(Duration::from_secs(15 * 60), async {
+        while let Some(Ok(event)) = rx.next().await {
+            if let FrontendEvent::Updates(u) = event {
+                match u.install {
+                    Some(rustinput_ipc::Install::Installed(v)) => return Ok(v),
+                    Some(rustinput_ipc::Install::Failed(e)) => return Err(e),
+                    _ => {}
+                }
+            }
+        }
+        Err("RustInput stopped while installing".to_owned())
+    })
+    .await
+    .map_err(|_| Failed("installing takes longer than 15 minutes; status tells".into()))?;
+    match outcome {
+        Ok(v) => Ok(format!(
+            "RustInput {v} is installed (signature and checksum checked); it runs once \
+             RustInput starts again: the person clicks Restart now in its window."
+        )),
+        Err(e) => Err(Failed(format!("installing RustInput {latest} failed: {e}"))),
+    }
 }
 
 /// the answer to one message, `None` for a notification
@@ -476,7 +547,13 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["status", "switch_computer", "send_files", "check_update"]
+            [
+                "status",
+                "switch_computer",
+                "send_files",
+                "check_update",
+                "apply_update"
+            ]
         );
         for tool in list["result"]["tools"].as_array().unwrap() {
             assert_eq!(tool["inputSchema"]["type"], "object", "{tool}");

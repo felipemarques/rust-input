@@ -869,6 +869,36 @@ in a line under the header bar (until "Later", for that version) and in the tray
 (the installer puts it there), which asks for administrator rights and installs; elsewhere
 **Download** opens the page of the release.
 
+### Installing a new version on Linux (0.51.0)
+
+`src/self_update.rs`. The release job of `release.yml` writes `SHA256SUMS`
+of the files for Linux and macOS (not those of Windows, which SignPath may
+replace afterwards) and signs it with `openssl pkeyutl -sign -rawin` and the
+repository secret `RELEASE_SIGNING_KEY` (an Ed25519 key in PEM), checking
+that its public half is `build-aux/release-key.pub` (32 bytes in hex, built
+in with `include_str!`). The private key was made on 27/11/2026 with
+`openssl genpkey -algorithm ed25519`; its owner keeps a copy offline. A new
+key means updating that file, and the RustInput already installed then
+needs one update by hand.
+
+`kind()` decides what replaces this RustInput: `$APPIMAGE` when it runs
+from one in a folder the user may write; the package of Debian when it is
+`/usr/bin/rustinput`, `/var/lib/dpkg/info/rustinput.list` exists and so does
+`pkexec`; else its executable, when its folder is writable and its name
+starts with `rustinput`; nothing in Flatpak. `UpdateState::installable` tells
+the window, which then says **Update now** and sends
+`FrontendRequest::InstallUpdate`; the service reports `UpdateState::install`
+(`Install::Downloading`, `Checking`, `Installing`, `Installed`, `Failed`).
+The downloads use the HTTPS of `update.rs` (rustls with the certificates of
+the system), follow GitHub's redirect to its storage, read sized and chunked
+answers, and fail after 60 s without data. The file is written beside its
+target as `.<file>.part` and renamed over it, the old one kept as
+`<name>.previous`. `restart()` in `main.rs` starts `self_update::program()`:
+the AppImage, or the executable without the " (deleted)" Linux appends once
+it is replaced. Debug builds take `RUSTINPUT_TEST_RELEASES` (a plain HTTP
+server) and `RUSTINPUT_TEST_RELEASE_KEY` (hex) for `e2e-tests/self-update.sh`;
+release builds take neither.
+
 ### The MCP server (0.50.0)
 
 `rustinput mcp` (`rustinput-cli/src/mcp.rs`) answers JSON-RPC 2.0 on stdin

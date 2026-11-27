@@ -547,6 +547,41 @@ pub struct UpdateState {
     /// ([`FrontendRequest::UpdateNotified`])
     #[serde(default)]
     pub notified: Option<String>,
+    /// this RustInput installs the new version itself, with
+    /// [`FrontendRequest::InstallUpdate`] (Linux: its executable, its
+    /// AppImage or its package of Debian, 0.51.0)
+    #[serde(default)]
+    pub installable: bool,
+    /// installing the new version, once asked to
+    #[serde(default)]
+    pub install: Option<Install>,
+}
+
+/// Where installing a new version is, see [`UpdateState::install`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Install {
+    /// downloading it: bytes so far, of `total` (0 while not known)
+    Downloading {
+        done: u64,
+        total: u64,
+    },
+    /// checking the signature of the release and the download
+    Checking,
+    /// installing it; a package asks for the password of an administrator
+    Installing,
+    /// installed: it runs when RustInput starts again
+    Installed(String),
+    Failed(String),
+}
+
+impl Install {
+    /// whether it is still going
+    pub fn busy(&self) -> bool {
+        matches!(
+            self,
+            Install::Downloading { .. } | Install::Checking | Install::Installing
+        )
+    }
 }
 
 /// One second of the input channel with a device: what went over the
@@ -840,6 +875,9 @@ pub enum FrontendRequest {
     SetCheckUpdates(bool),
     /// ask GitHub for the latest version now
     CheckUpdates,
+    /// downloads the new version, checks it and installs it, when
+    /// [`UpdateState::installable`] (0.51.0)
+    InstallUpdate,
     /// the user was told about the new version with a notification of the
     /// system (or saw it in the window), so it is not told again; kept in
     /// the configuration ([`UpdateState::notified`])

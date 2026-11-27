@@ -40,7 +40,9 @@ pub(crate) async fn latest() -> Result<String, String> {
         .map_err(|_| "GitHub did not answer".to_owned())?
 }
 
-async fn ask() -> Result<String, String> {
+/// TLS with the certificates of the system, for GitHub (also for
+/// downloading a new version, see [`crate::self_update`])
+pub(crate) fn tls_config() -> Result<rustls::ClientConfig, String> {
     let mut roots = rustls::RootCertStore::empty();
     let native = rustls_native_certs::load_native_certs();
     for error in &native.errors {
@@ -57,6 +59,11 @@ async fn ask() -> Result<String, String> {
     .map_err(|e| e.to_string())?
     .with_root_certificates(roots)
     .with_no_client_auth();
+    Ok(config)
+}
+
+async fn ask() -> Result<String, String> {
+    let config = tls_config()?;
     let server = ServerName::try_from(HOST).map_err(|e| e.to_string())?;
     let tcp = TcpStream::connect((HOST, 443))
         .await

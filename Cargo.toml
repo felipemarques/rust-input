@@ -72,6 +72,9 @@ rustls = { version = "0.23.12", default-features = false, features = [
 ] }
 rcgen = "0.13.1"
 sha2 = "0.10.8"
+# the signature of the checksums of a release, for installing a new version
+# (src/self_update.rs); already here through rustls
+ring = "0.17.14"
 notify = "8.2.0"
 arboard = { version = "3.7.0", features = ["wayland-data-control"] }
 png = "0.18.1"

@@ -164,6 +164,9 @@ pub struct Service {
     /// the latest version, or why it is not known
     update_results: Receiver<Result<String, String>>,
     update_results_tx: Sender<Result<String, String>>,
+    /// how installing a new version goes (0.51.0)
+    install_progress: tokio::sync::mpsc::UnboundedReceiver<rustinput_ipc::Install>,
+    install_progress_tx: tokio::sync::mpsc::UnboundedSender<rustinput_ipc::Install>,
     /// the clients that answered with a certificate not authorized here,
     /// with it and when the window was told
     not_authorized: HashMap<ClientHandle, (String, std::time::Instant)>,
@@ -331,9 +334,11 @@ impl Service {
             check: config.check_updates(),
             url: update::RELEASES_PAGE.to_owned(),
             notified: config.update_notified(),
+            installable: crate::self_update::kind().is_some(),
             ..Default::default()
         };
         let (update_results_tx, update_results) = channel();
+        let (install_progress_tx, install_progress) = tokio::sync::mpsc::unbounded_channel();
         let (clipboard_results_tx, clipboard_results) = channel();
         let show_clipboard = config.show_clipboard();
         let keep_clipboard_history = config.clipboard_history() > 0;
@@ -409,6 +414,8 @@ impl Service {
             update_due: Box::pin(tokio::time::sleep(UPDATE_FIRST)),
             update_results,
             update_results_tx,
+            install_progress,
+            install_progress_tx,
             not_authorized: HashMap::new(),
             show_clipboard,
             clipboard_seen: HashMap::new(),
@@ -480,6 +487,10 @@ impl Service {
                     self.check_updates();
                 }
                 Some(result) = self.update_results.recv() => self.updates_checked(result),
+                Some(state) = self.install_progress.recv() => {
+                    self.updates.install = Some(state);
+                    self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
+                }
                 r = signal::ctrl_c() => break r.expect("failed to wait for CTRL+C"),
             }
         }
@@ -640,6 +651,7 @@ impl Service {
                 self.notify_frontend(FrontendEvent::Updates(self.updates.clone()));
             }
             FrontendRequest::CheckUpdates => self.check_updates(),
+            FrontendRequest::InstallUpdate => self.install_update(),
             FrontendRequest::UpdateNotified(version) => {
                 if self.updates.notified.as_ref() != Some(&version) {
                     self.config.set_update_notified(version.clone());
@@ -1216,6 +1228,48 @@ impl Service {
         let results = self.update_results_tx.clone();
         tokio::task::spawn_local(async move {
             let _ = results.send(update::latest().await);
+        });
+    }
+
+    /// downloads the new version, checks it and installs it in place of this
+    /// one, once asked to (0.51.0)
+    fn install_update(&mut self) {
+        let busy = self.updates.install.as_ref().is_some_and(|i| i.busy());
+        let Some(version) = self
+            .updates
+            .latest
+            .clone()
+            .filter(|_| self.updates.available)
+        else {
+            return;
+        };
+        let Some(kind) = crate::self_update::kind().filter(|_| !busy) else {
+            return;
+        };
+        log::info!("installing RustInput {version} ({kind:?})");
+        let progress = self.install_progress_tx.clone();
+        progress
+            .send(rustinput_ipc::Install::Downloading { done: 0, total: 0 })
+            .ok();
+        tokio::task::spawn_local(async move {
+            let report = progress.clone();
+            let result = crate::self_update::install(kind, version.clone(), move |state| {
+                report.send(state).ok();
+            })
+            .await;
+            let done = match result {
+                Ok(()) => {
+                    log::info!(
+                        "RustInput {version} is installed: it runs when RustInput starts again"
+                    );
+                    rustinput_ipc::Install::Installed(version)
+                }
+                Err(e) => {
+                    log::warn!("installing RustInput {version} failed: {e}");
+                    rustinput_ipc::Install::Failed(e)
+                }
+            };
+            progress.send(done).ok();
         });
     }
 

@@ -18,6 +18,7 @@ mod lock;
 mod netstats;
 mod pairing;
 mod radial;
+pub mod self_update;
 pub mod service;
 mod update;
 #[cfg(windows)]

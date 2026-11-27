@@ -15,7 +15,7 @@ use gtk::{
 
 use rustinput_ipc::{
     ClientConfig, ClientHandle, ClientState, DEFAULT_PORT, FileOptions, FrontendRequest,
-    FrontendRequestWriter, LinkStats, Position, Theme, UpdateState,
+    FrontendRequestWriter, Install, LinkStats, Position, Theme, UpdateState,
 };
 
 use crate::{
@@ -997,7 +997,7 @@ impl Window {
                 window.request(FrontendRequest::SetCheckUpdates(switch.is_active()));
             }
         ));
-        imp.update_install_button.set_label(install_label());
+        imp.update_install_button.set_label(install_label(false));
         // the question shows once the service told that it was not asked yet
         imp.updates.borrow_mut().check = Some(false);
         self.show_updates();
@@ -1029,7 +1029,22 @@ impl Window {
     }
 
     pub(super) fn set_updates(&self, state: UpdateState) {
-        self.imp().updates.replace(state);
+        let before = self.imp().updates.replace(state.clone());
+        // installed just now: it runs once RustInput starts again
+        if let Some(Install::Installed(version)) = &state.install {
+            if !matches!(before.install, Some(Install::Installed(_))) {
+                let toast = adw::Toast::builder()
+                    .title(trf(
+                        "RustInput {version} is installed: it runs when RustInput starts again",
+                        &[("version", version)],
+                    ))
+                    .button_label(tr("Restart now"))
+                    .action_name("app.restart")
+                    .timeout(0)
+                    .build();
+                self.add_toast(toast);
+            }
+        }
         self.show_updates();
     }
 
@@ -1045,7 +1060,11 @@ impl Window {
 
         let current = crate::APP_VERSION.get().copied().unwrap_or_default();
         let latest = state.latest.clone().unwrap_or_default();
-        let status = if state.checking {
+        let installing = state.install.as_ref().is_some_and(|i| i.busy());
+        let installed = matches!(state.install, Some(Install::Installed(_)));
+        let status = if let Some(install) = &state.install {
+            install_status(install, &latest)
+        } else if state.checking {
             tr("Asking GitHub…").to_owned()
         } else if let Some(error) = &state.error {
             trf("Could not ask GitHub: {error}", &[("error", error)])
@@ -1062,6 +1081,12 @@ impl Window {
         imp.update_status_row.set_subtitle(&status);
         imp.update_check_button.set_sensitive(!state.checking);
         imp.update_install_button.set_visible(state.available);
+        imp.update_install_button.set_sensitive(!installing);
+        imp.update_install_button.set_label(if installed {
+            tr("Restart now")
+        } else {
+            install_label(state.installable)
+        });
 
         let dismissed = imp.update_dismissed.borrow().clone();
         let banner = match state.check {
@@ -1075,6 +1100,13 @@ impl Window {
                 tr("No"),
                 tr("Yes, look for them"),
             )),
+            Some(true) if installed || installing => Some((status.clone(), tr("Later"), {
+                if installed {
+                    tr("Restart now")
+                } else {
+                    install_label(state.installable)
+                }
+            })),
             Some(true) if state.available && dismissed.as_deref() != state.latest.as_deref() => {
                 Some((
                     trf(
@@ -1082,7 +1114,7 @@ impl Window {
                         &[("version", &latest), ("current", &current)],
                     ),
                     tr("Later"),
-                    install_label(),
+                    install_label(state.installable),
                 ))
             }
             _ => None,
@@ -1092,6 +1124,7 @@ impl Window {
                 imp.update_label.set_text(&text);
                 imp.update_no.set_label(no);
                 imp.update_yes.set_label(yes);
+                imp.update_yes.set_sensitive(!installing);
                 imp.update_revealer.set_reveal_child(true);
             }
             None => imp.update_revealer.set_reveal_child(false),
@@ -1114,10 +1147,23 @@ impl Window {
         }
     }
 
-    /// Gets the new version: on Windows the updater the installer put beside
-    /// RustInput, which asks for administrator rights, closes RustInput and
-    /// installs; elsewhere the page of the release opens.
+    /// Gets the new version: on Linux RustInput installs it itself (0.51.0),
+    /// and once installed this starts RustInput again; on Windows the updater
+    /// the installer put beside RustInput, which asks for administrator
+    /// rights, closes RustInput and installs; elsewhere the page of the
+    /// release opens.
     pub(crate) fn install_update(&self) {
+        let state = self.imp().updates.borrow().clone();
+        if matches!(state.install, Some(Install::Installed(_))) {
+            let _ = WidgetExt::activate_action(self, "app.restart", None);
+            return;
+        }
+        if state.installable {
+            if !state.install.as_ref().is_some_and(|i| i.busy()) {
+                self.request(FrontendRequest::InstallUpdate);
+            }
+            return;
+        }
         #[cfg(windows)]
         if let Some(script) = updater_script() {
             let powershell = std::env::var_os("SystemRoot")
@@ -1663,14 +1709,44 @@ fn show_status(
     row.set_visible(true);
 }
 
-/// what the button that gets a new version says: on Windows it installs
-/// it, elsewhere it opens the page to download it
-pub(crate) fn install_label() -> &'static str {
+/// what the button that gets a new version says: where RustInput installs
+/// it (`installable`, Linux) or its updater does (Windows) it installs it,
+/// elsewhere it opens the page to download it
+pub(crate) fn install_label(installable: bool) -> &'static str {
     #[cfg(windows)]
     if updater_script().is_some() {
         return tr("Update now");
     }
+    if installable {
+        return tr("Update now");
+    }
     tr("Download")
+}
+
+/// how installing the new version goes, for the preferences and the line
+/// under the header bar
+fn install_status(install: &Install, version: &str) -> String {
+    match install {
+        Install::Downloading { done, total } if *total > 0 => {
+            let percent = done * 100 / total;
+            trf(
+                "Downloading RustInput {version}… {percent} %",
+                &[("version", &version), ("percent", &percent)],
+            )
+        }
+        Install::Downloading { .. } => {
+            trf("Downloading RustInput {version}…", &[("version", &version)])
+        }
+        Install::Checking => tr("Checking the signature of the new version…").to_owned(),
+        Install::Installing => {
+            tr("Installing… the system may ask for the password of an administrator").to_owned()
+        }
+        Install::Installed(version) => trf(
+            "RustInput {version} is installed: it runs when RustInput starts again",
+            &[("version", version)],
+        ),
+        Install::Failed(error) => trf("The update failed: {error}", &[("error", error)]),
+    }
 }
 
 /// the updater the Windows installer puts beside RustInput
