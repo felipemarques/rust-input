@@ -7,6 +7,10 @@ Writing an entry: a `- ` line per change people will notice, in plain words, und
 between backticks. Each change is translated like the texts of the program: `cargo run -p rustinput-i18n --example
 update-po` puts it in `po/` (context `changelog`), and the window shows it in the language of the windows.
 
+## 0.53.0
+
+- A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off.
+
 ## 0.52.0
 
 - The sound of every computer in the headphones of one: switch on "Hear the other computers here" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there.
