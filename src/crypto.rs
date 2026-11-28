@@ -8,7 +8,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use webrtc_dtls::crypto::Certificate;
+use webrtc_dtls::{cipher_suite::CipherSuiteId, crypto::Certificate};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -17,6 +17,15 @@ pub enum Error {
     #[error(transparent)]
     Dtls(#[from] webrtc_dtls::Error),
 }
+
+/// The only DTLS cipher suite taken, both ways (0.54.0): ECDHE with AES-128-GCM.
+/// The defaults of webrtc-dtls also offered AES-256-CBC with SHA-1, never
+/// chosen between two RustInputs nor with Lan Mouse (both put AES-GCM first,
+/// and the handshake protects that choice), but one less to trust. Older
+/// versions and Lan Mouse offer AES-GCM, so they still connect. The
+/// certificates are ECDSA (webrtc-dtls takes no RSA key), hence no RSA suite.
+pub(crate) const DTLS_CIPHER_SUITES: [CipherSuiteId; 1] =
+    [CipherSuiteId::Tls_Ecdhe_Ecdsa_With_Aes_128_Gcm_Sha256];
 
 pub fn generate_fingerprint(cert: &[u8]) -> String {
     let mut hash = Sha256::new();

@@ -133,6 +133,7 @@ Focus lies on performance, ease of use and a maintainable implementation that ca
 ## Encryption
 
 RustInput encrypts all network traffic using the DTLS implementation provided by [WebRTC.rs](https://github.com/webrtc-rs/webrtc).
+It takes only ECDHE with AES-128-GCM (since 0.54.0), which Lan Mouse and older versions offer too.
 There are currently no mitigations in place for timing side-channel attacks.
 
 ## Clipboard

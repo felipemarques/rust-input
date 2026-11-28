@@ -129,6 +129,21 @@ type VerifyPeerCertificateFn = Arc<
         + Sync,
 >;
 
+/// the DTLS side of the connections other devices open to this one
+fn dtls_config(
+    cert: Certificate,
+    verify_peer_certificate: Option<VerifyPeerCertificateFn>,
+) -> Config {
+    Config {
+        certificates: vec![cert],
+        extended_master_secret: ExtendedMasterSecretType::Require,
+        client_auth: RequireAnyClientCert,
+        verify_peer_certificate,
+        cipher_suites: crypto::DTLS_CIPHER_SUITES.to_vec(),
+        ..Default::default()
+    }
+}
+
 impl RustInputListener {
     pub(crate) async fn new(
         port: u16,
@@ -168,13 +183,7 @@ impl RustInputListener {
                 },
             ))
         };
-        let cfg = Config {
-            certificates: vec![cert.clone()],
-            extended_master_secret: ExtendedMasterSecretType::Require,
-            client_auth: RequireAnyClientCert,
-            verify_peer_certificate,
-            ..Default::default()
-        };
+        let cfg = dtls_config(cert.clone(), verify_peer_certificate);
 
         let listen_addr = SocketAddr::new("0.0.0.0".parse().expect("invalid ip"), port);
         let mut listener = listen(listen_addr, cfg.clone()).await?;
@@ -450,6 +459,7 @@ async fn read_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use webrtc_dtls::cipher_suite::CipherSuiteId;
 
     #[test]
     fn a_computer_switched_off_is_refused() {
@@ -472,5 +482,82 @@ mod tests {
         // nor one that is not in the list
         assert!(!off.refuses(&stranger, at("192.168.1.60")));
         assert!(!SwitchedOff::default().refuses(&k11, at("192.168.1.51")));
+    }
+
+    fn certificate() -> Certificate {
+        Certificate::generate_self_signed(["ignored".to_owned()]).expect("certificate")
+    }
+
+    fn anyone() -> Option<VerifyPeerCertificateFn> {
+        Some(Arc::new(|_: &[Vec<u8>], _: &[CertificateDer<'static>]| {
+            Ok(())
+        }))
+    }
+
+    /// as Lan Mouse and RustInput before 0.54.0 listen: the default suites
+    fn default_server() -> Config {
+        Config {
+            cipher_suites: vec![],
+            ..dtls_config(certificate(), anyone())
+        }
+    }
+
+    /// as Lan Mouse and RustInput before 0.54.0 connect: the default suites
+    fn default_client() -> Config {
+        Config {
+            cipher_suites: vec![],
+            ..crate::connect::dtls_config(certificate())
+        }
+    }
+
+    fn cbc_only(config: Config) -> Config {
+        Config {
+            cipher_suites: vec![CipherSuiteId::Tls_Ecdhe_Ecdsa_With_Aes_256_Cbc_Sha],
+            ..config
+        }
+    }
+
+    /// whether a DTLS handshake on this machine gets through
+    async fn handshake(server: Config, client: Config) -> bool {
+        let at: SocketAddr = "127.0.0.1:0".parse().expect("address");
+        let listener = listen(at, server).await.expect("listen");
+        let addr = listener.addr().await.expect("address");
+        let socket = Arc::new(tokio::net::UdpSocket::bind(at).await.expect("bind"));
+        socket.connect(addr).await.expect("connect");
+        let both =
+            async { tokio::join!(listener.accept(), DTLSConn::new(socket, client, true, None)) };
+        let through = matches!(
+            tokio::time::timeout(Duration::from_secs(5), both).await,
+            Ok((Ok(_), Ok(_)))
+        );
+        let _ = listener.close().await;
+        through
+    }
+
+    #[tokio::test]
+    async fn only_aes_gcm_is_taken() {
+        let server = || dtls_config(certificate(), anyone());
+        let client = || crate::connect::dtls_config(certificate());
+        assert!(
+            handshake(server(), client()).await,
+            "RustInput with RustInput"
+        );
+        // Lan Mouse and older versions, both ways
+        assert!(
+            handshake(server(), default_client()).await,
+            "from Lan Mouse"
+        );
+        assert!(handshake(default_server(), client()).await, "to Lan Mouse");
+        // the old suite alone does get through with the defaults...
+        assert!(handshake(default_server(), cbc_only(default_client())).await);
+        // ...but not with RustInput, either way
+        assert!(
+            !handshake(server(), cbc_only(default_client())).await,
+            "CBC from"
+        );
+        assert!(
+            !handshake(cbc_only(default_server()), client()).await,
+            "CBC to"
+        );
     }
 }
