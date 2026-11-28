@@ -566,6 +566,11 @@ that took the address of one that is off, or one in between, would get every key
 the fingerprint it answered with and asks whether to authorize it. Clipboard and files go only between computers that
 authorized each other as well.
 
+The switch of a computer in the list of connections works both ways too (since 0.53.0; before, a computer switched off
+there could still control this one): switched off, it neither controls this computer nor is controlled by it, does not
+fill its clipboard and does not get its sound. It stays authorized, so switching it on again is enough. Its window
+says that this computer switched it off (0.53.0 or newer there) and its edge is a wall.
+
 **With a code, from the controlling computer** (both need RustInput 0.18.0 or newer):
 
 1. Add the other computer in RustInput and move the pointer to it. It refuses, and its window asks whether to

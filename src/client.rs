@@ -322,6 +322,14 @@ impl ClientManager {
         }
     }
 
+    /// the client says it has this computer switched off in its list (see
+    /// `ProtoEvent::SwitchedOff`)
+    pub(crate) fn set_switched_off(&self, handle: ClientHandle, off: bool) {
+        if let Some((_, s)) = self.clients.borrow_mut().get_mut(handle as usize) {
+            s.switched_off = off;
+        }
+    }
+
     pub(crate) fn set_peer_commit(&self, handle: ClientHandle, commit: Option<[u8; 8]>) {
         if let Some((_, s)) = self.clients.borrow_mut().get_mut(handle as usize) {
             s.peer_commit = commit;

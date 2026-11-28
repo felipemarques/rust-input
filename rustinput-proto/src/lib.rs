@@ -53,6 +53,12 @@ pub const CAP_PAUSE: u32 = 1 << 5;
 /// RustInput documentation); implies [`CAP_FILES`]
 pub const CAP_FILE_RESUME: u32 = 1 << 6;
 
+/// capability flag: the peer understands [`ProtoEvent::SwitchedOff`], which
+/// a RustInput sends along with its [`ProtoEvent::Pong`] to a device that
+/// is switched off in its list, so that device can tell it from paused or
+/// not available
+pub const CAP_SWITCHED_OFF: u32 = 1 << 7;
+
 /// Serial of the [`ProtoEvent::Ack`] the connect side sends right after
 /// connecting to find out whether the peer knows the newer events.
 ///
@@ -164,6 +170,11 @@ pub enum ProtoEvent {
     /// controlled, rather than without input emulation. A `Pong(true)` ends
     /// it. Only sent to peers with [`CAP_PAUSE`].
     Paused(bool),
+    /// Sent in answer to [`ProtoEvent::Ping`], after a `Pong(false)`, by a
+    /// device that has the pinging one switched off in its list: they
+    /// neither control nor are controlled by each other. A `Pong(true)`
+    /// ends it. Only sent to peers with [`CAP_SWITCHED_OFF`].
+    SwitchedOff(bool),
 }
 
 impl Display for ProtoEvent {
@@ -192,6 +203,7 @@ impl Display for ProtoEvent {
                 write!(f, "EnterSpan({pos}, {at:.3}, {lo:.3}..{hi:.3})")
             }
             ProtoEvent::Paused(paused) => write!(f, "Paused({paused})"),
+            ProtoEvent::SwitchedOff(off) => write!(f, "SwitchedOff({off})"),
         }
     }
 }
@@ -218,6 +230,7 @@ pub enum EventType {
     LeaveAt = 0x86,
     EnterSpan = 0x87,
     Paused = 0x88,
+    SwitchedOff = 0x89,
 }
 
 impl ProtoEvent {
@@ -246,6 +259,7 @@ impl ProtoEvent {
             ProtoEvent::LeaveAt(_) => EventType::LeaveAt,
             ProtoEvent::EnterSpan { .. } => EventType::EnterSpan,
             ProtoEvent::Paused(_) => EventType::Paused,
+            ProtoEvent::SwitchedOff(_) => EventType::SwitchedOff,
         }
     }
 }
@@ -320,6 +334,7 @@ impl TryFrom<[u8; MAX_EVENT_SIZE]> for ProtoEvent {
                 hi: decode_f32(&mut buf)?,
             }),
             EventType::Paused => Ok(Self::Paused(decode_u8(&mut buf)? != 0)),
+            EventType::SwitchedOff => Ok(Self::SwitchedOff(decode_u8(&mut buf)? != 0)),
         }
     }
 }
@@ -402,6 +417,7 @@ impl From<ProtoEvent> for ([u8; MAX_EVENT_SIZE], usize) {
                     encode_f32(buf, len, hi);
                 }
                 ProtoEvent::Paused(paused) => encode_u8(buf, len, paused as u8),
+                ProtoEvent::SwitchedOff(off) => encode_u8(buf, len, off as u8),
             }
         }
         (buf, len)
@@ -493,6 +509,20 @@ mod tests {
         ));
         let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::Paused(true).into();
         assert_eq!(&buf[..len], &[0x88, 1]);
+    }
+
+    #[test]
+    fn switched_off_roundtrip() {
+        assert!(matches!(
+            roundtrip(ProtoEvent::SwitchedOff(true)),
+            ProtoEvent::SwitchedOff(true)
+        ));
+        assert!(matches!(
+            roundtrip(ProtoEvent::SwitchedOff(false)),
+            ProtoEvent::SwitchedOff(false)
+        ));
+        let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = ProtoEvent::SwitchedOff(true).into();
+        assert_eq!(&buf[..len], &[0x89, 1]);
     }
 
     #[test]

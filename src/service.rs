@@ -13,7 +13,7 @@ use crate::{
     emulation::{Emulation, EmulationEvent},
     files::{self, FilesHandle},
     hotkeys::Hotkey,
-    listen::{ListenerCreationError, RustInputListener},
+    listen::{ListenerCreationError, RustInputListener, SwitchedOff},
     netstats::{NetStats, Sample},
     pairing::{self, PairError, Paired, Pairing, PairingEvent},
     radial::{self, Action, Item, Menu, Texts},
@@ -113,9 +113,11 @@ pub struct Service {
     locked: bool,
     /// paused by the user: neither controlling nor controlled
     paused: bool,
-    /// whether each client answered and whether it is paused, as the window
-    /// last heard
-    peer_states: HashMap<ClientHandle, (bool, bool)>,
+    /// whether each client answered, whether it is paused and whether it has
+    /// this computer switched off, as the window last heard
+    peer_states: HashMap<ClientHandle, (bool, bool, bool)>,
+    /// the computers switched off in the list, as the listener last heard
+    switched_off: SwitchedOff,
     /// state of the file transfers, whenever it changes
     transfer_reports: Receiver<Vec<TransferInfo>>,
     /// large transfers sent by themselves, to ask the window about
@@ -427,6 +429,7 @@ impl Service {
             locked: false,
             paused,
             peer_states: HashMap::new(),
+            switched_off: SwitchedOff::default(),
             layout,
             arrangement,
             arrangement_events,
@@ -1289,7 +1292,8 @@ impl Service {
             .get_client_states()
             .into_iter()
             .filter(|(handle, _, s)| {
-                self.peer_states.insert(*handle, (s.alive, s.paused)) != Some((s.alive, s.paused))
+                let state = (s.alive, s.paused, s.switched_off);
+                self.peer_states.insert(*handle, state) != Some(state)
             })
             .map(|(handle, ..)| handle)
             .collect();
@@ -1917,7 +1921,9 @@ impl Service {
         {
             self.capture.destroy(handle);
         }
+        self.descriptions.remove(&handle);
         self.notify_frontend(FrontendEvent::Deleted(handle));
+        self.update_switched_off();
     }
 
     fn update_fix_ips(&mut self, handle: ClientHandle, fix_ips: Vec<IpAddr>) {
@@ -1972,6 +1978,67 @@ impl Service {
             .map(|(c, s)| FrontendEvent::State(handle, c, s))
             .unwrap_or(FrontendEvent::NoSuchClient(handle));
         self.notify_frontend(event);
+        self.update_switched_off();
+    }
+
+    /// The computers of the list switched off (0.53.0): by the certificate
+    /// they described themselves with or have in the arrangement, else by
+    /// their addresses.
+    fn compute_switched_off(&self) -> SwitchedOff {
+        let mut switched_off = SwitchedOff::default();
+        let (mut ips_on, mut ips_off) = (HashSet::new(), HashSet::new());
+        for (handle, config, state) in self.client_manager.get_client_states() {
+            let ips = config
+                .fix_ips
+                .iter()
+                .chain(state.ips.iter())
+                .map(|ip| ip.to_canonical());
+            let fingerprint = self.known_fingerprint(handle);
+            if state.active {
+                ips_on.extend(ips);
+                switched_off.on.extend(fingerprint);
+            } else {
+                // by its address too: a new certificate (RustInput set up
+                // again there, and authorized again) is still that computer
+                ips_off.extend(ips);
+                switched_off.off.extend(fingerprint);
+            }
+        }
+        switched_off.ips = ips_off.difference(&ips_on).copied().collect();
+        switched_off
+    }
+
+    /// the certificate of a client: the one it described itself with, or
+    /// the one of its computer in the arrangement
+    fn known_fingerprint(&self, handle: ClientHandle) -> Option<String> {
+        if let Some(Ok((fingerprint, _))) = self.descriptions.get(&handle) {
+            return Some(fingerprint.clone());
+        }
+        self.layout
+            .machines
+            .iter()
+            .filter(|m| is_fingerprint(&m.id) && m.id != self.public_key_fingerprint)
+            .find(|m| self.client_for(m, None) == Some(handle))
+            .map(|m| m.id.clone())
+    }
+
+    /// tells the listener which computers of the list are switched off,
+    /// when that changed; the sound of this computer stops going to one
+    fn update_switched_off(&mut self) {
+        let switched_off = self.compute_switched_off();
+        if switched_off == self.switched_off {
+            return;
+        }
+        log::debug!("switched off in the list: {switched_off:?}");
+        if let Some((fingerprint, ip)) = self.sound.sending_to() {
+            if switched_off.refuses(&fingerprint, ip) {
+                log::info!("sound: the listening computer was switched off in the list");
+                self.sound.stopped(&fingerprint);
+                self.show_sound();
+            }
+        }
+        self.emulation.switched_off(switched_off.clone());
+        self.switched_off = switched_off;
     }
 
     fn spawn_hook_command(&self, handle: ClientHandle, kind: HookKind) {
@@ -2169,6 +2236,7 @@ impl Service {
                 active: state.active,
                 alive: state.alive,
                 paused: state.paused,
+                switched_off: state.switched_off,
                 version: match self.descriptions.get(&handle) {
                     Some(Ok((_, d))) => d.version.clone(),
                     _ => String::new(),
@@ -2335,7 +2403,11 @@ impl Service {
                     .get(&from)
                     .cloned()
                     .unwrap_or_else(|| addr.ip().to_string());
-                let result = self.sound.incoming(&from, &name, addr, port, &stream, &key);
+                let result = if self.switched_off.refuses(&from, addr.ip()) {
+                    Err("it has this computer switched off in its list".to_owned())
+                } else {
+                    self.sound.incoming(&from, &name, addr, port, &stream, &key)
+                };
                 if let Err(e) = &result {
                     log::info!("sound: {name} listens; not sending: {e}");
                 }
@@ -2422,6 +2494,7 @@ impl Service {
                 }
                 self.descriptions
                     .insert(handle, result.map_err(|e| e.to_string()));
+                self.update_switched_off();
                 self.show_arrangement(false);
             }
             ArrangeResult::Sent(name, result) => {
@@ -2550,6 +2623,7 @@ impl Service {
         self.layout = layout;
         self.arrangement.set_revision(self.layout.revision);
         self.save_config();
+        self.update_switched_off();
     }
 
     /// puts the client at `pos`, on the parts of the edges in `link`, active

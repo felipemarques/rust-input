@@ -42,6 +42,8 @@ pub(crate) struct Item {
     pub(crate) alive: bool,
     /// paused there by its user
     pub(crate) paused: bool,
+    /// it has this computer switched off in its list
+    pub(crate) switched_off: bool,
 }
 
 /// what the editor shows about the selected computer: one row per computer
@@ -394,12 +396,20 @@ impl ArrangementArea {
     }
 
     /// whether the connection is switched on and answers
-    pub(crate) fn set_state(&self, handle: ClientHandle, active: bool, alive: bool, paused: bool) {
+    pub(crate) fn set_state(
+        &self,
+        handle: ClientHandle,
+        active: bool,
+        alive: bool,
+        paused: bool,
+        switched_off: bool,
+    ) {
         let mut model = self.model_mut();
         if let Some(item) = model.items.iter_mut().find(|i| i.handle == Some(handle)) {
             item.active = active;
             item.alive = alive;
             item.paused = paused;
+            item.switched_off = switched_off;
         }
         drop(model);
         self.queue_draw();
@@ -453,6 +463,7 @@ impl ArrangementArea {
             active: true,
             alive: true,
             paused: false,
+            switched_off: false,
         }];
         let in_layout = |id: &str| view.layout.machine(id).is_some();
         let mut unplaced = Vec::new();
@@ -473,6 +484,7 @@ impl ArrangementArea {
                 active: peer.active,
                 alive,
                 paused,
+                switched_off: peer.switched_off,
             });
         }
         if dirty {
@@ -917,6 +929,8 @@ impl ArrangementArea {
                     tr("switched off")
                 } else if item.paused {
                     tr("paused there")
+                } else if item.switched_off {
+                    tr("switched this one off")
                 } else if item.alive {
                     tr("connected")
                 } else {
@@ -986,7 +1000,7 @@ impl ArrangementArea {
                 let dot = graphene::Rect::new(dot_x as f32, (y + 10.0) as f32, 8.0, 8.0);
                 let color = if item.alive {
                     success
-                } else if item.paused {
+                } else if item.paused || item.switched_off {
                     warning
                 } else {
                     dim
@@ -1155,6 +1169,7 @@ mod tests {
             active: true,
             alive: true,
             paused: false,
+            switched_off: false,
         }
     }
 

@@ -633,7 +633,7 @@ impl CaptureTask {
                 PREV_REFUSED_LOG,
                 DUR,
                 log::info!(
-                    "client {handle} takes no input now (paused there?), the edge is a wall"
+                    "client {handle} takes no input now (paused there, or this computer switched off there?), the edge is a wall"
                 )
             );
             return capture.release().await;

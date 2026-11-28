@@ -152,6 +152,9 @@ pub struct Peer {
     /// paused there by its user
     #[serde(default)]
     pub paused: bool,
+    /// it has this computer switched off in its list
+    #[serde(default)]
+    pub switched_off: bool,
     /// the version of its RustInput, when it described itself (empty from
     /// a RustInput before 0.48.0)
     #[serde(default)]

@@ -1,14 +1,14 @@
 use futures::{Stream, StreamExt};
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_proto::{
-    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
-    MAX_EVENT_SIZE, ProtoEvent,
+    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, CAP_SWITCHED_OFF, Datagram, HANDSHAKE_PROBE,
+    MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent,
 };
 use rustls::pki_types::CertificateDer;
 use std::{
     cell::RefCell,
-    collections::{HashMap, VecDeque},
-    net::SocketAddr,
+    collections::{HashMap, HashSet, VecDeque},
+    net::{IpAddr, SocketAddr},
     rc::Rc,
     sync::{Arc, Mutex, RwLock},
     time::Duration,
@@ -46,6 +46,33 @@ type ArcConn = Arc<dyn Conn + Send + Sync>;
 
 /// optional features announced by the connected devices
 type PeerCapabilities = Rc<RefCell<HashMap<SocketAddr, u32>>>;
+
+/// The computers switched off in the list of this one (0.53.0): like in
+/// the list, they neither control this one nor send it their clipboard.
+/// Known by the certificate they described themselves with, or else by
+/// their address.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SwitchedOff {
+    /// the certificates of computers switched off
+    pub(crate) off: HashSet<String>,
+    /// the certificates of computers switched on: one of them may connect
+    /// from the address of one switched off
+    pub(crate) on: HashSet<String>,
+    /// the addresses of computers switched off that no computer switched
+    /// on has
+    pub(crate) ips: HashSet<IpAddr>,
+}
+
+impl SwitchedOff {
+    /// whether the computer with the certificate `fingerprint`, connected
+    /// from `ip`, is switched off
+    pub(crate) fn refuses(&self, fingerprint: &str, ip: IpAddr) -> bool {
+        if self.off.contains(fingerprint) {
+            return true;
+        }
+        !self.on.contains(fingerprint) && self.ips.contains(&ip.to_canonical())
+    }
+}
 
 /// sends raw datagrams over the connections accepted by the listener
 #[derive(Clone)]
@@ -92,6 +119,8 @@ pub(crate) struct RustInputListener {
     request_port_change: Sender<u16>,
     port_changed: Receiver<Result<u16, ListenerCreationError>>,
     peer_capabilities: PeerCapabilities,
+    switched_off: Rc<RefCell<SwitchedOff>>,
+    clipboard: ClipboardHandle,
 }
 
 type VerifyPeerCertificateFn = Arc<
@@ -154,6 +183,9 @@ impl RustInputListener {
             Rc::new(AsyncMutex::new(Vec::new()));
         let peer_capabilities = PeerCapabilities::default();
         let capabilities = peer_capabilities.clone();
+        let switched_off: Rc<RefCell<SwitchedOff>> = Rc::default();
+        let off = switched_off.clone();
+        let clipboard_kept = clipboard.clone();
 
         let conns_clone = conns.clone();
         let listen_task: JoinHandle<()> = {
@@ -176,7 +208,7 @@ impl RustInputListener {
                                 let cert = certs.first().expect("cert");
                                 let fingerprint = crypto::generate_fingerprint(cert);
                                 listen_tx.send(ListenEvent::Accept { addr, fingerprint }).expect("channel closed");
-                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone(), clipboard.clone(), capabilities.clone()));
+                                spawn_local(read_loop(conns_clone.clone(), addr, conn, listen_tx.clone(), clipboard.clone(), capabilities.clone(), off.clone()));
                             },
                             Err(e) => {
                                 if let Error::Std(ref e) = e {
@@ -225,7 +257,32 @@ impl RustInputListener {
             port_changed,
             request_port_change,
             peer_capabilities,
+            switched_off,
+            clipboard: clipboard_kept,
         })
+    }
+
+    /// the computers switched off in the list of this one
+    pub(crate) fn set_switched_off(&self, switched_off: SwitchedOff) {
+        *self.switched_off.borrow_mut() = switched_off;
+    }
+
+    /// whether the computer connected from `addr` is switched off in the
+    /// list of this one
+    pub(crate) async fn switched_off(&self, addr: SocketAddr) -> bool {
+        let fingerprint = self.get_certificate_fingerprint(addr).await;
+        self.switched_off
+            .borrow()
+            .refuses(fingerprint.as_deref().unwrap_or(""), addr.ip())
+    }
+
+    /// The computer at `addr` stopped controlling this one: whatever was
+    /// copied here in the meantime goes back with it, unless it only goes
+    /// when asked (`clipboard_along`).
+    pub(crate) fn clipboard_back(&self, addr: SocketAddr) {
+        if self.clipboard.along() {
+            self.clipboard.push(Peer::Incoming(addr));
+        }
     }
 
     /// the optional features the device connected from `addr` announced
@@ -309,6 +366,7 @@ async fn read_loop(
     dtls_tx: Sender<ListenEvent>,
     clipboard: ClipboardHandle,
     peer_capabilities: PeerCapabilities,
+    switched_off: Rc<RefCell<SwitchedOff>>,
 ) -> Result<(), Error> {
     // every connection reaching this point presented an authorized certificate
     let peer = Peer::Incoming(addr);
@@ -316,8 +374,6 @@ async fn read_loop(
         .await
         .unwrap_or_default();
     let mut b = [0u8; MAX_DATAGRAM_SIZE];
-    // whether the peer controls this device now (entered and did not leave)
-    let mut entered = false;
 
     while let Ok(len) = conn.recv(&mut b).await {
         match Datagram::decode(&b[..len]) {
@@ -328,8 +384,11 @@ async fn read_loop(
                 let hello = ProtoEvent::Hello {
                     commit: local_commit(),
                 };
-                let flags =
-                    CAP_CURSOR_POSITION | CAP_EDGE_SPAN | CAP_PAUSE | clipboard.capabilities();
+                let flags = CAP_CURSOR_POSITION
+                    | CAP_EDGE_SPAN
+                    | CAP_PAUSE
+                    | CAP_SWITCHED_OFF
+                    | clipboard.capabilities();
                 for event in [hello, ProtoEvent::Capabilities(flags)] {
                     let (buf, len): ([u8; MAX_EVENT_SIZE], usize) = event.into();
                     let _ = conn.send(&buf[..len]).await;
@@ -345,27 +404,19 @@ async fn read_loop(
                     connect_to: None,
                 });
             }
-            Ok(Datagram::Event(event)) => {
-                match event {
-                    ProtoEvent::Enter(_)
-                    | ProtoEvent::EnterAt(..)
-                    | ProtoEvent::EnterSpan { .. } => entered = true,
-                    // The peer stopped controlling this device: whatever
-                    // was copied here in the meantime goes back with it.
-                    // Only then: a Leave at any time would let it pull
-                    // every new copy (a password from a password manager).
-                    ProtoEvent::Leave(_) => {
-                        let controlled = std::mem::take(&mut entered);
-                        // unless it only goes when asked (`clipboard_along`)
-                        if controlled && clipboard.along() {
-                            clipboard.push(peer);
-                        }
-                    }
-                    _ => {}
-                }
-                dtls_tx
-                    .send(ListenEvent::Msg { event, addr })
-                    .expect("channel closed")
+            // what was copied here goes back to the peer when it stops
+            // controlling this device, which the emulation knows: it was let
+            // in (not paused, locked or switched off)
+            Ok(Datagram::Event(event)) => dtls_tx
+                .send(ListenEvent::Msg { event, addr })
+                .expect("channel closed"),
+            // a computer switched off in the list does not fill the
+            // clipboard of this one (it copies just before crossing, before
+            // it knows it will not enter)
+            Ok(Datagram::Clipboard(_))
+                if switched_off.borrow().refuses(&fingerprint, addr.ip()) =>
+            {
+                log::debug!("{addr} is switched off in the list: its clipboard is dropped");
             }
             Ok(Datagram::Clipboard(frame)) => {
                 clipboard.notify(ClipboardMsg::Frame { peer, frame });
@@ -394,4 +445,32 @@ async fn read_loop(
         .expect("connection not found");
     conns.remove(index);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_computer_switched_off_is_refused() {
+        let k11 = "aa".repeat(32);
+        let laptop = "bb".repeat(32);
+        let stranger = "cc".repeat(32);
+        let at = |ip: &str| ip.parse::<IpAddr>().unwrap();
+        let off = SwitchedOff {
+            off: HashSet::from([k11.clone()]),
+            on: HashSet::from([laptop.clone()]),
+            ips: HashSet::from([at("192.168.1.51")]),
+        };
+        // by its certificate, from any address
+        assert!(off.refuses(&k11, at("10.0.0.7")));
+        // by its address, with a certificate not known here
+        assert!(off.refuses(&stranger, at("192.168.1.51")));
+        assert!(off.refuses(&stranger, at("::ffff:192.168.1.51")));
+        // a computer switched on, even from that address
+        assert!(!off.refuses(&laptop, at("192.168.1.51")));
+        // nor one that is not in the list
+        assert!(!off.refuses(&stranger, at("192.168.1.60")));
+        assert!(!SwitchedOff::default().refuses(&k11, at("192.168.1.51")));
+    }
 }
