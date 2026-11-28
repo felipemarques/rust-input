@@ -1525,115 +1525,120 @@ msgstr "Apuntar a una acción y soltar"
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
+msgid "The connection for mouse, keyboard and clipboard now takes only its modern encryption (AES-GCM): an older and weaker kind it still allowed, never used in practice, is refused. Lan Mouse and older versions of RustInput still connect."
+msgstr "La conexión del ratón, el teclado y el portapapeles ahora acepta solo su cifrado moderno (AES-GCM): un tipo más antiguo y más débil que aún permitía, nunca usado en la práctica, se rechaza. Lan Mouse y las versiones anteriores de RustInput siguen conectándose."
+
+#: CHANGELOG.md:16
+msgctxt "changelog"
 msgid "A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off."
 msgstr "Un equipo desactivado en la lista de conexiones ya tampoco controla este (antes sí): desactivado, ninguno controla al otro, y no llena el portapapeles de este ni recibe su sonido. Su ventana indica que este equipo lo desactivó."
 
-#: CHANGELOG.md:16
+#: CHANGELOG.md:20
 msgctxt "changelog"
 msgid "The sound of every computer in the headphones of one: switch on \"Hear the other computers here\" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there."
 msgstr "El sonido de todos los equipos en los auriculares de uno: activa «Escuchar aquí los otros equipos» en «Preferencias» del equipo con los auriculares. Los demás le envían su sonido, cifrado, con sus altavoces en silencio mientras tanto; cada uno tiene allí su volumen y silencio."
 
-#: CHANGELOG.md:20
+#: CHANGELOG.md:24
 msgctxt "changelog"
 msgid "Linux: \"Update now\" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after \"Restart now\". AI agents can do it too (apply_update)."
 msgstr "Linux: «Actualizar ahora» descarga la nueva versión, comprueba la firma de su publicación y la instala en lugar de esta; se ejecuta tras «Reiniciar ahora». Los agentes de IA también pueden hacerlo (apply_update)."
 
-#: CHANGELOG.md:24
+#: CHANGELOG.md:28
 msgctxt "changelog"
 msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
 msgstr "Un agente de IA (Claude Code, Claude Desktop o cualquier cliente MCP) puede ver dónde están el ratón y el teclado, moverlos a otro equipo, enviar archivos y buscar una versión nueva: `claude mcp add rustinput -- rustinput mcp`. Nunca autoriza un equipo, escribe ni lee un portapapeles."
 
-#: CHANGELOG.md:28
+#: CHANGELOG.md:32
 msgctxt "changelog"
 msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr "Português (Portugal): las ventanas, los menús, las novedades y el instalador para Windows también hablan el portugués de Portugal."
 
-#: CHANGELOG.md:32
+#: CHANGELOG.md:36
 msgctxt "changelog"
 msgid "After an update, the window shows what is new, once."
 msgstr "Tras una actualización, la ventana muestra las novedades una sola vez."
 
-#: CHANGELOG.md:33
+#: CHANGELOG.md:37
 msgctxt "changelog"
 msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr "La lista de equipos muestra qué versión de RustInput tiene cada uno y avisa cuando alguno es más antiguo que este."
 
-#: CHANGELOG.md:37
+#: CHANGELOG.md:41
 msgctxt "changelog"
 msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr "Linux: «Iniciar RustInput con la sesión», en «Preferencias», lo abre sin su ventana al iniciar sesión."
 
-#: CHANGELOG.md:41
+#: CHANGELOG.md:45
 msgctxt "changelog"
 msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr "`rustinput status`, `rustinput go <computer>` y `rustinput home` desde una terminal, y `rustinput status --waybar` para un módulo de Waybar."
 
-#: CHANGELOG.md:46
+#: CHANGELOG.md:50
 msgctxt "changelog"
 msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
 msgstr "Buscar en las copias: encima de las tarjetas de la pestaña «Portapapeles», la búsqueda mira en el historial de todos los equipos a la vez."
 
-#: CHANGELOG.md:50
+#: CHANGELOG.md:54
 msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr "El portapapeles solo cuando lo pidas: desactiva «Llevar el portapapeles junto con el puntero» en «Preferencias»; entonces AltGr + Mayús derecho + C lo lleva al equipo donde está el puntero, o trae el del equipo del que vino."
 
-#: CHANGELOG.md:55
+#: CHANGELOG.md:59
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr "El icono de la bandeja muestra dónde están el ratón y el teclado (una marca azul mientras están en otro equipo), y su menú los lleva a cualquier equipo."
 
-#: CHANGELOG.md:60
+#: CHANGELOG.md:64
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr "Atajos de teclado: AltGr + Mayús derecho + 1 … 9 va a ese equipo, + 0 vuelve a este; el Mayús derecho mantenido 3 segundos siempre trae de vuelta el puntero. Están en «Preferencias»."
 
-#: CHANGELOG.md:65
+#: CHANGELOG.md:69
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr "Un equipo emparejado con uno de los tuyos se ofrece a los demás, que preguntan una vez si autorizarlo también."
 
-#: CHANGELOG.md:66
+#: CHANGELOG.md:70
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr "Los nombres de otros equipos ya no pueden ocultar caracteres que invierten el sentido del texto."
 
-#: CHANGELOG.md:70
+#: CHANGELOG.md:74
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr "La sección «En esta red» de la pestaña «Equipos» encuentra los demás equipos cercanos con RustInput y los añade con un clic. Está desactivada hasta que actives «Mostrar este equipo a los demás» en cada equipo."
 
-#: CHANGELOG.md:75
+#: CHANGELOG.md:79
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr "La ventana de transferencias indica qué no se envió o no llegó, y por qué: enlaces a carpetas, archivos que cambiaron o desaparecieron mientras se enviaban (el resto sigue), nombres no permitidos en el otro sistema."
 
-#: CHANGELOG.md:80
+#: CHANGELOG.md:84
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr "Las copias grandes que llegan con el puntero piden confirmación antes (más de 1 GB; se ajusta con «Preguntar antes de recibir más de», en «Preferencias»)."
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr "Una transferencia que no cabe en el otro equipo se rechaza antes de empezar, indicando los tamaños."
 
-#: CHANGELOG.md:85
+#: CHANGELOG.md:89
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr "Una transferencia cortada por la red, un reinicio o un equipo apagado continúa desde el byte donde se detuvo."
 
-#: CHANGELOG.md:89
+#: CHANGELOG.md:93
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr "«Portapapeles» en el menú radial abre la pestaña «Portapapeles»."
 
-#: CHANGELOG.md:93
+#: CHANGELOG.md:97
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr "El historial del portapapeles de cada equipo, solo en memoria: recupera cualquier copia de cualquier equipo."
 
-#: CHANGELOG.md:97
+#: CHANGELOG.md:101
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr "La pestaña «Portapapeles» muestra lo que copió cada equipo, y «Copiar aquí» lo trae."

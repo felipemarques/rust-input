@@ -7,6 +7,10 @@ Writing an entry: a `- ` line per change people will notice, in plain words, und
 between backticks. Each change is translated like the texts of the program: `cargo run -p rustinput-i18n --example
 update-po` puts it in `po/` (context `changelog`), and the window shows it in the language of the windows.
 
+## 0.54.0
+
+- The connection for mouse, keyboard and clipboard now takes only its modern encryption (AES-GCM): an older and weaker kind it still allowed, never used in practice, is refused. Lan Mouse and older versions of RustInput still connect.
+
 ## 0.53.0
 
 - A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off.
