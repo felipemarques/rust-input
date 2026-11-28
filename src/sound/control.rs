@@ -5,7 +5,7 @@
 
 use std::{
     collections::HashMap,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     time::{Duration, Instant},
 };
 
@@ -31,9 +31,10 @@ struct Offer {
 /// what this computer sends its sound to
 struct Sending {
     sender: Sender,
-    /// the fingerprint and the name of the listening computer
+    /// the fingerprint, the name and the address of the listening computer
     listener: String,
     name: String,
+    ip: IpAddr,
     until: Instant,
 }
 
@@ -272,6 +273,7 @@ impl SoundControl {
             if sending.listener == from {
                 sending.sender.retarget(to, stream, &key);
                 sending.until = until;
+                sending.ip = addr.ip();
                 return Ok(());
             }
         }
@@ -282,10 +284,17 @@ impl SoundControl {
             }),
             listener: from.to_owned(),
             name: name.to_owned(),
+            ip: addr.ip(),
             until,
         });
         self.error = None;
         Ok(())
+    }
+
+    /// the certificate and the address of the computer this one sends its
+    /// sound to
+    pub(crate) fn sending_to(&self) -> Option<(String, IpAddr)> {
+        self.sending.as_ref().map(|s| (s.listener.clone(), s.ip))
     }
 
     /// the computer with the certificate `from` no longer listens

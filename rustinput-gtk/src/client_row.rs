@@ -239,6 +239,33 @@ impl ClientRow {
             .and_then(|co| co.property::<Option<String>>("peer-commit"));
         let local = crate::local_commit_str();
         self.remove_css_class("peer-paused");
+        // switched off here: what that means, rather than its version (it
+        // is not reached for it anyway)
+        let active = self
+            .imp()
+            .client_object
+            .borrow()
+            .as_ref()
+            .is_none_or(|co| co.property::<bool>("active"));
+        if !active {
+            for c in ["peer-mismatch", "peer-match", "peer-unknown"] {
+                self.remove_css_class(c);
+            }
+            self.set_subtitle(tr(
+                "Switched off: it neither controls this computer nor is controlled by it",
+            ));
+            return;
+        }
+        if self.imp().switched_off.get() {
+            for c in ["peer-mismatch", "peer-match", "peer-unknown"] {
+                self.remove_css_class(c);
+            }
+            self.add_css_class("peer-paused");
+            self.set_subtitle(tr(
+                "That computer switched this one off: neither controls the other",
+            ));
+            return;
+        }
         if self.imp().paused.get() {
             self.remove_css_class("peer-mismatch");
             self.remove_css_class("peer-match");

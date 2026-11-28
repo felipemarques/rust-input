@@ -1,5 +1,5 @@
 use crate::config::local_commit;
-use crate::listen::{ListenEvent, ListenerCreationError, RustInputListener};
+use crate::listen::{ListenEvent, ListenerCreationError, RustInputListener, SwitchedOff};
 use futures::StreamExt;
 use input_emulation::{EmulationHandle, InputEmulation, InputEmulationError};
 use input_event::{
@@ -7,7 +7,7 @@ use input_event::{
     edge::{Edge, Span},
 };
 use local_channel::mpsc::{Receiver, Sender, channel};
-use rustinput_proto::{CAP_CURSOR_POSITION, CAP_PAUSE, Position, ProtoEvent};
+use rustinput_proto::{CAP_CURSOR_POSITION, CAP_PAUSE, CAP_SWITCHED_OFF, Position, ProtoEvent};
 use std::{
     cell::Cell,
     collections::{HashMap, HashSet},
@@ -91,6 +91,8 @@ enum EmulationRequest {
     ChangePort(u16),
     /// paused, no other device controls this one
     Pause(bool),
+    /// the computers switched off in the list of this one
+    SwitchedOff(SwitchedOff),
     Terminate,
 }
 
@@ -141,6 +143,16 @@ impl Emulation {
     pub(crate) fn pause(&self, paused: bool) {
         self.request_tx
             .send(EmulationRequest::Pause(paused))
+            .expect("channel closed");
+    }
+
+    /// The computers switched off in the list of this one (0.53.0): one of
+    /// them that controls this one lets go of it, and they hear that this
+    /// one has them switched off (`Pong(false)`, and `SwitchedOff` for those
+    /// that know it) and keep their pointer.
+    pub(crate) fn switched_off(&self, switched_off: SwitchedOff) {
+        self.request_tx
+            .send(EmulationRequest::SwitchedOff(switched_off))
             .expect("channel closed");
     }
 
@@ -200,6 +212,11 @@ impl ListenTask {
                                 log::debug!("{addr} does not enter: paused or the screen is locked");
                                 self.listener.reply(addr, ProtoEvent::Leave(0)).await;
                             }
+                            ProtoEvent::Enter(..) | ProtoEvent::EnterAt(..) | ProtoEvent::EnterSpan { .. } if self.listener.switched_off(addr).await => {
+                                // the other device keeps its pointer
+                                log::debug!("{addr} does not enter: it is switched off in the list");
+                                self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                            }
                             ProtoEvent::Enter(pos) | ProtoEvent::EnterAt(pos, _) | ProtoEvent::EnterSpan { pos, .. } => {
                                 // the pointer is only placed on the first of
                                 // the (repeated) Enter events
@@ -224,7 +241,15 @@ impl ListenTask {
                                 }
                             }
                             ProtoEvent::Leave(_) => {
-                                entered.remove(&addr);
+                                // The peer stopped controlling this device:
+                                // whatever was copied here in the meantime
+                                // goes back with it. Only then, and only
+                                // when it was let in: a Leave at any time
+                                // would let it pull every new copy (a
+                                // password from a password manager).
+                                if entered.remove(&addr) {
+                                    self.listener.clipboard_back(addr);
+                                }
                                 self.emulation_proxy.remove(addr);
                                 self.listener.reply(addr, ProtoEvent::Ack(0)).await;
                             }
@@ -247,10 +272,14 @@ impl ListenTask {
                                 }
                             }
                             ProtoEvent::Ping => {
-                                let available = self.emulation_proxy.emulation_active.get() && !paused;
+                                let off = self.listener.switched_off(addr).await;
+                                let available = self.emulation_proxy.emulation_active.get() && !paused && !off;
                                 self.listener.reply(addr, ProtoEvent::Pong(available)).await;
-                                if paused && self.listener.peer_capabilities(addr) & CAP_PAUSE != 0 {
+                                let capabilities = self.listener.peer_capabilities(addr);
+                                if paused && capabilities & CAP_PAUSE != 0 {
                                     self.listener.reply(addr, ProtoEvent::Paused(true)).await;
+                                } else if off && capabilities & CAP_SWITCHED_OFF != 0 {
+                                    self.listener.reply(addr, ProtoEvent::SwitchedOff(true)).await;
                                 }
                             }
                             // Peer's version handshake. Echo our own
@@ -307,6 +336,22 @@ impl ListenTask {
                                 log::info!("paused: {addr} no longer controls this device");
                                 self.emulation_proxy.remove(addr);
                                 self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                            }
+                        }
+                    }
+                    EmulationRequest::SwitchedOff(switched_off) => {
+                        self.listener.set_switched_off(switched_off);
+                        // the devices controlling this one that were
+                        // switched off let go of it, and the keys they hold
+                        // are let go here
+                        for addr in entered.clone() {
+                            if self.listener.switched_off(addr).await {
+                                log::info!("{addr} no longer controls this device: it was switched off in the list");
+                                entered.remove(&addr);
+                                self.emulation_proxy.remove(addr);
+                                self.listener.reply(addr, ProtoEvent::Leave(0)).await;
+                                // nor comes back through the edge it left from
+                                self.event_tx.send(EmulationEvent::Disconnected { addr }).expect("channel closed");
                             }
                         }
                     }

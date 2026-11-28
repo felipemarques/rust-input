@@ -6,8 +6,8 @@ use crate::netstats::NetStats;
 use local_channel::mpsc::{Receiver, Sender, channel};
 use rustinput_ipc::{ClientHandle, DEFAULT_PORT};
 use rustinput_proto::{
-    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, Datagram, HANDSHAKE_PROBE, MAX_DATAGRAM_SIZE,
-    MAX_EVENT_SIZE, ProtoEvent,
+    CAP_CURSOR_POSITION, CAP_EDGE_SPAN, CAP_PAUSE, CAP_SWITCHED_OFF, Datagram, HANDSHAKE_PROBE,
+    MAX_DATAGRAM_SIZE, MAX_EVENT_SIZE, ProtoEvent,
 };
 use std::{
     cell::RefCell,
@@ -438,6 +438,7 @@ async fn receive_loop(
     let flags = CAP_CURSOR_POSITION
         | CAP_EDGE_SPAN
         | CAP_PAUSE
+        | CAP_SWITCHED_OFF
         | clipboard.as_ref().map_or(0, |(c, _)| c.capabilities());
     // whether the peer was told our build and features
     let mut introduced = false;
@@ -459,13 +460,27 @@ async fn receive_loop(
                     ProtoEvent::Pong(b) => {
                         client_manager.set_active_addr(handle, Some(addr));
                         client_manager.set_alive(handle, b);
-                        // a paused peer follows with `Paused(true)`
+                        // a paused peer follows with `Paused(true)`, one
+                        // that has this computer switched off with
+                        // `SwitchedOff(true)`
                         if b {
                             client_manager.set_paused(handle, false);
+                            client_manager.set_switched_off(handle, false);
                         }
                         ping_response.borrow_mut().insert(addr);
                     }
-                    ProtoEvent::Paused(paused) => client_manager.set_paused(handle, paused),
+                    ProtoEvent::Paused(paused) => {
+                        client_manager.set_paused(handle, paused);
+                        if paused {
+                            client_manager.set_switched_off(handle, false);
+                        }
+                    }
+                    ProtoEvent::SwitchedOff(off) => {
+                        client_manager.set_switched_off(handle, off);
+                        if off {
+                            client_manager.set_paused(handle, false);
+                        }
+                    }
                     ProtoEvent::Hello { commit } => {
                         client_manager.set_peer_commit(handle, Some(commit));
                     }
@@ -515,6 +530,7 @@ async fn disconnect(
     client_manager.set_peer_commit(handle, None);
     client_manager.set_peer_capabilities(handle, 0);
     client_manager.set_paused(handle, false);
+    client_manager.set_switched_off(handle, false);
     let active: Vec<SocketAddr> = conns.lock().await.keys().copied().collect();
     log::info!("active connections: {active:?}");
 }

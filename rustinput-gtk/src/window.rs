@@ -807,10 +807,15 @@ impl Window {
         /* activation state */
         row.set_active(state.active);
         row.imp().paused.set(state.paused);
+        row.imp().switched_off.set(state.switched_off);
         if let Some(parts) = self.imp().arrangement.borrow().as_ref() {
-            parts
-                .area
-                .set_state(handle, state.active, state.alive, state.paused);
+            parts.area.set_state(
+                handle,
+                state.active,
+                state.alive,
+                state.paused,
+                state.switched_off,
+            );
         }
 
         /* dns state */

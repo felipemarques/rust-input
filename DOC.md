@@ -671,6 +671,50 @@ and keeps the pause in its configuration; resumed, it crosses again; B
 paused is seen by A as paused and is a wall; pausing B while A controls it,
 and pausing A while it controls B, gives the pointer back to A.
 
+## Switched off in the list
+
+The switch of a computer in the list of connections works both ways (since
+0.53.0; before, it only kept the mouse and keyboard of this computer from
+going there, and any authorized computer could still control this one):
+switched off, that computer neither controls this one nor is controlled by
+it, does not fill its clipboard, and does not get its sound. It stays
+authorized: switched on again, it works at once.
+
+The service works out which computers of the list are switched off
+(`Service::compute_switched_off`) whenever a client changes, describes itself
+or the arrangement changes, and hands them to the listen side
+(`Emulation::switched_off`, a `listen::SwitchedOff`): their certificates,
+from the description of the client or its computer in the arrangement, and
+their addresses, for a client whose certificate is not known (and a new
+certificate of that computer). A computer switched on keeps its certificate
+out of it, also when it connects from the address of one switched off. The
+listen side then:
+
+- lets go of a computer switched off that controls this one (its pressed
+  keys are released here, it gets `Leave`, and its way back through the
+  edge is removed);
+- answers its `Enter` with `Leave` and drops its input;
+- drops its clipboard frames (it copies just before crossing, before it
+  knows it will not enter), and sends the clipboard of this one back only to
+  a computer that was let in;
+- answers its `Ping` with `Pong(false)`, followed by `SwitchedOff(true)`
+  (0x89) for peers with `CAP_SWITCHED_OFF`. A `Pong(true)` ends it.
+
+The other computer keeps it in its client state
+(`ClientState::switched_off`, also in the arrangement view): its window
+says "That computer switched this one off" and the edge is a wall, like for
+a paused one. Older peers get `Pong(false)` only, which they already treat
+so. A computer listening for the sound of one that has it switched off is
+refused ("it has this computer switched off in its list"), and the sound
+stops going to a listening computer as it is switched off.
+
+`e2e-tests/switched-off.sh` checks it with two instances that have each
+other in their lists: B switching A off while A controls it lets go of A;
+A then does not cross, sees that B switched it off and has a wall; a new A
+crossing at once is refused, its clipboard too; B knowing the certificate
+of A still refuses it; switched on again, A crosses and its clipboard
+arrives; switching off just before A crosses keeps the clipboard of B.
+
 ## Latency and network usage
 
 Every connection of the input channel, made or accepted, is wrapped in a

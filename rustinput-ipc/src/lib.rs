@@ -258,6 +258,11 @@ pub struct ClientState {
     /// controlled (it answers, but `alive` is false)
     #[serde(default)]
     pub paused: bool,
+    /// the client has this computer switched off in its list: they neither
+    /// control nor are controlled by each other (it answers, but `alive` is
+    /// false)
+    #[serde(default)]
+    pub switched_off: bool,
 }
 
 /// a file transfer, as shown to the user
