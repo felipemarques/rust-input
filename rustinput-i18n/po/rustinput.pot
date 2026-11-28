@@ -1523,115 +1523,120 @@ msgstr ""
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
-msgid "A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off."
+msgid "The connection for mouse, keyboard and clipboard now takes only its modern encryption (AES-GCM): an older and weaker kind it still allowed, never used in practice, is refused. Lan Mouse and older versions of RustInput still connect."
 msgstr ""
 
 #: CHANGELOG.md:16
 msgctxt "changelog"
-msgid "The sound of every computer in the headphones of one: switch on \"Hear the other computers here\" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there."
+msgid "A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off."
 msgstr ""
 
 #: CHANGELOG.md:20
 msgctxt "changelog"
-msgid "Linux: \"Update now\" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after \"Restart now\". AI agents can do it too (apply_update)."
+msgid "The sound of every computer in the headphones of one: switch on \"Hear the other computers here\" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there."
 msgstr ""
 
 #: CHANGELOG.md:24
 msgctxt "changelog"
-msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
+msgid "Linux: \"Update now\" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after \"Restart now\". AI agents can do it too (apply_update)."
 msgstr ""
 
 #: CHANGELOG.md:28
 msgctxt "changelog"
-msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
+msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
 msgstr ""
 
 #: CHANGELOG.md:32
 msgctxt "changelog"
-msgid "After an update, the window shows what is new, once."
+msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr ""
 
-#: CHANGELOG.md:33
+#: CHANGELOG.md:36
 msgctxt "changelog"
-msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
+msgid "After an update, the window shows what is new, once."
 msgstr ""
 
 #: CHANGELOG.md:37
 msgctxt "changelog"
-msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
+msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr ""
 
 #: CHANGELOG.md:41
 msgctxt "changelog"
-msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
+msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr ""
 
-#: CHANGELOG.md:46
+#: CHANGELOG.md:45
 msgctxt "changelog"
-msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
+msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr ""
 
 #: CHANGELOG.md:50
 msgctxt "changelog"
+msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
+msgstr ""
+
+#: CHANGELOG.md:54
+msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr ""
 
-#: CHANGELOG.md:55
+#: CHANGELOG.md:59
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr ""
 
-#: CHANGELOG.md:60
+#: CHANGELOG.md:64
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr ""
 
-#: CHANGELOG.md:65
+#: CHANGELOG.md:69
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr ""
 
-#: CHANGELOG.md:66
+#: CHANGELOG.md:70
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr ""
 
-#: CHANGELOG.md:70
+#: CHANGELOG.md:74
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr ""
 
-#: CHANGELOG.md:75
+#: CHANGELOG.md:79
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr ""
 
-#: CHANGELOG.md:80
+#: CHANGELOG.md:84
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr ""
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr ""
 
-#: CHANGELOG.md:85
+#: CHANGELOG.md:89
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr ""
 
-#: CHANGELOG.md:89
+#: CHANGELOG.md:93
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr ""
 
-#: CHANGELOG.md:93
+#: CHANGELOG.md:97
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr ""
 
-#: CHANGELOG.md:97
+#: CHANGELOG.md:101
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr ""

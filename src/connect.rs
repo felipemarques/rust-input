@@ -51,6 +51,18 @@ pub(crate) enum RustInputConnectionError {
 
 const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// the DTLS side of a connection this device opens
+pub(crate) fn dtls_config(cert: Certificate) -> Config {
+    Config {
+        certificates: vec![cert],
+        server_name: "ignored".to_owned(),
+        insecure_skip_verify: true,
+        extended_master_secret: ExtendedMasterSecretType::Require,
+        cipher_suites: crypto::DTLS_CIPHER_SUITES.to_vec(),
+        ..Default::default()
+    }
+}
+
 async fn connect(
     addr: SocketAddr,
     cert: Certificate,
@@ -62,13 +74,7 @@ async fn connect(
             .map_err(|e| (addr, e.into()))?,
     );
     conn.connect(addr).await.map_err(|e| (addr, e.into()))?;
-    let config = Config {
-        certificates: vec![cert],
-        server_name: "ignored".to_owned(),
-        insecure_skip_verify: true,
-        extended_master_secret: ExtendedMasterSecretType::Require,
-        ..Default::default()
-    };
+    let config = dtls_config(cert);
     let timeout = tokio::time::sleep(DEFAULT_CONNECTION_TIMEOUT);
     tokio::select! {
         _ = timeout => Err((addr, RustInputConnectionError::Timeout)),

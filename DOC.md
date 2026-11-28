@@ -1315,6 +1315,18 @@ remotes, which `shadow-rs` does not do) have no fixed version and do not fail th
 `.github/workflows/audit.yml` runs `cargo audit` every Monday and on every change of the
 dependencies, so a new advisory fails a run instead of waiting for someone to look.
 
+### Only AES-GCM in DTLS (0.54.0)
+
+The defaults of `webrtc-dtls` offer two suites: ECDHE-ECDSA with AES-128-GCM, and with
+AES-256-CBC and SHA-1 (plus their RSA twins, which it cannot use: it takes only ECDSA and
+Ed25519 keys). Both sides put AES-GCM first and the Finished messages cover that choice, so CBC
+was never negotiated; still, MAC-then-encrypt with SHA-1 is one suite less to trust. Both
+configurations, `connect::dtls_config` and `listen::dtls_config`, now name
+`crypto::DTLS_CIPHER_SUITES`, AES-GCM alone. Lan Mouse and RustInput before 0.54.0 keep the
+defaults, which offer it, so they still connect either way. `listen::tests::only_aes_gcm_is_taken`
+does real handshakes on 127.0.0.1: RustInput with RustInput, with the defaults both ways, and a
+peer offering only CBC refused both ways (while the defaults take it, so the refusal is ours).
+
 ## The Windows installer
 
 `rustinput-windows-x86_64-setup.exe`, built with Inno Setup 6 from

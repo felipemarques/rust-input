@@ -1515,115 +1515,120 @@ msgstr "操作にポインターを合わせて離してください"
 
 #: CHANGELOG.md:12
 msgctxt "changelog"
+msgid "The connection for mouse, keyboard and clipboard now takes only its modern encryption (AES-GCM): an older and weaker kind it still allowed, never used in practice, is refused. Lan Mouse and older versions of RustInput still connect."
+msgstr "マウス、キーボード、クリップボードの接続は、最新の暗号化（AES-GCM）だけを受け付けるようになりました。まだ許可していた古くて弱い方式（実際には使われていませんでした）は拒否されます。Lan Mouse と以前のバージョンの RustInput は引き続き接続できます。"
+
+#: CHANGELOG.md:16
+msgctxt "changelog"
 msgid "A computer switched off in the list of connections can no longer control this one either (it could before): switched off, neither controls the other, and it does not fill the clipboard of this one or get its sound. Its window says that this computer switched it off."
 msgstr "接続の一覧でオフにしたコンピューターは、こちらを操作することもできなくなりました（以前はできました）。オフの間はどちらも相手を操作せず、こちらのクリップボードに書き込むことも、こちらの音を受け取ることもありません。そのコンピューターのウィンドウには、こちらがオフにしたことが表示されます。"
 
-#: CHANGELOG.md:16
+#: CHANGELOG.md:20
 msgctxt "changelog"
 msgid "The sound of every computer in the headphones of one: switch on \"Hear the other computers here\" in Preferences on the computer with the headphones. The others send it their sound, encrypted, with their speakers silent meanwhile; each one has its volume and mute there."
 msgstr "すべてのコンピューターの音を 1 台のヘッドホンで: ヘッドホンをつないだコンピューターの「設定」で「ほかのコンピューターの音をここで聞く」をオンにします。ほかのコンピューターは音を暗号化して送り、その間スピーカーは鳴りません。それぞれの音量とミュートはそこで設定できます。"
 
-#: CHANGELOG.md:20
+#: CHANGELOG.md:24
 msgctxt "changelog"
 msgid "Linux: \"Update now\" downloads the new version, checks the signature of its release and installs it in place of this one; it runs after \"Restart now\". AI agents can do it too (apply_update)."
 msgstr "Linux: 「今すぐ更新」で新しいバージョンをダウンロードし、リリースの署名を確認して現在のバージョンと置き換えます。「今すぐ再起動」の後に動作します。AI エージェントも実行できます (apply_update)。"
 
-#: CHANGELOG.md:24
+#: CHANGELOG.md:28
 msgctxt "changelog"
 msgid "An AI agent (Claude Code, Claude Desktop or any MCP client) can see where the mouse and keyboard are, move them, send files and look for a new version: `claude mcp add rustinput -- rustinput mcp`. It can never authorize a computer, type or read a clipboard."
 msgstr "AI エージェント（Claude Code、Claude Desktop、その他の MCP クライアント）が、マウスとキーボードの場所の確認、別のコンピューターへの移動、ファイルの送信、新しいバージョンの確認を行えます: `claude mcp add rustinput -- rustinput mcp`。コンピューターの許可、入力、クリップボードの読み取りは決してできません。"
 
-#: CHANGELOG.md:28
+#: CHANGELOG.md:32
 msgctxt "changelog"
 msgid "Português (Portugal): the windows, the menus, what is new and the installer for Windows also speak the Portuguese of Portugal."
 msgstr "Português (Portugal): ウィンドウ、メニュー、新機能の説明、Windows 用インストーラーがポルトガルのポルトガル語にも対応しました。"
 
-#: CHANGELOG.md:32
+#: CHANGELOG.md:36
 msgctxt "changelog"
 msgid "After an update, the window shows what is new, once."
 msgstr "アップデート後、ウィンドウに新機能が一度だけ表示されます。"
 
-#: CHANGELOG.md:33
+#: CHANGELOG.md:37
 msgctxt "changelog"
 msgid "The list of computers shows the version of RustInput each one runs, and says when one is older than this one."
 msgstr "コンピューターの一覧に、それぞれで動いている RustInput のバージョンが表示され、このコンピューターより古い場合はそのことが示されます。"
 
-#: CHANGELOG.md:37
+#: CHANGELOG.md:41
 msgctxt "changelog"
 msgid "Linux: \"Start RustInput with the session\" in Preferences starts it without its window when you log in."
 msgstr "Linux：「設定」の「セッション開始時に RustInput を起動」をオンにすると、ログイン時にウィンドウなしで起動します。"
 
-#: CHANGELOG.md:41
+#: CHANGELOG.md:45
 msgctxt "changelog"
 msgid "`rustinput status`, `rustinput go <computer>` and `rustinput home` from a terminal, and `rustinput status --waybar` for a module of Waybar."
 msgstr "ターミナルから `rustinput status`、`rustinput go <computer>`、`rustinput home` を、Waybar のモジュールには `rustinput status --waybar` を使えます。"
 
-#: CHANGELOG.md:46
+#: CHANGELOG.md:50
 msgctxt "changelog"
 msgid "Search the copies: above the cards of the Clipboards tab, it looks into the history of every computer at once."
 msgstr "コピーを検索：「クリップボード」タブのカードの上で、すべてのコンピューターの履歴を一度に検索します。"
 
-#: CHANGELOG.md:50
+#: CHANGELOG.md:54
 msgctxt "changelog"
 msgid "The clipboard only when you ask: switch off \"Bring the clipboard along with the pointer\" in Preferences, then AltGr + right Shift + C takes it to the computer the pointer is on, or brings the one of the computer it came from."
 msgstr "クリップボードは必要なときだけ：「設定」で「クリップボードをポインターと一緒に送る」をオフにすると、AltGr + 右 Shift + C でポインターのあるコンピューターへクリップボードを送るか、ポインターの来たコンピューターのクリップボードをここへ取り込みます。"
 
-#: CHANGELOG.md:55
+#: CHANGELOG.md:59
 msgctxt "changelog"
 msgid "The tray icon shows where the mouse and keyboard are (a blue sign while they are on another computer), and its menu moves them to any computer."
 msgstr "トレイアイコンにマウスとキーボードの場所が表示され（別のコンピューターにあるときは青い印）、そのメニューから任意のコンピューターへ移動できます。"
 
-#: CHANGELOG.md:60
+#: CHANGELOG.md:64
 msgctxt "changelog"
 msgid "Keyboard shortcuts: AltGr + right Shift + 1 … 9 goes to that computer, + 0 back here; the right Shift held for 3 seconds always brings the pointer back. They are in Preferences."
 msgstr "キーボードショートカット：AltGr + 右 Shift + 1 … 9 でそのコンピューターへ、+ 0 でここに戻ります。右 Shift を3秒押し続けると、いつでもポインターが戻ります。「設定」にあります。"
 
-#: CHANGELOG.md:65
+#: CHANGELOG.md:69
 msgctxt "changelog"
 msgid "A computer paired with one of yours is offered to the others, which ask once whether to authorize it too."
 msgstr "あなたのコンピューターのいずれかとペアリングされたコンピューターは他のコンピューターにも提示され、それらも承認するかどうかを一度だけ確認します。"
 
-#: CHANGELOG.md:66
+#: CHANGELOG.md:70
 msgctxt "changelog"
 msgid "Names of other computers can no longer hide characters that turn the text around."
 msgstr "他のコンピューターの名前に、テキストの向きを反転させる文字を隠せなくなりました。"
 
-#: CHANGELOG.md:70
+#: CHANGELOG.md:74
 msgctxt "changelog"
 msgid "On this network: the Computers tab finds the other computers running RustInput nearby and adds them with one click. Off until you switch on \"Show this computer to the others\", on each computer."
 msgstr "「コンピューター」タブの「このネットワーク」欄で、近くで RustInput を実行している他のコンピューターが見つかり、ワンクリックで追加できます。各コンピューターで「このコンピューターを他に表示する」をオンにするまではオフです。"
 
-#: CHANGELOG.md:75
+#: CHANGELOG.md:79
 msgctxt "changelog"
 msgid "The transfers window says what did not go or come, and why: links to folders, files that changed or went away while they were sent (the rest goes on), names not allowed on the other system."
 msgstr "転送ウィンドウに、送られなかったものや届かなかったものとその理由が表示されます：フォルダーへのリンク、送信中に変更または削除されたファイル（残りは続行）、相手のシステムで使えない名前。"
 
-#: CHANGELOG.md:80
+#: CHANGELOG.md:84
 msgctxt "changelog"
 msgid "Large copies that come along with the pointer ask first (over 1 GB, in Preferences)."
 msgstr "ポインターと一緒に届く大きなコピーは、先に確認されます（1 GB 超。「設定」の「次のサイズを超える受信は確認する」で変更できます）。"
 
-#: CHANGELOG.md:81
+#: CHANGELOG.md:85
 msgctxt "changelog"
 msgid "A transfer that does not fit on the other computer is refused before it starts, with the sizes."
 msgstr "相手のコンピューターに収まらない転送は、開始前にサイズを示して拒否されます。"
 
-#: CHANGELOG.md:85
+#: CHANGELOG.md:89
 msgctxt "changelog"
 msgid "A transfer cut off by the network, a restart or a computer turned off goes on from the byte where it stopped."
 msgstr "ネットワーク、再起動、コンピューターの電源オフで中断された転送は、止まったバイトから再開します。"
 
-#: CHANGELOG.md:89
+#: CHANGELOG.md:93
 msgctxt "changelog"
 msgid "\"Clipboards\" in the radial menu opens the Clipboards tab."
 msgstr "ラジアルメニューの「クリップボード」で「クリップボード」タブが開きます。"
 
-#: CHANGELOG.md:93
+#: CHANGELOG.md:97
 msgctxt "changelog"
 msgid "The history of the clipboard of every computer, in memory only: bring back any copy of any computer."
 msgstr "各コンピューターのクリップボード履歴をメモリーにだけ保存：どのコンピューターのどのコピーでも呼び戻せます。"
 
-#: CHANGELOG.md:97
+#: CHANGELOG.md:101
 msgctxt "changelog"
 msgid "The Clipboards tab shows what every computer copied, and \"Copy here\" brings it."
 msgstr "「クリップボード」タブに各コンピューターがコピーした内容が表示され、「ここにコピー」で取り込めます。"
